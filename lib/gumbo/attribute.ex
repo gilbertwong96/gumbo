@@ -18,7 +18,16 @@ defmodule Gumbo.Attribute do
 
   @opaque t :: %__MODULE__{node: Node.t(), index: non_neg_integer()}
 
-  @doc "The attribute's namespace."
+  @doc """
+  The attribute's namespace.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.namespace()
+      :none
+  """
   @spec namespace(t()) :: Gumbo.Types.attribute_namespace()
   def namespace(%__MODULE__{} = attribute), do: fetch!(attribute, :namespace)
 
@@ -28,6 +37,13 @@ defmodule Gumbo.Attribute do
   In HTML content this is lowercased; foreign-content attributes are adjusted
   per the HTML spec, so e.g. `xlink:href` in SVG becomes `"href"` here with
   `namespace/1` `:xlink` — `original_name/1` keeps the source spelling.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.name()
+      "class"
   """
   @spec name(t()) :: binary()
   def name(%__MODULE__{} = attribute), do: fetch!(attribute, :name)
@@ -36,34 +52,93 @@ defmodule Gumbo.Attribute do
   The attribute's value after entity decoding, without surrounding quotes.
 
   Attributes with no value yield the empty binary.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.value()
+      "a"
   """
   @spec value(t()) :: binary()
   def value(%__MODULE__{} = attribute), do: fetch!(attribute, :value)
 
-  @doc "The attribute name as written in the source."
+  @doc """
+  The attribute name as written in the source.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.original_name()
+      "class"
+  """
   @spec original_name(t()) :: binary()
   def original_name(%__MODULE__{} = attribute), do: fetch!(attribute, :original_name)
 
   @doc """
   The attribute value as written in the source, including any surrounding
   quotes; the empty binary when the attribute has no value.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.original_value()
+      "\\"a\\""
   """
   @spec original_value(t()) :: binary()
   def original_value(%__MODULE__{} = attribute), do: fetch!(attribute, :original_value)
 
-  @doc "The source position where the attribute name starts."
+  @doc """
+  The source position where the attribute name starts.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.name_start()
+      %Gumbo.Position{line: 1, column: 4, offset: 3}
+  """
   @spec name_start(t()) :: Gumbo.Position.t()
   def name_start(%__MODULE__{} = attribute), do: fetch!(attribute, :name_start)
 
-  @doc "The source position just after the attribute name."
+  @doc """
+  The source position just after the attribute name.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.name_end()
+      %Gumbo.Position{line: 1, column: 9, offset: 8}
+  """
   @spec name_end(t()) :: Gumbo.Position.t()
   def name_end(%__MODULE__{} = attribute), do: fetch!(attribute, :name_end)
 
-  @doc "The source position where the attribute value starts."
+  @doc """
+  The source position where the attribute value starts.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.value_start()
+      %Gumbo.Position{line: 1, column: 10, offset: 9}
+  """
   @spec value_start(t()) :: Gumbo.Position.t()
   def value_start(%__MODULE__{} = attribute), do: fetch!(attribute, :value_start)
 
-  @doc "The source position just after the attribute value."
+  @doc """
+  The source position just after the attribute value.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.value_end()
+      %Gumbo.Position{line: 1, column: 13, offset: 12}
+  """
   @spec value_end(t()) :: Gumbo.Position.t()
   def value_end(%__MODULE__{} = attribute), do: fetch!(attribute, :value_end)
 
@@ -76,6 +151,14 @@ defmodule Gumbo.Attribute do
   `Gumbo.Node.details/1`: a caller asking for a whole attribute branches on
   `{:error, :invalid_node}` or `{:error, :invalid_attribute}` rather than
   rescues.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> {:ok, details} = p |> Gumbo.Node.attributes() |> Enum.at(0) |> Gumbo.Attribute.details()
+      iex> details[:value]
+      "a"
   """
   @spec details(t()) ::
           {:ok, map()} | {:error, :invalid_node | :invalid_attribute}

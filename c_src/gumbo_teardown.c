@@ -33,7 +33,7 @@
    This unit includes no ERTS header, so it links into both the NIF and the
    standalone probe. */
 
-void gumbo_teardown_pass(GumboOptions* options, GumboOutput* output,
+void gumbo_teardown_pass(const GumboOptions* options, GumboOutput* output,
                          GumboNode** nodes, size_t node_count) {
   GumboParser parser;
   memset(&parser, 0, sizeof(parser));

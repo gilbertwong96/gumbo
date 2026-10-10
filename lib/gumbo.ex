@@ -20,6 +20,12 @@ defmodule Gumbo do
   scheduler; `dirty: false` forces the normal scheduler, `dirty: true`
   the dirty one. On a VM without dirty schedulers the dirty choice falls
   back to the normal path invisibly.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.type(Gumbo.Output.root(output))
+      :element
   """
   @spec parse(binary(), keyword()) :: {:ok, Gumbo.Output.t()} | {:error, term()}
   def parse(html, options \\ []) when is_binary(html) do
@@ -42,6 +48,11 @@ defmodule Gumbo do
 
   @doc """
   Like `parse/2`, but raises `ArgumentError` with the reason on failure.
+
+  ## Examples
+
+      iex> Gumbo.parse!("<!doctype html><p>x</p>") |> Gumbo.Output.node_count()
+      6
   """
   @spec parse!(binary(), keyword()) :: Gumbo.Output.t()
   def parse!(html, options \\ []) do
@@ -78,6 +89,15 @@ defmodule Gumbo do
   namespace returns `{:error, {:conflicting_option, key}}`. `Gumbo.parse/2`
   performs no such check; it is the unchecked path for combinations this
   function refuses.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse_fragment("<b>x</b>", :div)
+      iex> Enum.map(Gumbo.Output.fragment_nodes(output), &Gumbo.Node.tag_name/1)
+      ["b"]
+
+      iex> Gumbo.parse_fragment("<b>x</b>", :div, fragment_namespace: :svg)
+      {:error, {:conflicting_option, :fragment_namespace}}
   """
   @spec parse_fragment(binary(), Gumbo.Tag.t(), keyword()) ::
           {:ok, Gumbo.Output.t()} | {:error, term()}
@@ -90,6 +110,11 @@ defmodule Gumbo do
   @doc """
   Like `parse_fragment/3`, but raises `ArgumentError` with the reason on
   failure.
+
+  ## Examples
+
+      iex> Gumbo.parse_fragment!("<b>x</b>", :div) |> Gumbo.Output.fragment_nodes() |> Enum.map(&Gumbo.Node.tag_name/1)
+      ["b"]
   """
   @spec parse_fragment!(binary(), Gumbo.Tag.t(), keyword()) :: Gumbo.Output.t()
   def parse_fragment!(html, context, options \\ []) do
@@ -127,6 +152,16 @@ defmodule Gumbo do
   CPU scheduler — the size proxy is the handle's cached node count, so the
   dispatch costs no NIF call — with the same `dirty:` override; it raises
   `ArgumentError` for anything but `:auto | true | false`.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.materialize(output) |> Map.keys() |> Enum.sort()
+      [:document, :errors, :root]
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.materialize(output, detail: :content)[:root][:tag]
+      :html
   """
   @spec materialize(
           Gumbo.Output.t() | Gumbo.Node.t() | [Gumbo.Node.t()] | nil,

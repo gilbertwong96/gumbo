@@ -6,6 +6,7 @@ defmodule Gumbo.Test.HTML do
   Wraps `inner` in the doctype/html/body wrapper the shape matrix is
   generated and measured against: `<!doctype html><html><body>…</body></html>`.
   """
+  @spec wrapped(binary()) :: binary()
   def wrapped(inner), do: "<!doctype html><html><body>" <> inner <> "</body></html>"
 
   @doc """

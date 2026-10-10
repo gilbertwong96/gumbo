@@ -36,7 +36,14 @@ defmodule Gumbo.Options do
           dirty: :auto | boolean()
         }
 
-  @doc "Returns the default options."
+  @doc """
+  Returns the default options.
+
+  ## Examples
+
+      iex> Gumbo.Options.new().tab_stop
+      8
+  """
   @spec new() :: t()
   def new, do: %__MODULE__{}
 
@@ -46,6 +53,15 @@ defmodule Gumbo.Options do
 
   An unknown key or an out-of-range value returns
   `{:error, {:invalid_option, key, value}}`.
+
+  ## Examples
+
+      iex> {:ok, options} = Gumbo.Options.new(max_errors: 3)
+      iex> options.max_errors
+      3
+
+      iex> Gumbo.Options.new(bogus: 1)
+      {:error, {:invalid_option, :bogus, 1}}
   """
   @spec new(keyword() | map()) :: {:ok, t()} | {:error, term()}
   def new(opts) when is_list(opts) or is_map(opts) do
@@ -61,6 +77,11 @@ defmodule Gumbo.Options do
   Converts the struct to the map the NIF decodes.
 
   Every field is present, so the NIF can decode strictly.
+
+  ## Examples
+
+      iex> Gumbo.Options.to_nif(Gumbo.Options.new()) |> Map.keys() |> Enum.sort()
+      [:dirty, :fragment_context, :fragment_namespace, :max_errors, :stop_on_first_error, :tab_stop]
   """
   @spec to_nif(t()) :: map()
   def to_nif(%__MODULE__{} = options) do
@@ -78,6 +99,18 @@ defmodule Gumbo.Options do
   The single scheduler policy for `parse/2` and `materialize/2`: `:dirty` when
   forced, `:normal` when forbidden, and `:dirty` when `:auto` and the workload
   reaches `dirty_threshold/0`.
+
+  ## Examples
+
+      iex> Gumbo.Options.dispatch(Gumbo.Options.new(), 20_479)
+      :normal
+
+      iex> Gumbo.Options.dispatch(Gumbo.Options.new(), 20_480)
+      :dirty
+
+      iex> {:ok, forced} = Gumbo.Options.new(dirty: true)
+      iex> Gumbo.Options.dispatch(forced, 1)
+      :dirty
   """
   @spec dispatch(t(), non_neg_integer()) :: :normal | :dirty
   def dispatch(%__MODULE__{dirty: true}, _size), do: :dirty
@@ -85,7 +118,14 @@ defmodule Gumbo.Options do
   def dispatch(%__MODULE__{dirty: :auto}, size) when size < @dirty_threshold, do: :normal
   def dispatch(%__MODULE__{dirty: :auto}, _size), do: :dirty
 
-  @doc "The workload size at and above which `dispatch/2` picks `:dirty`."
+  @doc """
+  The workload size at and above which `dispatch/2` picks `:dirty`.
+
+  ## Examples
+
+      iex> Gumbo.Options.dirty_threshold()
+      20_480
+  """
   @spec dirty_threshold() :: 20_480
   def dirty_threshold, do: @dirty_threshold
 

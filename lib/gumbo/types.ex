@@ -8,7 +8,7 @@ defmodule Gumbo.Types do
   `GUMBO_INSERTION_MODE_IN_HEAD` becomes `:in_head`, and so on. The tag enum
   is the one exception: it has no family prefix and its names come from
   gumbo's own normalized tag table (`GUMBO_TAG_UNKNOWN` becomes `:unknown`,
-  not `""`). See `Gumbo.Tag.t/0`.
+  not `""`). See `t:Gumbo.Tag.t/0`.
 
   This module holds only types; the functions that produce these atoms live
   in the modules that own each concept.
