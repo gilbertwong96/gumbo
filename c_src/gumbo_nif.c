@@ -7,6 +7,7 @@
 #include "gumbo_attr.h"
 #include "gumbo_error.h"
 #include "gumbo_handle.h"
+#include "gumbo_materialize.h"
 #include "gumbo_node.h"
 #include "gumbo_tags.h"
 
@@ -165,6 +166,18 @@ static ERL_NIF_TERM nif_error_details(ErlNifEnv* env, int argc,
   return gumbo_nif_error_details(env, &priv->atoms, argc, argv);
 }
 
+static ERL_NIF_TERM nif_materialize_output(ErlNifEnv* env, int argc,
+                                           const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_materialize_output(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_materialize_node(ErlNifEnv* env, int argc,
+                                         const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_materialize_node(env, &priv->atoms, argc, argv);
+}
+
 static int gumbo_nif_load(ErlNifEnv* env, void** priv_data,
                           ERL_NIF_TERM load_info) {
   (void)load_info;
@@ -214,6 +227,8 @@ static ErlNifFunc nif_funcs[] = {
     {"attr_details", 3, nif_attr_details, 0},
     {"output_errors", 1, nif_output_errors, 0},
     {"error_details", 2, nif_error_details, 0},
+    {"materialize_output", 2, nif_materialize_output, 0},
+    {"materialize_node", 3, nif_materialize_node, 0},
 };
 
 ERL_NIF_INIT(Elixir.Gumbo.Native, nif_funcs, gumbo_nif_load, NULL, NULL,

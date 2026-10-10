@@ -87,6 +87,61 @@ defmodule Gumbo do
     end
   end
 
+  @doc """
+  Converts a handle, a node, a list of nodes, or `nil` into plain nested
+  Elixir data in a single NIF call.
+
+  The walk is iterative in C — the node table is preorder, and each node's
+  map is built from its already-built children in one reverse pass — so
+  depth is bounded by memory, not by the scheduler's C stack.
+
+  `Gumbo.Output.t()` materializes to `%{document: ..., root: ..., errors:
+  [...]}`, `Gumbo.Node.t()` to that node's map, a list to the list of its
+  nodes' maps, and `nil` to `nil`.
+
+  `detail: :full` (the default) carries every gumbo field, with `nil` where
+  the node type has none; `detail: :content` returns a usable tree without
+  the source bookkeeping (positions, originals, flags and index). The
+  materialized `:full` values agree with the lazy accessors — they come
+  from the same extractors — under the materialized shape's own key names
+  (`start_position`, `name`).
+
+  `detail:` is validated here and raises `ArgumentError` for anything but
+  `:full | :content`.
+  """
+  @spec materialize(
+          Gumbo.Output.t() | Gumbo.Node.t() | [Gumbo.Node.t()] | nil,
+          keyword()
+        ) :: term()
+  def materialize(value, options \\ []) do
+    detail = detail_code(options)
+    do_materialize(value, detail)
+  end
+
+  defp do_materialize(nil, _detail), do: nil
+
+  defp do_materialize(values, detail) when is_list(values),
+    do: Enum.map(values, &do_materialize(&1, detail))
+
+  defp do_materialize(%Gumbo.Node{output: output, index: index}, detail) do
+    case Gumbo.Native.materialize_node(output.resource, index, detail) do
+      {:ok, map} -> map
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp do_materialize(%Gumbo.Output{resource: resource}, detail) do
+    Gumbo.Native.materialize_output(resource, detail)
+  end
+
+  defp detail_code(options) do
+    case Keyword.get(options, :detail, :full) do
+      :full -> 0
+      :content -> 1
+      other -> raise ArgumentError, "invalid detail: #{inspect(other)}"
+    end
+  end
+
   defp check_fragment_conflicts(context, options) do
     cond do
       Keyword.has_key?(options, :fragment_context) ->

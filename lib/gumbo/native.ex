@@ -75,6 +75,15 @@ defmodule Gumbo.Native do
           {:ok, map()} | {:error, :invalid_node}
   def error_details(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
 
+  @spec materialize_output(reference(), non_neg_integer()) ::
+          map() | {:error, :invalid_handle}
+  def materialize_output(_resource, _detail), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec materialize_node(reference(), non_neg_integer(), non_neg_integer()) ::
+          {:ok, map()} | {:error, :invalid_node}
+  def materialize_node(_resource, _index, _detail),
+    do: :erlang.nif_error(:nif_not_loaded)
+
   defp load_nif do
     path = :filename.join(:code.priv_dir(:gumbo), ~c"gumbo_nif")
 

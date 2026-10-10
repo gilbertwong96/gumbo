@@ -110,20 +110,20 @@ int gumbo_node_position_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
 
 /* ---- one scalar extractor per field ---- */
 
-static ERL_NIF_TERM gumbo_node_type_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_type_term(ErlNifEnv* env,
                                          const gumbo_atoms_t* atoms,
                                          const GumboNode* node) {
   (void)env;
   return atoms->node_types[node->type];
 }
 
-static ERL_NIF_TERM gumbo_node_index_within_parent_term(
+ERL_NIF_TERM gumbo_node_index_within_parent_term(
     ErlNifEnv* env, const gumbo_atoms_t* atoms, const GumboNode* node) {
   (void)atoms;
   return enif_make_ulong(env, (unsigned long)node->index_within_parent);
 }
 
-static ERL_NIF_TERM gumbo_node_parse_flags_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_parse_flags_term(ErlNifEnv* env,
                                                 const gumbo_atoms_t* atoms,
                                                 const GumboNode* node) {
   /* parse_flags is a bitvector; GUMBO_INSERTION_NORMAL (0) is the empty
@@ -142,7 +142,7 @@ static ERL_NIF_TERM gumbo_node_parse_flags_term(ErlNifEnv* env,
 /* Start position. The document node's union member carries no position, so
    it reports kGumboEmptySourcePosition (all zeros), exactly as parser-
    inserted elements do. */
-static ERL_NIF_TERM gumbo_node_position_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_position_term(ErlNifEnv* env,
                                              const gumbo_atoms_t* atoms,
                                              const GumboNode* node) {
   GumboSourcePosition pos = kGumboEmptySourcePosition;
@@ -158,7 +158,7 @@ static ERL_NIF_TERM gumbo_node_position_term(ErlNifEnv* env,
   return out;
 }
 
-static ERL_NIF_TERM gumbo_node_has_doctype_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_has_doctype_term(ErlNifEnv* env,
                                                 const gumbo_atoms_t* atoms,
                                                 const GumboNode* node) {
   (void)env;
@@ -168,7 +168,7 @@ static ERL_NIF_TERM gumbo_node_has_doctype_term(ErlNifEnv* env,
   return node->v.document.has_doctype ? atoms->true_ : atoms->false_;
 }
 
-static ERL_NIF_TERM gumbo_node_doctype_name_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_doctype_name_term(ErlNifEnv* env,
                                                  const gumbo_atoms_t* atoms,
                                                  const GumboNode* node) {
   if (node->type != GUMBO_NODE_DOCUMENT) {
@@ -177,7 +177,7 @@ static ERL_NIF_TERM gumbo_node_doctype_name_term(ErlNifEnv* env,
   return gumbo_node_stringz(env, atoms, node->v.document.name);
 }
 
-static ERL_NIF_TERM gumbo_node_public_identifier_term(
+ERL_NIF_TERM gumbo_node_public_identifier_term(
     ErlNifEnv* env, const gumbo_atoms_t* atoms, const GumboNode* node) {
   if (node->type != GUMBO_NODE_DOCUMENT) {
     return atoms->nil;
@@ -185,7 +185,7 @@ static ERL_NIF_TERM gumbo_node_public_identifier_term(
   return gumbo_node_stringz(env, atoms, node->v.document.public_identifier);
 }
 
-static ERL_NIF_TERM gumbo_node_system_identifier_term(
+ERL_NIF_TERM gumbo_node_system_identifier_term(
     ErlNifEnv* env, const gumbo_atoms_t* atoms, const GumboNode* node) {
   if (node->type != GUMBO_NODE_DOCUMENT) {
     return atoms->nil;
@@ -193,7 +193,7 @@ static ERL_NIF_TERM gumbo_node_system_identifier_term(
   return gumbo_node_stringz(env, atoms, node->v.document.system_identifier);
 }
 
-static ERL_NIF_TERM gumbo_node_quirks_mode_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_quirks_mode_term(ErlNifEnv* env,
                                                 const gumbo_atoms_t* atoms,
                                                 const GumboNode* node) {
   (void)env;
@@ -203,7 +203,7 @@ static ERL_NIF_TERM gumbo_node_quirks_mode_term(ErlNifEnv* env,
   return atoms->quirks_modes[node->v.document.doc_type_quirks_mode];
 }
 
-static ERL_NIF_TERM gumbo_node_tag_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_tag_term(ErlNifEnv* env,
                                         const gumbo_atoms_t* atoms,
                                         const GumboNode* node) {
   (void)env;
@@ -213,7 +213,7 @@ static ERL_NIF_TERM gumbo_node_tag_term(ErlNifEnv* env,
   return atoms->tags[node->v.element.tag];
 }
 
-static ERL_NIF_TERM gumbo_node_tag_name_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_tag_name_term(ErlNifEnv* env,
                                              const gumbo_atoms_t* atoms,
                                              const GumboNode* node) {
   if (!gumbo_node_is_element(node)) {
@@ -268,7 +268,7 @@ static ERL_NIF_TERM gumbo_node_tag_name_term(ErlNifEnv* env,
   return out;
 }
 
-static ERL_NIF_TERM gumbo_node_namespace_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_namespace_term(ErlNifEnv* env,
                                               const gumbo_atoms_t* atoms,
                                               const GumboNode* node) {
   (void)env;
@@ -278,7 +278,7 @@ static ERL_NIF_TERM gumbo_node_namespace_term(ErlNifEnv* env,
   return atoms->namespaces[node->v.element.tag_namespace];
 }
 
-static ERL_NIF_TERM gumbo_node_original_tag_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_original_tag_term(ErlNifEnv* env,
                                                  const gumbo_atoms_t* atoms,
                                                  const GumboNode* node) {
   if (!gumbo_node_is_element(node)) {
@@ -287,7 +287,7 @@ static ERL_NIF_TERM gumbo_node_original_tag_term(ErlNifEnv* env,
   return gumbo_node_string_piece(env, node->v.element.original_tag);
 }
 
-static ERL_NIF_TERM gumbo_node_original_end_tag_term(
+ERL_NIF_TERM gumbo_node_original_end_tag_term(
     ErlNifEnv* env, const gumbo_atoms_t* atoms, const GumboNode* node) {
   if (!gumbo_node_is_element(node)) {
     return atoms->nil;
@@ -295,7 +295,7 @@ static ERL_NIF_TERM gumbo_node_original_end_tag_term(
   return gumbo_node_string_piece(env, node->v.element.original_end_tag);
 }
 
-static ERL_NIF_TERM gumbo_node_end_position_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_end_position_term(ErlNifEnv* env,
                                                  const gumbo_atoms_t* atoms,
                                                  const GumboNode* node) {
   if (!gumbo_node_is_element(node)) {
@@ -308,7 +308,7 @@ static ERL_NIF_TERM gumbo_node_end_position_term(ErlNifEnv* env,
   return out;
 }
 
-static ERL_NIF_TERM gumbo_node_text_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_text_term(ErlNifEnv* env,
                                          const gumbo_atoms_t* atoms,
                                          const GumboNode* node) {
   if (!gumbo_node_is_text_like(node)) {
@@ -317,7 +317,7 @@ static ERL_NIF_TERM gumbo_node_text_term(ErlNifEnv* env,
   return gumbo_node_stringz(env, atoms, node->v.text.text);
 }
 
-static ERL_NIF_TERM gumbo_node_original_text_term(ErlNifEnv* env,
+ERL_NIF_TERM gumbo_node_original_text_term(ErlNifEnv* env,
                                                   const gumbo_atoms_t* atoms,
                                                   const GumboNode* node) {
   if (!gumbo_node_is_text_like(node)) {
