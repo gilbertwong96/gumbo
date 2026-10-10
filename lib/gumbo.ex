@@ -97,7 +97,9 @@ defmodule Gumbo do
 
   `Gumbo.Output.t()` materializes to `%{document: ..., root: ..., errors:
   [...]}`, `Gumbo.Node.t()` to that node's map, a list to the list of its
-  nodes' maps, and `nil` to `nil`.
+  nodes' maps, and `nil` to `nil`. `root` is `nil` for a
+  `stop_on_first_error` parse that halted before any element was built —
+  that handle has no root, only errors.
 
   `detail: :full` (the default) carries every gumbo field, with `nil` where
   the node type has none; `detail: :content` returns a usable tree without

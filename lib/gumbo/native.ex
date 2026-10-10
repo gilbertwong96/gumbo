@@ -30,7 +30,7 @@ defmodule Gumbo.Native do
   @spec output_document(reference()) :: non_neg_integer()
   def output_document(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec output_root(reference()) :: non_neg_integer()
+  @spec output_root(reference()) :: non_neg_integer() | nil
   def output_root(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
   @spec output_input(reference()) :: binary()

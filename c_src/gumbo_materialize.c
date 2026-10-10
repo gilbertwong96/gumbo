@@ -80,7 +80,7 @@ static ERL_NIF_TERM gumbo_materialize_attributes(ErlNifEnv* env,
       ERL_NIF_TERM name = gumbo_node_stringz(env, atoms, attr->name);
       ERL_NIF_TERM value = gumbo_node_stringz(env, atoms, attr->value);
       if (!enif_make_map_put(env, map, name, value, &map)) {
-        return enif_raise_exception(env, enif_make_badarg(env));
+        return enif_make_badarg(env);
       }
     }
     return map;
@@ -91,7 +91,7 @@ static ERL_NIF_TERM gumbo_materialize_attributes(ErlNifEnv* env,
   for (i = attributes->length; i-- > 0;) {
     ERL_NIF_TERM map;
     if (!gumbo_attr_details_map(env, atoms, attributes->data[i], &map)) {
-      return enif_raise_exception(env, enif_make_badarg(env));
+      return enif_make_badarg(env);
     }
     list = enif_make_list_cell(env, map, list);
   }
@@ -112,7 +112,7 @@ static ERL_NIF_TERM gumbo_materialize_node_content(ErlNifEnv* env,
       ERL_NIF_TERM values[] = {atoms->node_types[node->type], children};
       ERL_NIF_TERM map;
       if (!enif_make_map_from_arrays(env, keys, values, 2, &map)) {
-        return enif_raise_exception(env, enif_make_badarg(env));
+        return enif_make_badarg(env);
       }
       return map;
     }
@@ -129,7 +129,7 @@ static ERL_NIF_TERM gumbo_materialize_node_content(ErlNifEnv* env,
                                attributes, children};
       ERL_NIF_TERM map;
       if (!enif_make_map_from_arrays(env, keys, values, 5, &map)) {
-        return enif_raise_exception(env, enif_make_badarg(env));
+        return enif_make_badarg(env);
       }
       return map;
     }
@@ -139,7 +139,7 @@ static ERL_NIF_TERM gumbo_materialize_node_content(ErlNifEnv* env,
                                gumbo_node_text_term(env, atoms, node)};
       ERL_NIF_TERM map;
       if (!enif_make_map_from_arrays(env, keys, values, 2, &map)) {
-        return enif_raise_exception(env, enif_make_badarg(env));
+        return enif_make_badarg(env);
       }
       return map;
     }
@@ -205,7 +205,7 @@ static ERL_NIF_TERM gumbo_materialize_node_full(ErlNifEnv* env,
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values,
                                  GUMBO_MATERIALIZE_FULL_COUNT, &map)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return map;
 }
@@ -234,17 +234,16 @@ static void gumbo_materialize_range(ErlNifEnv* env, const gumbo_atoms_t* atoms,
 /* The two scratch arrays every materialize call needs: the per-node terms
    and the shared children buffer. Each children vector has at most
    node_count - 1 entries and one is processed at a time, so node_count
-   entries always fit. Allocation failure surfaces as an exception. */
-static int gumbo_materialize_scratch(ErlNifEnv* env, size_t count,
-                                     ERL_NIF_TERM** terms_out,
+   entries always fit. On allocation failure it frees both and returns 0;
+   the callers answer badarg, which the VM surfaces as an ArgumentError. */
+static int gumbo_materialize_scratch(size_t count, ERL_NIF_TERM** terms_out,
                                      ERL_NIF_TERM** scratch_out) {
   ERL_NIF_TERM* terms = enif_alloc(count * sizeof(ERL_NIF_TERM));
   ERL_NIF_TERM* scratch = enif_alloc(count * sizeof(ERL_NIF_TERM));
   if (terms == NULL || scratch == NULL) {
     enif_free(terms);
     enif_free(scratch);
-    enif_raise_exception(env, enif_make_badarg(env));
-    return 0; /* unreachable: the raise longjmps out of the NIF */
+    return 0;
   }
   *terms_out = terms;
   *scratch_out = scratch;
@@ -268,7 +267,7 @@ ERL_NIF_TERM gumbo_nif_materialize_output(ErlNifEnv* env,
 
   ERL_NIF_TERM* terms;
   ERL_NIF_TERM* scratch;
-  if (!gumbo_materialize_scratch(env, h->node_count, &terms, &scratch)) {
+  if (!gumbo_materialize_scratch(h->node_count, &terms, &scratch)) {
     return enif_make_badarg(env);
   }
 
@@ -285,20 +284,25 @@ ERL_NIF_TERM gumbo_nif_materialize_output(ErlNifEnv* env,
     if (!gumbo_error_details_map(env, atoms, h, vector->data[i], &map)) {
       enif_free(terms);
       enif_free(scratch);
-      return enif_raise_exception(env, enif_make_badarg(env));
+      return enif_make_badarg(env);
     }
     errors = enif_make_list_cell(env, map, errors);
   }
 
-  /* Table invariant: 0 is the document node, 1 is output->root. */
+  /* Table invariant: 0 is the document node, root_index is output->root —
+     resolved by pointer at parse time, because a comment or PI before
+     <html> occupies index 1 instead — or nil when the parse stopped
+     before any element was built (GUMBO_NO_ROOT). */
   ERL_NIF_TERM keys[] = {atoms->materialize.document, atoms->materialize.root,
                          atoms->materialize.errors};
-  ERL_NIF_TERM values[] = {terms[0], terms[1], errors};
+  ERL_NIF_TERM root =
+      (h->root_index == GUMBO_NO_ROOT) ? atoms->nil : terms[h->root_index];
+  ERL_NIF_TERM values[] = {terms[0], root, errors};
   ERL_NIF_TERM out;
   if (!enif_make_map_from_arrays(env, keys, values, 3, &out)) {
     enif_free(terms);
     enif_free(scratch);
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   enif_free(terms);
   enif_free(scratch);
@@ -335,7 +339,7 @@ ERL_NIF_TERM gumbo_nif_materialize_node(ErlNifEnv* env,
      code path with materialize_output. */
   ERL_NIF_TERM* terms;
   ERL_NIF_TERM* scratch;
-  if (!gumbo_materialize_scratch(env, h->node_count, &terms, &scratch)) {
+  if (!gumbo_materialize_scratch(h->node_count, &terms, &scratch)) {
     return enif_make_badarg(env);
   }
 

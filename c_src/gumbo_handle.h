@@ -25,6 +25,15 @@ typedef struct {
   GumboNode** nodes;  /* preorder; node identity is an index into this */
   size_t node_count;
   size_t capacity;
+  /* output->root is not necessarily table index 1: a comment or processing
+     instruction before <html> is appended to the document's children first,
+     so the html element lands later in preorder. root_index is resolved by
+     pointer during the table build — never assumed — and is what
+     output_root, materialize_output and (through Gumbo.Output.root/1)
+     fragment_nodes treat as the root. It is GUMBO_NO_ROOT when the parse
+     stopped before any element was built (stop_on_first_error can halt
+     that early), which gumbo itself represents as output->root == NULL. */
+  size_t root_index;
   /* Index arithmetic for the O(1) node accessors, filled once by
      gumbo_node_table_size: parent_indices[i] is the table index of
      nodes[i]'s parent (GUMBO_NO_PARENT for the document node) and
@@ -37,6 +46,10 @@ typedef struct {
 
 /* Sentinel for parent_indices[i] when nodes[i] is the document node. */
 #define GUMBO_NO_PARENT SIZE_MAX
+
+/* Sentinel for root_index when the parse stopped before any element was
+   built: output->root is NULL and the document has no children. */
+#define GUMBO_NO_ROOT SIZE_MAX
 
 /* Opens the resource type. Returns 0 on success; a nonzero return makes the
    NIF load fail. The type pointer is kept file-private; the NIF entry points

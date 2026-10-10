@@ -78,7 +78,7 @@ static ERL_NIF_TERM gumbo_attr_position_term(ErlNifEnv* env,
                                              GumboSourcePosition pos) {
   ERL_NIF_TERM out;
   if (!gumbo_node_position_map(env, atoms, pos, &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -160,7 +160,7 @@ ERL_NIF_TERM gumbo_nif_attr_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
 
   ERL_NIF_TERM map;
   if (!gumbo_attr_details_map(env, atoms, attr, &map)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return enif_make_tuple2(env, atoms->ok, map);
 }

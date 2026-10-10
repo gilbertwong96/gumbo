@@ -61,7 +61,7 @@ static ERL_NIF_TERM gumbo_error_position_term(ErlNifEnv* env,
                                               const GumboError* error) {
   ERL_NIF_TERM out;
   if (!gumbo_node_position_map(env, atoms, error->position, &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -112,7 +112,7 @@ static ERL_NIF_TERM gumbo_error_render_term(ErlNifEnv* env,
   int ok = gumbo_make_binary(env, buffer.data, buffer.length, &out);
   gumbo_parser_deallocate(&parser, buffer.data);
   if (!ok) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -180,7 +180,7 @@ static ERL_NIF_TERM gumbo_error_tokenizer_term(ErlNifEnv* env,
   };
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values, 2, &map)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return map;
 }
@@ -215,7 +215,7 @@ static ERL_NIF_TERM gumbo_error_duplicate_attr_term(
   };
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values, 3, &map)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return map;
 }
@@ -253,7 +253,7 @@ static ERL_NIF_TERM gumbo_error_parser_error_term(ErlNifEnv* env,
   };
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values, 4, &map)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return map;
 }
@@ -312,7 +312,7 @@ ERL_NIF_TERM gumbo_nif_error_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
 
   ERL_NIF_TERM map;
   if (!gumbo_error_details_map(env, atoms, h, error, &map)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return enif_make_tuple2(env, atoms->ok, map);
 }

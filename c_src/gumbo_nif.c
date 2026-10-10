@@ -27,7 +27,7 @@ static ERL_NIF_TERM nif_smoke(ErlNifEnv* env, int argc,
 
   ErlNifBinary bin;
   if (!enif_alloc_binary(len, &bin)) {
-    return enif_raise_exception(env, enif_make_atom(env, "allocation_failure"));
+    return enif_make_badarg(env);
   }
   memcpy(bin.data, name, len);
 

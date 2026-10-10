@@ -25,7 +25,7 @@ static ERL_NIF_TERM gumbo_tag_name_binary(ErlNifEnv* env, GumboTag tag) {
   if (buf == NULL) {
     /* Allocation failure surfaces as an ArgumentError; it is unreachable in
        practice and this path must not create atoms. */
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   if (len > 0) {
     memcpy(buf, name, len);
@@ -127,7 +127,7 @@ ERL_NIF_TERM gumbo_nif_tag_svg_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   if (!gumbo_make_binary(env, name, strlen(name), &out)) {
     /* Allocation failure surfaces as an ArgumentError; it is unreachable in
        practice and this path must not create atoms. */
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -166,7 +166,7 @@ ERL_NIF_TERM gumbo_nif_tag_from_original_text(ErlNifEnv* env,
   }
   ERL_NIF_TERM name_term;
   if (!gumbo_make_binary(env, piece.data, piece.length, &name_term)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return enif_make_tuple2(env, atoms->ok, name_term);
 }

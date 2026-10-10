@@ -39,7 +39,7 @@ static ERL_NIF_TERM gumbo_node_invalid(ErlNifEnv* env,
   }
   ERL_NIF_TERM message_term;
   if (!gumbo_make_binary(env, message, (size_t)len, &message_term)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   ERL_NIF_TERM keys[] = {atoms->node.struct_, atoms->node.exception_,
                          atoms->node.message};
@@ -47,7 +47,7 @@ static ERL_NIF_TERM gumbo_node_invalid(ErlNifEnv* env,
                            message_term};
   ERL_NIF_TERM exception;
   if (!enif_make_map_from_arrays(env, keys, values, 3, &exception)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return enif_raise_exception(env, exception);
 }
@@ -81,7 +81,7 @@ ERL_NIF_TERM gumbo_node_stringz(ErlNifEnv* env,
   }
   ERL_NIF_TERM out;
   if (!gumbo_make_binary(env, s, strlen(s), &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -91,7 +91,7 @@ ERL_NIF_TERM gumbo_node_stringz(ErlNifEnv* env,
 ERL_NIF_TERM gumbo_node_string_piece(ErlNifEnv* env, GumboStringPiece piece) {
   ERL_NIF_TERM out;
   if (!gumbo_make_binary(env, piece.data, piece.length, &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -153,7 +153,7 @@ ERL_NIF_TERM gumbo_node_position_term(ErlNifEnv* env,
   }
   ERL_NIF_TERM out;
   if (!gumbo_node_position_map(env, atoms, pos, &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -263,7 +263,7 @@ ERL_NIF_TERM gumbo_node_tag_name_term(ErlNifEnv* env,
 
   ERL_NIF_TERM out;
   if (!gumbo_make_binary(env, name, len, &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -303,7 +303,7 @@ ERL_NIF_TERM gumbo_node_end_position_term(ErlNifEnv* env,
   }
   ERL_NIF_TERM out;
   if (!gumbo_node_position_map(env, atoms, node->v.element.end_pos, &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -382,7 +382,7 @@ ERL_NIF_TERM gumbo_nif_node_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values, GUMBO_NODE_DETAILS_COUNT,
                                  &map)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return enif_make_tuple2(env, atoms->ok, map);
 }
@@ -409,7 +409,7 @@ ERL_NIF_TERM gumbo_nif_node_children(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     unsigned long* indices =
         enif_alloc((size_t)children->length * sizeof(unsigned long));
     if (indices == NULL) {
-      return enif_raise_exception(env, enif_make_badarg(env));
+      return enif_make_badarg(env);
     }
     /* Children are contiguous subtree ranges in preorder: child 0 starts at
        index + 1 and each later child starts right after the previous one's
@@ -574,7 +574,7 @@ ERL_NIF_TERM gumbo_nif_node_attribute(ErlNifEnv* env,
   if (name.size >= sizeof(stack_buf)) {
     buf = enif_alloc(name.size + 1);
     if (buf == NULL) {
-      return enif_raise_exception(env, enif_make_badarg(env));
+      return enif_make_badarg(env);
     }
   }
   memcpy(buf, name.data, name.size);

@@ -1,7 +1,7 @@
 defmodule Gumbo.MaterializeTest do
   use ExUnit.Case, async: true
 
-  alias Gumbo.{Error, Node, Output}
+  alias Gumbo.{Attribute, Error, Node, Output}
 
   test "detail: :full carries every field the lazy accessors return" do
     {:ok, output} = Gumbo.parse(~s(<div class="a" id="b">x<!--c--></div>))
@@ -52,6 +52,40 @@ defmodule Gumbo.MaterializeTest do
     assert div.original_tag == Node.original_tag(div_node)
     assert div.original_end_tag == Node.original_end_tag(div_node)
     assert div.parse_flags == Node.parse_flags(div_node)
+  end
+
+  test "a comment before <html> does not displace the materialized root" do
+    {:ok, output} = Gumbo.parse("<!--c--><p>x</p>")
+    full = Gumbo.materialize(output)
+
+    assert full.root[:type] == :element
+    assert full.root[:tag] == :html
+    assert [%{type: :comment}, %{tag: :html}] = full.document.children
+  end
+
+  test "a root-less output materializes with root: nil and its errors intact" do
+    html = String.duplicate(~s(<div title=>), 50)
+    assert {:ok, output} = Gumbo.parse(html, stop_on_first_error: true)
+
+    full = Gumbo.materialize(output)
+    assert full.root == nil
+    assert full.document.type == :document
+    assert full.document.children == []
+    assert full.errors != []
+  end
+
+  test "detail: :full agrees with the lazy accessors field by field" do
+    {:ok, output} =
+      Gumbo.parse(
+        ~s(<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">) <>
+          ~s(<p class="a">x &amp; y<!--c--></p>)
+      )
+
+    # The walk covers the doctype-bearing document (the renamed-:name area),
+    # the root and every element, the text node with its entity decoding,
+    # and the comment, comparing every field against the same node through
+    # the lazy surface.
+    assert_full_agreement(Gumbo.materialize(output).document, Output.document(output))
   end
 
   test "detail: :content is a usable tree without source bookkeeping" do
@@ -117,7 +151,6 @@ defmodule Gumbo.MaterializeTest do
   # Depth-first over the materialized children lists, iterative so it is safe
   # on arbitrarily deep documents; [access] is what keeps it total on maps.
   defp find_tag(node, tag), do: walk([node], tag)
-
   defp walk([], _tag), do: nil
 
   defp walk([node | rest], tag) do
@@ -134,5 +167,52 @@ defmodule Gumbo.MaterializeTest do
 
   defp do_depth([{node, d} | rest], best) do
     do_depth(Enum.map(node[:children], &{&1, d + 1}) ++ rest, max(best, d))
+  end
+
+  # Compares a materialized :full node against its lazy counterpart, field
+  # by field: the 17 scalar fields through details/1 (with the materialized
+  # shape's two key renames mapped explicitly), the whole attribute list,
+  # and the children lists recursively. Tail-recursive on the pair queue, so
+  # the walk is iterative exactly like the helpers above.
+  defp assert_full_agreement(materialized, lazy) do
+    compare_pairs([{materialized, lazy}])
+  end
+
+  defp compare_pairs([]), do: :ok
+
+  defp compare_pairs([{mat, lazy} | rest]) do
+    {:ok, details} = Node.details(lazy)
+
+    assert mat.type == details.type
+    assert mat.index_within_parent == details.index_within_parent
+    assert mat.parse_flags == details.parse_flags
+    assert mat.start_position == details.position
+    assert mat.has_doctype == details.has_doctype
+    assert mat.name == details.doctype_name
+    assert mat.public_identifier == details.public_identifier
+    assert mat.system_identifier == details.system_identifier
+    assert mat.quirks_mode == details.quirks_mode
+    assert mat.tag == details.tag
+    assert mat.tag_name == details.tag_name
+    assert mat.namespace == details.namespace
+    assert mat.original_tag == details.original_tag
+    assert mat.original_end_tag == details.original_end_tag
+    assert mat.end_position == details.end_position
+    assert mat.text == details.text
+    assert mat.original_text == details.original_text
+
+    lazy_attributes =
+      lazy
+      |> Node.attributes()
+      |> Enum.map(fn attribute ->
+        {:ok, attribute_details} = Attribute.details(attribute)
+        attribute_details
+      end)
+
+    assert mat.attributes == lazy_attributes
+
+    lazy_children = Node.children(lazy)
+    assert length(mat.children) == length(lazy_children)
+    compare_pairs(Enum.zip(mat.children, lazy_children) ++ rest)
   end
 end
