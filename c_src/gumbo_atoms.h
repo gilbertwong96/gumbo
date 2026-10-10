@@ -111,6 +111,22 @@ typedef struct {
     ERL_NIF_TERM message;
     ERL_NIF_TERM invalid_node;
   } node;
+
+  /* Attribute accessor atoms: the attr_details-map keys named after the
+     accessors they feed, plus the error atom a bad attribute index
+     yields. */
+  struct {
+    ERL_NIF_TERM namespace;
+    ERL_NIF_TERM name;
+    ERL_NIF_TERM value;
+    ERL_NIF_TERM original_name;
+    ERL_NIF_TERM original_value;
+    ERL_NIF_TERM name_start;
+    ERL_NIF_TERM name_end;
+    ERL_NIF_TERM value_start;
+    ERL_NIF_TERM value_end;
+    ERL_NIF_TERM invalid_attribute;
+  } attribute;
 } gumbo_atoms_t;
 
 /* Interns every table above. Returns 0 on success; a nonzero return makes

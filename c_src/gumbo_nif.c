@@ -4,6 +4,7 @@
 
 #include "gumbo.h"
 #include "gumbo_atoms.h"
+#include "gumbo_attr.h"
 #include "gumbo_handle.h"
 #include "gumbo_node.h"
 #include "gumbo_tags.h"
@@ -133,6 +134,24 @@ static ERL_NIF_TERM nif_node_previous(ErlNifEnv* env, int argc,
   return gumbo_nif_node_previous(env, &priv->atoms, argc, argv);
 }
 
+static ERL_NIF_TERM nif_node_attributes(ErlNifEnv* env, int argc,
+                                        const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_node_attributes(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_node_attribute(ErlNifEnv* env, int argc,
+                                       const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_node_attribute(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_attr_details(ErlNifEnv* env, int argc,
+                                     const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_attr_details(env, &priv->atoms, argc, argv);
+}
+
 static int gumbo_nif_load(ErlNifEnv* env, void** priv_data,
                           ERL_NIF_TERM load_info) {
   (void)load_info;
@@ -177,6 +196,9 @@ static ErlNifFunc nif_funcs[] = {
     {"node_parent", 2, nif_node_parent, 0},
     {"node_next", 2, nif_node_next, 0},
     {"node_previous", 2, nif_node_previous, 0},
+    {"node_attributes", 2, nif_node_attributes, 0},
+    {"node_attribute", 3, nif_node_attribute, 0},
+    {"attr_details", 3, nif_attr_details, 0},
 };
 
 ERL_NIF_INIT(Elixir.Gumbo.Native, nif_funcs, gumbo_nif_load, NULL, NULL,

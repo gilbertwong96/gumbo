@@ -107,6 +107,11 @@ defmodule Gumbo.NodeTest do
     assert Gumbo.Node.parse_flags(p) == []
   end
 
+  test "parse_flags/1 is [] for an explicit <html> root" do
+    {:ok, output} = Gumbo.parse("<html><body><p>x</p></body></html>")
+    assert Gumbo.Node.parse_flags(Gumbo.Output.root(output)) == []
+  end
+
   test "parse_flag?/2 matches the flags parse_flags/1 reports" do
     output = parse!("<p>x</p>")
     root = Output.root(output)
