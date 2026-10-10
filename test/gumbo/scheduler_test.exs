@@ -79,8 +79,11 @@ defmodule Gumbo.SchedulerTest do
     assert Task.await(ticker) < 10_000
   end
 
-  test "the dirty path is skipped when the VM has no dirty schedulers" do
-    # dirty_schedulers?/0 is the guard parse/2 consults; assert it agrees with :erlang
-    assert Gumbo.Native.dirty_schedulers?() == :erlang.system_info(:dirty_cpu_schedulers) > 0
-  end
+  # Deliberately no test for the no-dirty-schedulers fallback in run/4: the
+  # fallback branch is unreachable on a dirty-scheduler VM and any assertion
+  # comparing dirty_schedulers?/0 against the expression it must equal is
+  # self-referential, so such a test could never fail. The guard's existence
+  # is pinned incidentally — run/4 calls it on every dirty-path parse, so
+  # removing it fails "both paths produce the same tree" above. See the
+  # comment at Gumbo.Native.dirty_schedulers?/0 for why it is not a NIF.
 end
