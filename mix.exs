@@ -44,6 +44,16 @@ defmodule Gumbo.MixProject do
         if status != 0 do
           Mix.raise("test.small_stack failed with status #{inspect(status)}")
         end
+      end,
+      "test.teardown_contract": fn _ ->
+        # make's exit status must propagate: check-teardown fails the build
+        # on a non-zero allocator balance, so the alias must fail too.
+        {_output, status} =
+          System.cmd("make", ["check-teardown"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check-teardown failed with status #{inspect(status)}")
+        end
       end
     ]
   end

@@ -2,17 +2,10 @@
 
 #include <erl_nif.h>
 
-#include "attribute.h" /* gumbo_destroy_attribute */
 #include "gumbo.h"
 #include "gumbo_handle.h"
 #include "gumbo_options.h"
-#include "parser.h" /* GumboParser, for the destructor's stack-local parser */
-#include "util.h"  /* gumbo_parser_deallocate */
-
-/* parser.h and util.h are internal to gumbo-parser and are depended on only
-   for the destructor's stack-local GumboParser, exactly as
-   gumbo_destroy_output and gumbo_destroy_node do. Acceptable because the
-   submodule pins the version. */
+#include "gumbo_teardown.h"
 
 static ErlNifResourceType* gumbo_handle_resource_type = NULL;
 
@@ -36,70 +29,10 @@ static void gumbo_handle_dtor(ErlNifEnv* env, void* obj) {
 
   gumbo_handle_t* h = obj;
   if (h->output != NULL) {
-    /* Teardown runs on a GC/scheduler thread, possibly on the dirty CPU
-       scheduler's small stack, so it must not recurse. gumbo's own
-       destroy_node recurses once per tree level and 0.14.1 has no nesting
-       cap; its per-node work (spec: parser.c destroy_node at tag 0.14.1)
-       is therefore reimplemented here iteratively in reverse preorder:
-       preorder puts a parent before all its descendants, so descending
-       index order frees every child before its parent.
-
-       Emptying each children vector as we go also makes the destroy_node
-       call inside gumbo_destroy_output bottom out at depth 1, where it
-       frees only the document node, the doctype strings, the error vector
-       and the output struct. Note: merely emptying the vectors is NOT
-       enough — stopping destroy_node's loop also stops its traversal, so
-       the whole subtree below the document would leak. This loop must
-       stay in sync with c_src/test/teardown_probe.c, which asserts a
-       counting allocator's balance is zero across the same teardown. */
-    GumboParser parser;
-    memset(&parser, 0, sizeof(parser));
-    parser._options = &h->options;
-    for (size_t i = h->node_count; i-- > 0;) {
-      GumboNode* node = h->nodes[i];
-      GumboVector* children = NULL;
-
-      switch (node->type) {
-        case GUMBO_NODE_ELEMENT:
-        case GUMBO_NODE_TEMPLATE: {
-          GumboVector* attributes = &node->v.element.attributes;
-          unsigned int j;
-          for (j = 0; j < attributes->length; ++j) {
-            gumbo_destroy_attribute(&parser, attributes->data[j]);
-          }
-          gumbo_parser_deallocate(&parser, attributes->data);
-          attributes->data = NULL;
-          attributes->length = 0;
-          attributes->capacity = 0;
-          children = &node->v.element.children;
-          break;
-        }
-        case GUMBO_NODE_DOCUMENT:
-          children = &node->v.document.children;
-          break;
-        default: /* TEXT, CDATA, COMMENT, WHITESPACE, PROCESSING_INSTRUCTION */
-          gumbo_parser_deallocate(&parser, (void*)node->v.text.text);
-          break;
-      }
-
-      if (children != NULL) {
-        /* Free the pointer array and zero all three fields by hand;
-           gumbo_vector_destroy is not a substitute because it leaves
-           length set, and the zeroed vector is what stops destroy_node's
-           double-free in gumbo_destroy_output. */
-        gumbo_parser_deallocate(&parser, children->data);
-        children->data = NULL;
-        children->length = 0;
-        children->capacity = 0;
-      }
-      /* gumbo_destroy_output's destroy_node frees the document node
-         itself; compare pointers rather than indices so this stays
-         correct if the table build ever changes. */
-      if (node != h->output->document) {
-        gumbo_parser_deallocate(&parser, node);
-      }
-    }
-    gumbo_destroy_output(&h->options, h->output);
+    /* The disarming pass lives in gumbo_teardown.c, shared with the
+       teardown probe, so a regression in this destructor fails the probe
+       rather than passing by private copy. */
+    gumbo_teardown_pass(&h->options, h->output, h->nodes, h->node_count);
   }
   enif_free(h->nodes);
   enif_free(h->parent_indices);

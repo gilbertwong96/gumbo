@@ -89,17 +89,27 @@ $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
 	$(CC) $(LDSHARED_FLAGS) -o $@ $(OBJS)
 
 # Deterministic teardown probe: parses with a counting allocator, runs the
-# destructor's teardown, and fails unless the allocator balance is exactly
-# zero. The binary lives in priv/obj (gitignored).
+# destructor's shared teardown pass, and fails unless the allocator balance
+# is exactly zero. A second mode is the crash canary: it calls
+# gumbo_destroy_output directly — no pass — on a deep document under a
+# deliberately small stack and reports whether gumbo's own teardown still
+# recurses; that mode is informational and never fails the build.
+# The binary lives in priv/obj (gitignored). gumbo_teardown.c is compiled
+# explicitly here; it is shared with the NIF, which the wildcard above
+# picks up legitimately because the unit has no ERTS dependency.
 TEARDOWN_PROBE_SRC := c_src/test/teardown_probe.c
 TEARDOWN_PROBE := $(OBJ_DIR)/teardown_probe
 
-$(TEARDOWN_PROBE): $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS)
+$(TEARDOWN_PROBE): $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS) c_src/gumbo_teardown.c
 	@mkdir -p $(dir $@)
-	$(CC) $(ALL_CFLAGS) -o $@ $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS)
+	$(CC) $(ALL_CFLAGS) -o $@ $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS) c_src/gumbo_teardown.c
 
 check-teardown: $(TEARDOWN_PROBE)
-	$(TEARDOWN_PROBE)
+	$(TEARDOWN_PROBE) balance
+	@echo "--- crash canary: does gumbo's teardown still recurse? ---"
+	@( ulimit -s 320; $(TEARDOWN_PROBE) canary 20000 ) \
+	  && echo "NOTE: teardown survived; gumbo may no longer recurse (the pass stays correct)" \
+	  || echo "OK: teardown still recurses, so the teardown pass remains required"
 
 # Pull in the compiler-emitted dependency files: -MMD writes one .d next to
 # every object (and the probe's next to its binary), naming the headers each
