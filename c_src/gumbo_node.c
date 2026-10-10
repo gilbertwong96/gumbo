@@ -54,7 +54,7 @@ static ERL_NIF_TERM gumbo_node_invalid(ErlNifEnv* env,
 
 /* ---- node shape predicates ---- */
 
-static int gumbo_node_is_element(const GumboNode* node) {
+int gumbo_node_is_element(const GumboNode* node) {
   return node->type == GUMBO_NODE_ELEMENT || node->type == GUMBO_NODE_TEMPLATE;
 }
 
@@ -74,9 +74,8 @@ static int gumbo_node_is_text_like(const GumboNode* node) {
 /* ---- small term builders shared by several extractors ---- */
 
 /* NUL-terminated string (doctype names, decoded text) or nil when NULL. */
-static ERL_NIF_TERM gumbo_node_stringz(ErlNifEnv* env,
-                                       const gumbo_atoms_t* atoms,
-                                       const char* s) {
+ERL_NIF_TERM gumbo_node_stringz(ErlNifEnv* env,
+                                const gumbo_atoms_t* atoms, const char* s) {
   if (s == NULL) {
     return atoms->nil;
   }
@@ -89,8 +88,7 @@ static ERL_NIF_TERM gumbo_node_stringz(ErlNifEnv* env,
 
 /* Length-delimited piece (original text, original tag). A zero-length piece
    is the empty binary; its data pointer is never touched in that case. */
-static ERL_NIF_TERM gumbo_node_string_piece(ErlNifEnv* env,
-                                            GumboStringPiece piece) {
+ERL_NIF_TERM gumbo_node_string_piece(ErlNifEnv* env, GumboStringPiece piece) {
   ERL_NIF_TERM out;
   if (!gumbo_make_binary(env, piece.data, piece.length, &out)) {
     return enif_raise_exception(env, enif_make_badarg(env));
@@ -99,9 +97,8 @@ static ERL_NIF_TERM gumbo_node_string_piece(ErlNifEnv* env,
 }
 
 /* %Gumbo.Position{} built from a GumboSourcePosition. */
-static int gumbo_node_position_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                   GumboSourcePosition pos,
-                                   ERL_NIF_TERM* out) {
+int gumbo_node_position_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                            GumboSourcePosition pos, ERL_NIF_TERM* out) {
   ERL_NIF_TERM keys[] = {atoms->node.struct_, atoms->node.line,
                          atoms->node.column, atoms->node.offset};
   ERL_NIF_TERM values[] = {atoms->node.position_module,
@@ -512,4 +509,95 @@ ERL_NIF_TERM gumbo_nif_node_previous(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     prev += h->subtree_sizes[prev];
   }
   return enif_make_ulong(env, (unsigned long)prev);
+}
+
+ERL_NIF_TERM gumbo_nif_node_attributes(ErlNifEnv* env,
+                                       const gumbo_atoms_t* atoms, int argc,
+                                       const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  gumbo_handle_t* h;
+  GumboNode* node;
+  int status = gumbo_node_get(env, argv[0], argv[1], &h, &node);
+  if (status != GUMBO_NODE_OK) {
+    return gumbo_node_invalid(env, atoms, status, argv);
+  }
+  (void)h;
+
+  ERL_NIF_TERM list = enif_make_list(env, 0);
+  if (gumbo_node_is_element(node)) {
+    GumboVector* attributes = &node->v.element.attributes;
+    /* Cons from the end so the list stays in source order. */
+    unsigned int i;
+    for (i = attributes->length; i-- > 0;) {
+      list = enif_make_list_cell(env, enif_make_ulong(env, i), list);
+    }
+  }
+  return list;
+}
+
+/* gumbo_get_attribute compares with strcasecmp in a loop, which needs a
+   NUL-terminated C string; an Elixir binary is not one. The name is copied
+   into a terminated buffer (stack below 256 bytes, heap above), and a name
+   containing a NUL byte yields nil: passing one through would silently
+   truncate the search and could match the wrong attribute. attribute.c has
+   no asserts, so the call itself needs no other guard. */
+#define GUMBO_NODE_ATTR_NAME_STACK 256
+
+ERL_NIF_TERM gumbo_nif_node_attribute(ErlNifEnv* env,
+                                      const gumbo_atoms_t* atoms, int argc,
+                                      const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  gumbo_handle_t* h;
+  GumboNode* node;
+  int status = gumbo_node_get(env, argv[0], argv[1], &h, &node);
+  if (status != GUMBO_NODE_OK) {
+    return gumbo_node_invalid(env, atoms, status, argv);
+  }
+  (void)h;
+
+  if (!gumbo_node_is_element(node)) {
+    return atoms->nil;
+  }
+
+  ErlNifBinary name;
+  if (!enif_inspect_binary(env, argv[2], &name)) {
+    return enif_make_badarg(env);
+  }
+  if (memchr(name.data, '\0', name.size) != NULL) {
+    return atoms->nil;
+  }
+
+  char stack_buf[GUMBO_NODE_ATTR_NAME_STACK];
+  char* buf = stack_buf;
+  if (name.size >= sizeof(stack_buf)) {
+    buf = enif_alloc(name.size + 1);
+    if (buf == NULL) {
+      return enif_raise_exception(env, enif_make_badarg(env));
+    }
+  }
+  memcpy(buf, name.data, name.size);
+  buf[name.size] = '\0';
+
+  GumboAttribute* attr =
+      gumbo_get_attribute(&node->v.element.attributes, buf);
+  if (buf != stack_buf) {
+    enif_free(buf);
+  }
+  if (attr == NULL) {
+    return atoms->nil;
+  }
+
+  /* The matched attribute's index in the vector, by pointer comparison
+     rather than arithmetic on the void** data. */
+  GumboVector* attributes = &node->v.element.attributes;
+  unsigned int i;
+  for (i = 0; i < attributes->length; ++i) {
+    if (attributes->data[i] == attr) {
+      return enif_make_ulong(env, i);
+    }
+  }
+  /* Unreachable: gumbo_get_attribute only returns vector members. */
+  return atoms->nil;
 }

@@ -394,5 +394,17 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->node.message = enif_make_atom(env, "message");
   atoms->node.invalid_node = enif_make_atom(env, "invalid_node");
 
+  /* Attribute accessors: details-map keys and the error atom. */
+  atoms->attribute.namespace = enif_make_atom(env, "namespace");
+  atoms->attribute.name = enif_make_atom(env, "name");
+  atoms->attribute.value = enif_make_atom(env, "value");
+  atoms->attribute.original_name = enif_make_atom(env, "original_name");
+  atoms->attribute.original_value = enif_make_atom(env, "original_value");
+  atoms->attribute.name_start = enif_make_atom(env, "name_start");
+  atoms->attribute.name_end = enif_make_atom(env, "name_end");
+  atoms->attribute.value_start = enif_make_atom(env, "value_start");
+  atoms->attribute.value_end = enif_make_atom(env, "value_end");
+  atoms->attribute.invalid_attribute = enif_make_atom(env, "invalid_attribute");
+
   return 0;
 }

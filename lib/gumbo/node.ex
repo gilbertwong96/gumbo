@@ -16,7 +16,7 @@ defmodule Gumbo.Node do
   |---|---|---|---|
   | `type/1` `parent/1` `children/1` `next/1` `previous/1` `descendants/1` `index_within_parent/1` `parse_flags/1` `parse_flag?/2` `position/1` `details/1` | ✓ | ✓ | ✓ |
   | `has_doctype?/1` `doctype_name/1` `public_identifier/1` `system_identifier/1` `quirks_mode/1` | ✓ | `nil` | `nil` |
-  | `tag/1` `tag_name/1` `namespace/1` `original_tag/1` `original_end_tag/1` `end_position/1` | `nil` | ✓ | `nil` |
+  | `tag/1` `tag_name/1` `namespace/1` `attributes/1` `attribute/2` `attribute_map/1` `original_tag/1` `original_end_tag/1` `end_position/1` | `nil` | ✓ | `nil` |
   | `text/1` `original_text/1` | `nil` | `nil` | ✓ |
 
   \\* `:text`, `:cdata`, `:comment`, `:whitespace`, `:processing_instruction`.
@@ -150,6 +150,47 @@ defmodule Gumbo.Node do
   @doc "The element's namespace; `nil` off elements."
   @spec namespace(t()) :: Gumbo.Types.namespace() | nil
   def namespace(%__MODULE__{} = node), do: fetch!(node, :namespace)
+
+  @doc "The element's attributes in source order; `[]` off elements."
+  @spec attributes(t()) :: [Gumbo.Attribute.t()]
+  def attributes(%__MODULE__{output: output, index: index} = node) do
+    output.resource
+    |> Gumbo.Native.node_attributes(index)
+    |> Enum.map(&%Gumbo.Attribute{node: node, index: &1})
+  end
+
+  @doc """
+  The element's attribute named `name`, matched case-insensitively exactly
+  as `gumbo_get_attribute` does (`strcasecmp`); `nil` when absent or off
+  elements.
+
+  `name` must not contain a NUL byte: the search is a C-string comparison, so
+  a NUL would silently truncate the lookup and could match a different
+  attribute. A name containing one is rejected and `nil` is returned.
+  """
+  @spec attribute(t(), binary()) :: Gumbo.Attribute.t() | nil
+  def attribute(%__MODULE__{output: output, index: index} = node, name) do
+    case Gumbo.Native.node_attribute(output.resource, index, name) do
+      nil -> nil
+      attribute_index -> %Gumbo.Attribute{node: node, index: attribute_index}
+    end
+  end
+
+  @doc """
+  A name → value map of the element's attributes, built from the same data
+  as `Gumbo.Attribute.details/1`.
+
+  Lossy: the keys are the normalized names, so namespaces are folded away
+  (an `xlink:href` and a plain `href` collide) and the map cannot represent
+  duplicate names. `attributes/1` is the lossless path.
+  """
+  @spec attribute_map(t()) :: %{binary() => binary()}
+  def attribute_map(%__MODULE__{} = node) do
+    Map.new(attributes(node), fn attribute ->
+      {:ok, details} = Gumbo.Attribute.details(attribute)
+      {details.name, details.value}
+    end)
+  end
 
   @doc """
   The start tag as written, including the trailing `>`; the empty binary for
