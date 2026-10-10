@@ -238,12 +238,17 @@ the assertion that matters is that the VM survives teardown.
 $ make check-teardown
 ```
 
-compiles and runs the teardown-contract probe: it parses a 20 000-deep
-document through counting allocators and fails the build if any allocation
-is outstanding after teardown. Survival is not reclamation — this probe is
-what proves nothing leaks, and it has a canary mode that verifies gumbo
-0.14.1's own recursive teardown still segfaults, so the disarm pass is
-known to remain necessary.
+compiles and runs the teardown-contract probe, which has two modes. The
+balance mode parses a small document that exercises every teardown branch
+(doctype strings, attributes, text, comment, template content, and a parse
+error) through counting allocators, runs the destructor's shared teardown
+pass, and fails the build if any allocation is outstanding afterward. The
+canary mode parses a 20 000-deep document with gumbo's default allocators,
+calls gumbo's own recursive teardown directly under a deliberately small
+stack, and only reports whether it still recurses — it never fails the
+build. Surviving proves liveness, balancing proves reclamation, and
+neither alone is sufficient: this project once shipped a teardown that
+satisfied the first while violating the second.
 
 ## Deliberate omissions
 
