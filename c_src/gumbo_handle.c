@@ -2,6 +2,7 @@
 
 #include <erl_nif.h>
 
+#include "attribute.h" /* gumbo_destroy_attribute */
 #include "gumbo.h"
 #include "gumbo_handle.h"
 #include "gumbo_options.h"
@@ -35,28 +36,67 @@ static void gumbo_handle_dtor(ErlNifEnv* env, void* obj) {
 
   gumbo_handle_t* h = obj;
   if (h->output != NULL) {
-    /* Disarm gumbo's recursive destroy_node before gumbo_destroy_output
-       runs (spec: "Gumbo's own recursion, and why teardown is the hard
-       part"). destroy_node recurses once per tree level and 0.14.1 has no
-       nesting cap, so on a dirty CPU scheduler's small stack a 20k-deep
-       document takes the VM down at GC time. Emptying every children
-       vector in reverse preorder makes destroy_node's loop body never
-       run: its recursion bottoms out at constant depth while all the
-       string, attribute and doctype frees still happen through gumbo's
-       own code. */
+    /* Teardown runs on a GC/scheduler thread, possibly on the dirty CPU
+       scheduler's small stack, so it must not recurse. gumbo's own
+       destroy_node recurses once per tree level and 0.14.1 has no nesting
+       cap; its per-node work (spec: parser.c destroy_node at tag 0.14.1)
+       is therefore reimplemented here iteratively in reverse preorder:
+       preorder puts a parent before all its descendants, so descending
+       index order frees every child before its parent.
+
+       Emptying each children vector as we go also makes the destroy_node
+       call inside gumbo_destroy_output bottom out at depth 1, where it
+       frees only the document node, the doctype strings, the error vector
+       and the output struct. Note: merely emptying the vectors is NOT
+       enough — stopping destroy_node's loop also stops its traversal, so
+       the whole subtree below the document would leak. This loop must
+       stay in sync with c_src/test/teardown_probe.c, which asserts a
+       counting allocator's balance is zero across the same teardown. */
     GumboParser parser;
     memset(&parser, 0, sizeof(parser));
     parser._options = &h->options;
     for (size_t i = h->node_count; i-- > 0;) {
-      GumboVector* children = gumbo_node_children(h->nodes[i]);
-      if (children != NULL && children->capacity > 0) {
-        /* Free the pointer array and zero all three fields by hand.
-           gumbo_vector_destroy is not a substitute: it frees data but
-           leaves length set, so destroy_node would walk freed pointers. */
+      GumboNode* node = h->nodes[i];
+      GumboVector* children = NULL;
+
+      switch (node->type) {
+        case GUMBO_NODE_ELEMENT:
+        case GUMBO_NODE_TEMPLATE: {
+          GumboVector* attributes = &node->v.element.attributes;
+          unsigned int j;
+          for (j = 0; j < attributes->length; ++j) {
+            gumbo_destroy_attribute(&parser, attributes->data[j]);
+          }
+          gumbo_parser_deallocate(&parser, attributes->data);
+          attributes->data = NULL;
+          attributes->length = 0;
+          attributes->capacity = 0;
+          children = &node->v.element.children;
+          break;
+        }
+        case GUMBO_NODE_DOCUMENT:
+          children = &node->v.document.children;
+          break;
+        default: /* TEXT, CDATA, COMMENT, WHITESPACE, PROCESSING_INSTRUCTION */
+          gumbo_parser_deallocate(&parser, (void*)node->v.text.text);
+          break;
+      }
+
+      if (children != NULL) {
+        /* Free the pointer array and zero all three fields by hand;
+           gumbo_vector_destroy is not a substitute because it leaves
+           length set, and the zeroed vector is what stops destroy_node's
+           double-free in gumbo_destroy_output. */
         gumbo_parser_deallocate(&parser, children->data);
         children->data = NULL;
         children->length = 0;
         children->capacity = 0;
+      }
+      /* gumbo_destroy_output's destroy_node frees the document node
+         itself; compare pointers rather than indices so this stays
+         correct if the table build ever changes. */
+      if (node != h->output->document) {
+        gumbo_parser_deallocate(&parser, node);
       }
     }
     gumbo_destroy_output(&h->options, h->output);
@@ -205,10 +245,11 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   }
 
   if (gumbo_node_table_build(h) != 0) {
-    /* The table only partially covers the tree, so the destructor cannot
-       disarm it and gumbo_destroy_output would recurse to full depth on a
-       GC thread. This is an unreachable OOM path, and the parse already
-       raises; leak the tree rather than risk that recursion. */
+    /* The table only partially covers the tree, so the teardown above
+       cannot empty every children vector and destroy_node inside
+       gumbo_destroy_output would still recurse into unvisited subtrees
+       on a GC thread. This is an unreachable OOM path, and the parse
+       already raises; leak the tree rather than risk that recursion. */
     h->output = NULL;
     enif_release_resource(h);
     return enif_raise_exception(env, enif_make_badarg(env));

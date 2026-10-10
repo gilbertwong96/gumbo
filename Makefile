@@ -83,6 +83,19 @@ $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
 	@mkdir -p $(PRIV_DIR)
 	$(CC) $(LDSHARED_FLAGS) -o $@ $(OBJS)
 
+# Deterministic teardown probe: parses with a counting allocator, runs the
+# destructor's teardown, and fails unless the allocator balance is exactly
+# zero. The binary lives in priv/obj (gitignored).
+TEARDOWN_PROBE_SRC := c_src/test/teardown_probe.c
+TEARDOWN_PROBE := $(OBJ_DIR)/teardown_probe
+
+$(TEARDOWN_PROBE): $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS)
+	@mkdir -p $(dir $@)
+	$(CC) $(ALL_CFLAGS) -o $@ $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS)
+
+check-teardown: $(TEARDOWN_PROBE)
+	$(TEARDOWN_PROBE)
+
 gumbo-fetch:
 	rm -rf $(GUMBO_DIR)
 	git clone --depth 1 --branch 0.14.1 https://codeberg.org/gumbo-parser/gumbo-parser.git $(GUMBO_DIR)
@@ -91,4 +104,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch
+.PHONY: all clean gumbo-fetch check-teardown

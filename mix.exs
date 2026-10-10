@@ -30,12 +30,20 @@ defmodule Gumbo.MixProject do
   defp aliases do
     [
       "test.small_stack": fn _ ->
-        System.cmd(
-          "elixir",
-          ["--erl", "+sssdcpu 20", "-S", "mix", "test", "--only", "small_stack"],
-          into: IO.stream(),
-          stderr_to_stdout: true
-        )
+        # The child VM's exit status must propagate: a destructor crash
+        # (e.g. SIGBUS, reported by System.cmd as exit status 138) has to
+        # fail the alias or the safety net silently never trips.
+        {_output, status} =
+          System.cmd(
+            "elixir",
+            ["--erl", "+sssdcpu 20", "-S", "mix", "test", "--only", "small_stack"],
+            into: IO.stream(),
+            stderr_to_stdout: true
+          )
+
+        if status != 0 do
+          Mix.raise("test.small_stack failed with status #{inspect(status)}")
+        end
       end
     ]
   end

@@ -10,6 +10,7 @@ defmodule Gumbo.Options do
 
   @dirty_threshold 20_480
   @max_buffer_size 4_294_967_295
+  @c_int_max 2_147_483_647
 
   defstruct tab_stop: 8,
             stop_on_first_error: false,
@@ -22,12 +23,14 @@ defmodule Gumbo.Options do
   `tab_stop`, `stop_on_first_error`, `max_errors`, `fragment_context` and
   `fragment_namespace` are `GumboOptions` fields; `:dirty` is this library's
   scheduler policy. `fragment_context` is `nil` (no fragment, gumbo's
-  `GUMBO_TAG_LAST`) or a tag atom.
+  `GUMBO_TAG_LAST`) or a tag atom. `tab_stop` and `max_errors` are bounded by
+  C `int` range, so a value that passes `new/1` can never fail the NIF
+  decode.
   """
   @type t :: %__MODULE__{
-          tab_stop: pos_integer(),
+          tab_stop: 1..2_147_483_647,
           stop_on_first_error: boolean(),
-          max_errors: -1 | non_neg_integer(),
+          max_errors: -1..2_147_483_647,
           fragment_context: nil | Gumbo.Tag.t(),
           fragment_namespace: Gumbo.Types.namespace(),
           dirty: :auto | boolean()
@@ -93,9 +96,16 @@ defmodule Gumbo.Options do
   def check_size(size) when is_integer(size) and size >= 0 and size <= @max_buffer_size, do: :ok
   def check_size(_size), do: {:error, :input_too_large}
 
-  defp validate_option(:tab_stop, value) when is_integer(value) and value >= 1, do: :ok
+  defp validate_option(:tab_stop, value)
+       when is_integer(value) and value >= 1 and value <= @c_int_max,
+       do: :ok
+
   defp validate_option(:stop_on_first_error, value) when is_boolean(value), do: :ok
-  defp validate_option(:max_errors, value) when is_integer(value) and value >= -1, do: :ok
+
+  defp validate_option(:max_errors, value)
+       when is_integer(value) and value >= -1 and value <= @c_int_max,
+       do: :ok
+
   defp validate_option(:fragment_context, nil), do: :ok
 
   defp validate_option(:fragment_context, value) when is_atom(value) do

@@ -17,6 +17,14 @@ defmodule Gumbo.ParseTest do
     assert {:error, {:invalid_option, :tab_stop, 0}} = Gumbo.parse("<p>", tab_stop: 0)
   end
 
+  test "values beyond C int range are rejected with the documented shape" do
+    assert {:error, {:invalid_option, :max_errors, 3_000_000_000}} =
+             Gumbo.parse("<p>", max_errors: 3_000_000_000)
+
+    assert {:error, {:invalid_option, :tab_stop, 3_000_000_000}} =
+             Gumbo.parse("<p>", tab_stop: 3_000_000_000)
+  end
+
   test "the empty binary parses to an implied document" do
     assert {:ok, output} = Gumbo.parse("")
     assert Gumbo.Output.node_count(output) > 0
