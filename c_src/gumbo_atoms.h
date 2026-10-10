@@ -127,6 +127,32 @@ typedef struct {
     ERL_NIF_TERM value_end;
     ERL_NIF_TERM invalid_attribute;
   } attribute;
+
+  /* Error accessor atoms: the error_details-map keys named after the
+     accessors they feed, plus the keys of the type-specific submaps
+     (tokenizer, duplicate_attr, parser_error). The :invalid_node reason a
+     bad error index yields is atoms->node.invalid_node, exactly as
+     attr_details reuses it. */
+  struct {
+    ERL_NIF_TERM type;
+    ERL_NIF_TERM position;
+    ERL_NIF_TERM original_text;
+    ERL_NIF_TERM message;
+    ERL_NIF_TERM caret;
+    ERL_NIF_TERM codepoint;
+    ERL_NIF_TERM tokenizer;
+    ERL_NIF_TERM text;
+    ERL_NIF_TERM duplicate_attr;
+    ERL_NIF_TERM parser_error;
+    ERL_NIF_TERM state;
+    ERL_NIF_TERM name;
+    ERL_NIF_TERM original_index;
+    ERL_NIF_TERM new_index;
+    ERL_NIF_TERM input_type;
+    ERL_NIF_TERM input_tag;
+    ERL_NIF_TERM insertion_mode;
+    ERL_NIF_TERM tag_stack;
+  } error_;
 } gumbo_atoms_t;
 
 /* Interns every table above. Returns 0 on success; a nonzero return makes

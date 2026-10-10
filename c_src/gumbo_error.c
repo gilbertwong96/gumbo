@@ -1,0 +1,330 @@
+#include <string.h>
+
+#include "error.h" /* gumbo's internal header; see the note below */
+#include "parser.h"
+#include "util.h" /* gumbo_parser_deallocate, for the rendered buffer */
+#include "gumbo.h"
+#include "gumbo_atoms.h"
+#include "gumbo_error.h"
+#include "gumbo_handle.h"
+#include "gumbo_node.h"
+
+/* This file owns the GumboError surface: output_errors lists the indices
+   into output->errors and error_details assembles the full map from one
+   extractor per field, exactly as gumbo_node.c and gumbo_attr.c do, so a
+   field cannot be right in one place and wrong in another. Every term is
+   built in the caller's environment per call; the shared string, piece and
+   position extractors are the same helpers node and attribute fields use.
+
+   error.h is gumbo's internal header — the public gumbo.h exposes
+   output->errors only as an opaque GumboVector — and this is the one place
+   we read it. That is safe because the submodule pins gumbo-parser to
+   0.14.1, and gumbo_atoms.c's compile-time enum checks fail loudly on a
+   bump. The GumboError.v union is read strictly by type, per error.h:
+   codepoint (UTF8_INVALID/TRUNCATED and the numeric char-ref errors),
+   tokenizer (the tokenizer-state errors), text (the named char-ref
+   errors), duplicate_attr (DUPLICATE_ATTR), parser (PARSER and
+   UNACKNOWLEDGED_SELF_CLOSING_TAG); every other member of the union is
+   garbage for that type.
+
+   message and caret render through gumbo_error_to_string /
+   gumbo_caret_diagnostic_to_string with a stack-local GumboParser carrying
+   only _options, the same trick gumbo_destroy_output uses. Verified at
+   0.14.1: nothing on that formatting path touches parser except
+   parser->_options, reached through print_message and the
+   gumbo_string_buffer_* helpers. The rendered buffer is allocated with
+   gumbo's allocator, so it is freed with gumbo_parser_deallocate, never
+   enif_free. caret/1's source_text must be the very buffer the parse used
+   — h->input.data — because the diagnostic walks outwards from
+   error->original_text, a pointer into it; that copy is NUL-terminated
+   (gumbo_handle.c) because the walk stops at the first NUL. */
+
+/* ---- resolution ---- */
+
+/* An error index outside output->errors is a programmer error: error_details
+   answers {:error, :invalid_node} (the same atom node and attribute details
+   use) and the Elixir-side scalar accessors raise ArgumentError on it.
+   Nothing dereferences an unchecked index. */
+
+/* ---- one extractor per details-map field ---- */
+
+static ERL_NIF_TERM gumbo_error_type_term(ErlNifEnv* env,
+                                          const gumbo_atoms_t* atoms,
+                                          const GumboError* error) {
+  (void)env;
+  /* Parser-produced, so the table index is in range by construction. */
+  return atoms->error_types[error->type];
+}
+
+static ERL_NIF_TERM gumbo_error_position_term(ErlNifEnv* env,
+                                              const gumbo_atoms_t* atoms,
+                                              const GumboError* error) {
+  ERL_NIF_TERM out;
+  if (!gumbo_node_position_map(env, atoms, error->position, &out)) {
+    return enif_raise_exception(env, enif_make_badarg(env));
+  }
+  return out;
+}
+
+/* The source bytes from the error location to the end of the input: the
+   pointer identifies a position, not a length, and the retained copy's size
+   is what bounds it. The guard is unreachable — every producer sets
+   original_text inside the buffer — and degrades to the empty binary rather
+   than dereferencing. */
+static ERL_NIF_TERM gumbo_error_original_text_term(ErlNifEnv* env,
+                                                   const gumbo_atoms_t* atoms,
+                                                   const gumbo_handle_t* h,
+                                                   const GumboError* error) {
+  (void)atoms;
+  const char* start = (const char*)h->input.data;
+  const char* end = start + h->input.size;
+  if (error->original_text == NULL || error->original_text < start ||
+      error->original_text > end) {
+    GumboStringPiece empty = {NULL, 0};
+    return gumbo_node_string_piece(env, empty);
+  }
+  GumboStringPiece piece = {error->original_text,
+                            (size_t)(end - error->original_text)};
+  return gumbo_node_string_piece(env, piece);
+}
+
+/* Renders the error with one of gumbo's two string builders and copies the
+   result into a fresh binary before freeing the buffer with gumbo's own
+   deallocator. caret selects gumbo_caret_diagnostic_to_string, which reads
+   source bytes around error->original_text, so the buffer handed in is the
+   one the parse used. */
+static ERL_NIF_TERM gumbo_error_render_term(ErlNifEnv* env,
+                                            const gumbo_handle_t* h,
+                                            const GumboError* error,
+                                            int caret) {
+  GumboParser parser;
+  memset(&parser, 0, sizeof(parser));
+  parser._options = &h->options;
+  GumboStringBuffer buffer;
+  gumbo_string_buffer_init(&parser, &buffer);
+  if (caret) {
+    gumbo_caret_diagnostic_to_string(&parser, error,
+                                     (const char*)h->input.data, &buffer);
+  } else {
+    gumbo_error_to_string(&parser, error, &buffer);
+  }
+  ERL_NIF_TERM out;
+  int ok = gumbo_make_binary(env, buffer.data, buffer.length, &out);
+  gumbo_parser_deallocate(&parser, buffer.data);
+  if (!ok) {
+    return enif_raise_exception(env, enif_make_badarg(env));
+  }
+  return out;
+}
+
+static ERL_NIF_TERM gumbo_error_codepoint_term(ErlNifEnv* env,
+                                               const gumbo_atoms_t* atoms,
+                                               const GumboError* error) {
+  switch (error->type) {
+    case GUMBO_ERR_UTF8_INVALID:
+    case GUMBO_ERR_UTF8_TRUNCATED:
+    case GUMBO_ERR_NUMERIC_CHAR_REF_WITHOUT_SEMICOLON:
+    case GUMBO_ERR_NUMERIC_CHAR_REF_INVALID:
+      return enif_make_uint64(env, error->v.codepoint);
+    default:
+      return atoms->nil;
+  }
+}
+
+/* The tokenizer-state errors, the exact set tokenizer_add_parse_error
+   produces at 0.14.1 (tokenizer.c). codepoint is the raw int under the
+   cursor, which can be -1 at EOF. */
+static ERL_NIF_TERM gumbo_error_tokenizer_term(ErlNifEnv* env,
+                                               const gumbo_atoms_t* atoms,
+                                               const GumboError* error) {
+  switch (error->type) {
+    case GUMBO_ERR_UTF8_NULL:
+    case GUMBO_ERR_TAG_EOF:
+    case GUMBO_ERR_TAG_INVALID:
+    case GUMBO_ERR_CLOSE_TAG_EMPTY:
+    case GUMBO_ERR_CLOSE_TAG_EOF:
+    case GUMBO_ERR_CLOSE_TAG_INVALID:
+    case GUMBO_ERR_SCRIPT_EOF:
+    case GUMBO_ERR_ATTR_NAME_EOF:
+    case GUMBO_ERR_ATTR_NAME_INVALID:
+    case GUMBO_ERR_ATTR_DOUBLE_QUOTE_EOF:
+    case GUMBO_ERR_ATTR_SINGLE_QUOTE_EOF:
+    case GUMBO_ERR_ATTR_UNQUOTED_EOF:
+    case GUMBO_ERR_ATTR_UNQUOTED_RIGHT_BRACKET:
+    case GUMBO_ERR_ATTR_UNQUOTED_EQUALS:
+    case GUMBO_ERR_ATTR_AFTER_EOF:
+    case GUMBO_ERR_ATTR_AFTER_INVALID:
+    case GUMBO_ERR_SOLIDUS_EOF:
+    case GUMBO_ERR_SOLIDUS_INVALID:
+    case GUMBO_ERR_DASHES_OR_DOCTYPE:
+    case GUMBO_ERR_COMMENT_EOF:
+    case GUMBO_ERR_COMMENT_INVALID:
+    case GUMBO_ERR_COMMENT_BANG_AFTER_DOUBLE_DASH:
+    case GUMBO_ERR_COMMENT_DASH_AFTER_DOUBLE_DASH:
+    case GUMBO_ERR_COMMENT_SPACE_AFTER_DOUBLE_DASH:
+    case GUMBO_ERR_COMMENT_END_BANG_EOF:
+    case GUMBO_ERR_DOCTYPE_EOF:
+    case GUMBO_ERR_DOCTYPE_INVALID:
+    case GUMBO_ERR_DOCTYPE_SPACE:
+    case GUMBO_ERR_DOCTYPE_RIGHT_BRACKET:
+    case GUMBO_ERR_DOCTYPE_SPACE_OR_RIGHT_BRACKET:
+    case GUMBO_ERR_DOCTYPE_END:
+      break;
+    default:
+      return atoms->nil;
+  }
+  ERL_NIF_TERM keys[] = {atoms->error_.state, atoms->error_.codepoint};
+  ERL_NIF_TERM values[] = {
+      atoms->tokenizer_states[error->v.tokenizer.state],
+      enif_make_int(env, error->v.tokenizer.codepoint),
+  };
+  ERL_NIF_TERM map;
+  if (!enif_make_map_from_arrays(env, keys, values, 2, &map)) {
+    return enif_raise_exception(env, enif_make_badarg(env));
+  }
+  return map;
+}
+
+/* The named char-ref errors: text is a piece into the retained input (the
+   bad reference as written). */
+static ERL_NIF_TERM gumbo_error_text_term(ErlNifEnv* env,
+                                          const gumbo_atoms_t* atoms,
+                                          const GumboError* error) {
+  switch (error->type) {
+    case GUMBO_ERR_NAMED_CHAR_REF_WITHOUT_SEMICOLON:
+    case GUMBO_ERR_NAMED_CHAR_REF_INVALID:
+      break;
+    default:
+      return atoms->nil;
+  }
+  return gumbo_node_string_piece(env, error->v.text);
+}
+
+static ERL_NIF_TERM gumbo_error_duplicate_attr_term(
+    ErlNifEnv* env, const gumbo_atoms_t* atoms, const GumboError* error) {
+  if (error->type != GUMBO_ERR_DUPLICATE_ATTR) {
+    return atoms->nil;
+  }
+  const GumboDuplicateAttrError* dup = &error->v.duplicate_attr;
+  ERL_NIF_TERM keys[] = {atoms->error_.name, atoms->error_.original_index,
+                         atoms->error_.new_index};
+  ERL_NIF_TERM values[] = {
+      gumbo_node_stringz(env, atoms, dup->name),
+      enif_make_uint(env, dup->original_index),
+      enif_make_uint(env, dup->new_index),
+  };
+  ERL_NIF_TERM map;
+  if (!enif_make_map_from_arrays(env, keys, values, 3, &map)) {
+    return enif_raise_exception(env, enif_make_badarg(env));
+  }
+  return map;
+}
+
+static ERL_NIF_TERM gumbo_error_parser_error_term(ErlNifEnv* env,
+                                                  const gumbo_atoms_t* atoms,
+                                                  const GumboError* error) {
+  switch (error->type) {
+    case GUMBO_ERR_PARSER:
+    case GUMBO_ERR_UNACKNOWLEDGED_SELF_CLOSING_TAG:
+      break;
+    default:
+      return atoms->nil;
+  }
+  const GumboParserError* parser = &error->v.parser;
+
+  /* tag_stack is the one gumbo vector that stores its values by value: each
+     void* slot is a GumboTag cast to a pointer (error.h says so, and
+     error.c's print_tag_stack casts back the same way). Cons from the end so
+     the list stays in stack order, bottom to top. */
+  ERL_NIF_TERM stack = enif_make_list(env, 0);
+  unsigned int i;
+  for (i = parser->tag_stack.length; i-- > 0;) {
+    GumboTag tag = (GumboTag)(intptr_t)parser->tag_stack.data[i];
+    stack = enif_make_list_cell(env, atoms->tags[tag], stack);
+  }
+
+  ERL_NIF_TERM keys[] = {atoms->error_.input_type, atoms->error_.input_tag,
+                         atoms->error_.insertion_mode, atoms->error_.tag_stack};
+  ERL_NIF_TERM values[] = {
+      atoms->token_types[parser->input_type],
+      atoms->tags[parser->input_tag],
+      atoms->insertion_modes[parser->parser_state],
+      stack,
+  };
+  ERL_NIF_TERM map;
+  if (!enif_make_map_from_arrays(env, keys, values, 4, &map)) {
+    return enif_raise_exception(env, enif_make_badarg(env));
+  }
+  return map;
+}
+
+/* ---- the NIF entry points ---- */
+
+#define GUMBO_ERROR_DETAILS_COUNT 10
+
+ERL_NIF_TERM gumbo_nif_error_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                     int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  gumbo_handle_t* h;
+  if (!gumbo_handle_get(env, argv[0], &h)) {
+    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+  }
+  unsigned long index;
+  if (!enif_get_ulong(env, argv[1], &index) ||
+      index >= h->output->errors.length) {
+    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+  }
+  const GumboError* error = h->output->errors.data[index];
+
+  ERL_NIF_TERM keys[GUMBO_ERROR_DETAILS_COUNT] = {
+      atoms->error_.type,
+      atoms->error_.position,
+      atoms->error_.original_text,
+      atoms->error_.message,
+      atoms->error_.caret,
+      atoms->error_.codepoint,
+      atoms->error_.tokenizer,
+      atoms->error_.text,
+      atoms->error_.duplicate_attr,
+      atoms->error_.parser_error,
+  };
+  ERL_NIF_TERM values[GUMBO_ERROR_DETAILS_COUNT] = {
+      gumbo_error_type_term(env, atoms, error),
+      gumbo_error_position_term(env, atoms, error),
+      gumbo_error_original_text_term(env, atoms, h, error),
+      gumbo_error_render_term(env, h, error, 0),
+      gumbo_error_render_term(env, h, error, 1),
+      gumbo_error_codepoint_term(env, atoms, error),
+      gumbo_error_tokenizer_term(env, atoms, error),
+      gumbo_error_text_term(env, atoms, error),
+      gumbo_error_duplicate_attr_term(env, atoms, error),
+      gumbo_error_parser_error_term(env, atoms, error),
+  };
+  ERL_NIF_TERM map;
+  if (!enif_make_map_from_arrays(env, keys, values, GUMBO_ERROR_DETAILS_COUNT,
+                                 &map)) {
+    return enif_raise_exception(env, enif_make_badarg(env));
+  }
+  return enif_make_tuple2(env, atoms->ok, map);
+}
+
+ERL_NIF_TERM gumbo_nif_output_errors(ErlNifEnv* env,
+                                     const gumbo_atoms_t* atoms, int argc,
+                                     const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  gumbo_handle_t* h;
+  if (!gumbo_handle_get(env, argv[0], &h)) {
+    return enif_make_tuple2(env, atoms->error, atoms->invalid_handle);
+  }
+
+  ERL_NIF_TERM list = enif_make_list(env, 0);
+  GumboVector* errors = &h->output->errors;
+  /* Cons from the end so the list stays in source order. */
+  unsigned int i;
+  for (i = errors->length; i-- > 0;) {
+    list = enif_make_list_cell(env, enif_make_ulong(env, i), list);
+  }
+  return list;
+}

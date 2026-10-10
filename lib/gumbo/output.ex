@@ -31,6 +31,23 @@ defmodule Gumbo.Output do
     %Gumbo.Node{output: output, index: Gumbo.Native.output_root(resource)}
   end
 
+  @doc """
+  The parse errors gumbo recorded, in source order; `[]` when none.
+
+  These are descriptions of malformations the parser recovered from:
+  `parse/2` still returns `{:ok, _}` with the best-effort tree. gumbo is
+  designed to be resilient, so an empty list does not mean "valid HTML" —
+  plenty of sloppy but legal markup produces no errors, and not every
+  malformation produces one. The list is capped by the `:max_errors` option
+  and by `:stop_on_first_error`.
+  """
+  @spec errors(t()) :: [Gumbo.Error.t()]
+  def errors(%__MODULE__{resource: resource} = output) do
+    resource
+    |> Gumbo.Native.output_errors()
+    |> Enum.map(&%Gumbo.Error{output: output, index: &1})
+  end
+
   @doc "The exact input that was parsed."
   @spec input(t()) :: binary()
   def input(%__MODULE__{resource: resource}), do: Gumbo.Native.output_input(resource)
