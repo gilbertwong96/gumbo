@@ -41,6 +41,13 @@ CFLAGS ?= -O2
 ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -Wall -Wextra \
 	-Ic_src -I$(GUMBO_DIR)/src -I$(ERTS_INCLUDE_DIR)
 
+# The vendored gumbo-parser sources trip -Wunused-parameter and
+# -Wsign-compare in several places. They are vendored unpatched by policy,
+# so those warnings are unfixable; silence only those two for the vendored
+# objects so a warning in our own c_src/*.c still stands out. Our sources
+# keep the full $(ALL_CFLAGS) set — do not re-broaden this.
+GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare
+
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	LDSHARED_FLAGS := -bundle -flat_namespace -undefined dynamic_lookup
@@ -63,7 +70,7 @@ $(OBJS): $(GUMBO_HEADER)
 
 $(OBJ_DIR)/gumbo-parser/%.o: $(GUMBO_DIR)/src/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(ALL_CFLAGS) -c -o $@ $<
+	$(CC) $(GUMBO_CFLAGS) -c -o $@ $<
 
 $(OBJ_DIR)/%.o: c_src/%.c
 	@mkdir -p $(dir $@)
