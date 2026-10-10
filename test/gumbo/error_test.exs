@@ -28,6 +28,54 @@ defmodule Gumbo.ErrorTest do
     assert is_binary(Error.message(err))
   end
 
+  test "a tokenizer error reports its state and codepoint" do
+    {:ok, output} = Gumbo.parse(~s(<div title=>))
+
+    err =
+      Enum.find(
+        Gumbo.Output.errors(output),
+        &(Error.type(&1) == :attr_unquoted_right_bracket)
+      )
+
+    # 62 is the '>' that ended the attribute value; the tokenizer was still
+    # in the attribute-name state when it saw the right bracket.
+    assert %{state: :attr_name, codepoint: 62} = Error.tokenizer(err)
+  end
+
+  test "an unresolvable named character reference reports text, not a codepoint" do
+    {:ok, output} = Gumbo.parse(~s(&notanentity;))
+
+    err =
+      Enum.find(
+        Gumbo.Output.errors(output),
+        &(Error.type(&1) == :named_char_ref_without_semicolon)
+      )
+
+    # "&not" resolves to a real entity without its semicolon; the v.text
+    # member holds it and v.codepoint must stay unread (nil).
+    assert Error.text(err) == "not"
+    assert Error.codepoint(err) == nil
+  end
+
+  test "a parser error reports its insertion mode and open-tag stack" do
+    {:ok, output} = Gumbo.parse("<div><span>")
+
+    # The premature-EOF error: the one whose tag_stack is non-empty (the
+    # initial-mode doctype error carries an empty one).
+    err =
+      Enum.find(Gumbo.Output.errors(output), fn error ->
+        Error.type(error) == :parser and
+          match?(%{tag_stack: [_ | _]}, Error.parser_error(error))
+      end)
+
+    assert %{
+             input_type: :eof,
+             input_tag: :unknown,
+             insertion_mode: :in_body,
+             tag_stack: [:html, :body, :div, :span]
+           } = Error.parser_error(err)
+  end
+
   test "stop_on_first_error stops after the first" do
     # Repeated duplicate attributes cannot show this: add_duplicate_attr_error
     # never makes gumbo_lex return false, so the parse loop in
