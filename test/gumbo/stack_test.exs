@@ -28,6 +28,22 @@ defmodule Gumbo.StackTest do
     assert_survives_death(fn -> html end)
   end
 
+  test "a 20k-deep document walks with descendants/1 and still tears down" do
+    # The walk is one children/1 NIF per node on the Elixir side, so it
+    # exercises the node accessors at depth with no materialize in sight;
+    # teardown after the walk is the assertion that matters.
+    assert_walks_and_survives(fn -> HTML.nested("span", 20_000) end)
+  end
+
+  defp assert_walks_and_survives(build) do
+    {:ok, output} = Gumbo.parse(build.())
+    assert length(output |> Gumbo.Output.document() |> Gumbo.Node.descendants()) >= 20_002
+
+    :erlang.garbage_collect()
+    assert {:ok, again} = Gumbo.parse("<p>after</p>")
+    assert Gumbo.Output.node_count(again) > 0
+  end
+
   test "an 80k-deep table document tears down" do
     assert_survives_death(fn ->
       String.duplicate("<table><tr><td>", 20_000) <>
