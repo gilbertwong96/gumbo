@@ -4,8 +4,8 @@ defmodule Gumbo.Output do
 
   The struct holds one NIF resource — the parse tree, a private copy of the
   input, the options, and the preorder node table — plus the cached node
-  count. Node structs returned by `document/1`, `root/1` and (in later
-  tasks) the node accessors reference this handle; the handle must outlive
+  count. Node structs returned by `document/1`, `root/1`, `fragment_nodes/1`
+  and the node accessors reference this handle; the handle must outlive
   them, and the tree is freed when the handle is garbage collected.
   """
 
@@ -61,4 +61,20 @@ defmodule Gumbo.Output do
   @doc "The number of nodes in the tree, document included."
   @spec node_count(t()) :: non_neg_integer()
   def node_count(%__MODULE__{node_count: node_count}), do: node_count
+
+  @doc """
+  The parsed fragment's nodes: the children of `root/1`.
+
+  A fragment parse (`Gumbo.parse_fragment/3`) is a full
+  `gumbo_parse_with_options` run, so its `root/1` is the parser-inserted
+  implied `<html>` element rather than the context element — the context
+  element lives in gumbo's internal parser state and is freed with it, so it
+  never appears in the tree. The children of that implied root are the nodes
+  the fragment parse produced, which is what callers almost always want.
+  Outside fragment mode this is the children of the real `<html>` element.
+  """
+  @spec fragment_nodes(t()) :: [Gumbo.Node.t()]
+  def fragment_nodes(%__MODULE__{} = output) do
+    output |> root() |> Gumbo.Node.children()
+  end
 end
