@@ -231,15 +231,34 @@ defmodule Gumbo do
   end
 
   defp check_fragment_conflicts(context, options) do
-    cond do
-      Keyword.has_key?(options, :fragment_context) ->
-        {:error, {:conflicting_option, :fragment_context}}
+    with :ok <- validate_fragment_namespace(options) do
+      cond do
+        Keyword.has_key?(options, :fragment_context) ->
+          {:error, {:conflicting_option, :fragment_context}}
 
-      Keyword.get(options, :fragment_namespace) not in [nil, implied_namespace(context)] ->
-        {:error, {:conflicting_option, :fragment_namespace}}
+        Keyword.get(options, :fragment_namespace) not in [nil, implied_namespace(context)] ->
+          {:error, {:conflicting_option, :fragment_namespace}}
 
-      true ->
+        true ->
+          :ok
+      end
+    end
+  end
+
+  # fragment_namespace is validated here, before the agreement check, so an
+  # invalid value is reported as {:invalid_option, key, value} — as parse/2
+  # would — instead of being mislabeled as a conflict. Reusing Options.new/1
+  # keeps the two paths from ever disagreeing on what is valid.
+  defp validate_fragment_namespace(options) do
+    case Keyword.fetch(options, :fragment_namespace) do
+      :error ->
         :ok
+
+      {:ok, value} ->
+        case Gumbo.Options.new(fragment_namespace: value) do
+          {:ok, _opts} -> :ok
+          {:error, _reason} = error -> error
+        end
     end
   end
 
