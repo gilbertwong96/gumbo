@@ -186,9 +186,12 @@ int main(void) {
   options.deallocator = gumbo_probe_dealloc;
 
   /* Exercises every teardown branch: doctype strings, attributes, text,
-     comment, template content, element and document children vectors. */
+     comment, template content, element and document children vectors, and
+     the error vector (the duplicate attribute produces an error, and the
+     premature EOF at the end of the tree produces a parser error with a
+     tag_stack vector). */
   const char* html = "<!DOCTYPE html PUBLIC \"pub\" \"sys\">"
-                     "<div id=\"a\" class=\"b\">text<!--c-->"
+                     "<div id=\"a\" class=\"b\" class=\"c\">text<!--c-->"
                      "<template><p>x</p></template></div>";
 
   GumboOutput* output =

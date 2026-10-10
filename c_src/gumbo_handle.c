@@ -265,14 +265,20 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   memset(h, 0, sizeof(*h));
 
   /* Private copy of the input: the tree's original_text/original_tag/...
-     fields point into it, and the caller's binary is not safe to hold. */
-  if (!enif_alloc_binary(caller.size, &h->input)) {
+     fields point into it, and the caller's binary is not safe to hold. One
+     extra byte is allocated and set to NUL: the error caret diagnostic
+     walks to the first NUL (error.c's find_last_newline/find_next_newline),
+     so the copy must be terminated exactly as gumbo's own printer expects.
+     size stays the caller's byte count; the terminator is never parsed. */
+  if (!enif_alloc_binary(caller.size + 1, &h->input)) {
     enif_release_resource(h);
     return enif_raise_exception(env, enif_make_badarg(env));
   }
+  h->input.size = caller.size;
   if (caller.size > 0) {
     memcpy(h->input.data, caller.data, caller.size);
   }
+  h->input.data[caller.size] = '\0';
 
   if (!gumbo_options_decode(env, atoms, argv[1], h)) {
     enif_release_resource(h);

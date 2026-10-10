@@ -406,5 +406,25 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->attribute.value_end = enif_make_atom(env, "value_end");
   atoms->attribute.invalid_attribute = enif_make_atom(env, "invalid_attribute");
 
+  /* Error accessors: details-map keys and the type-specific submap keys. */
+  atoms->error_.type = enif_make_atom(env, "type");
+  atoms->error_.position = enif_make_atom(env, "position");
+  atoms->error_.original_text = enif_make_atom(env, "original_text");
+  atoms->error_.message = enif_make_atom(env, "message");
+  atoms->error_.caret = enif_make_atom(env, "caret");
+  atoms->error_.codepoint = enif_make_atom(env, "codepoint");
+  atoms->error_.tokenizer = enif_make_atom(env, "tokenizer");
+  atoms->error_.text = enif_make_atom(env, "text");
+  atoms->error_.duplicate_attr = enif_make_atom(env, "duplicate_attr");
+  atoms->error_.parser_error = enif_make_atom(env, "parser_error");
+  atoms->error_.state = enif_make_atom(env, "state");
+  atoms->error_.name = enif_make_atom(env, "name");
+  atoms->error_.original_index = enif_make_atom(env, "original_index");
+  atoms->error_.new_index = enif_make_atom(env, "new_index");
+  atoms->error_.input_type = enif_make_atom(env, "input_type");
+  atoms->error_.input_tag = enif_make_atom(env, "input_tag");
+  atoms->error_.insertion_mode = enif_make_atom(env, "insertion_mode");
+  atoms->error_.tag_stack = enif_make_atom(env, "tag_stack");
+
   return 0;
 }
