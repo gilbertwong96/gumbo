@@ -71,13 +71,28 @@ defmodule Gumbo.MixProject do
   # consumers need no git.
   defp package do
     [
+      description:
+        "A faithful Elixir binding to gumbo-parser 0.14.1: spec-conformant " <>
+          "HTML5 parsing into a lazy native handle or plain Elixir data.",
       name: "gumbo",
       licenses: ["Apache-2.0"],
+      links: %{
+        "gumbo-parser" => "https://codeberg.org/gumbo-parser/gumbo-parser",
+        # PLACEHOLDER: guessed, no git remote exists yet — see docs/0.
+        "Source" => "https://github.com/elixir-gumbo/gumbo"
+      },
       files: ~w(lib c_src mix.exs Makefile README.md CHANGELOG.md LICENSE NOTICE)
     ]
   end
 
+  # PLACEHOLDER: the repo has no git remote yet, so the URLs below are
+  # guesses. The owner must substitute the real repository URL before a
+  # public Hex release.
   defp docs do
-    [main: "Gumbo"]
+    [
+      main: "Gumbo",
+      source_url: "https://github.com/elixir-gumbo/gumbo",
+      extras: ["README.md", "CHANGELOG.md"]
+    ]
   end
 end

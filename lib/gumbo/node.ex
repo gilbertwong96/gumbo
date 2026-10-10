@@ -33,12 +33,30 @@ defmodule Gumbo.Node do
 
   @opaque t :: %__MODULE__{output: Gumbo.Output.t(), index: non_neg_integer()}
 
-  @doc "The node's `Gumbo.Types.node_type/0`."
+  @doc """
+  The node's `t:Gumbo.Types.node_type/0`.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.type(Gumbo.Output.root(output))
+      :element
+  """
   @spec type(t()) :: Gumbo.Types.node_type()
   def type(%__MODULE__{} = node), do: fetch!(node, :type)
 
   @doc """
   The node's parent, or `nil` for the document node.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.parent(Gumbo.Output.document(output))
+      nil
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.parent(Gumbo.Output.root(output)) |> Gumbo.Node.type()
+      :document
   """
   @spec parent(t()) :: t() | nil
   def parent(%__MODULE__{output: output, index: index}) do
@@ -47,6 +65,12 @@ defmodule Gumbo.Node do
 
   @doc """
   The node's direct children in source order, or `[]` for leaves.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Enum.map(Gumbo.Node.children(Gumbo.Output.root(output)), &Gumbo.Node.type/1)
+      [:element, :element]
   """
   @spec children(t()) :: [t()]
   def children(%__MODULE__{output: output, index: index}) do
@@ -60,6 +84,13 @@ defmodule Gumbo.Node do
 
   Computed from the parent's children plus the node's
   `index_within_parent/1`; gumbo stores no sibling pointers.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.next(p)
+      nil
   """
   @spec next(t()) :: t() | nil
   def next(%__MODULE__{output: output, index: index}) do
@@ -68,6 +99,13 @@ defmodule Gumbo.Node do
 
   @doc """
   The node's previous sibling, or `nil` when the node is first.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x<b>y</b></p>")
+      iex> b = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "b"))
+      iex> Gumbo.Node.previous(b) |> Gumbo.Node.type()
+      :text
   """
   @spec previous(t()) :: t() | nil
   def previous(%__MODULE__{output: output, index: index}) do
@@ -80,11 +118,26 @@ defmodule Gumbo.Node do
   The walk is iterative — an explicit list used as a stack, one
   `children/1` call per node — so depth is bounded by memory, not by the
   scheduler's C stack.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Enum.map(Gumbo.Node.descendants(Gumbo.Output.root(output)), &Gumbo.Node.type/1)
+      [:element, :element, :element, :element, :text]
   """
   @spec descendants(t()) :: [t()]
   def descendants(%__MODULE__{} = node), do: walk([], [node])
 
-  @doc "The node's position within its parent's `children/1`, 0-based."
+  @doc """
+  The node's position within its parent's `children/1`, 0-based.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.index_within_parent(p)
+      0
+  """
   @spec index_within_parent(t()) :: non_neg_integer()
   def index_within_parent(%__MODULE__{} = node), do: fetch!(node, :index_within_parent)
 
@@ -93,6 +146,17 @@ defmodule Gumbo.Node do
 
   `[]` means `GUMBO_INSERTION_NORMAL`; parser-inserted nodes report why, e.g.
   `[:by_parser, :implied]` for an implied `<html>`.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.parse_flags(Gumbo.Output.root(output))
+      [:by_parser, :implicit_end_tag, :implied]
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.parse_flags(p)
+      []
   """
   @spec parse_flags(t()) :: [Gumbo.Types.parse_flag()]
   def parse_flags(%__MODULE__{} = node), do: fetch!(node, :parse_flags)
@@ -101,38 +165,109 @@ defmodule Gumbo.Node do
   Returns whether `flag` describes the node's insertion.
 
   `:normal` means no parse flags are set; any other flag tests its bit.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.parse_flag?(Gumbo.Output.root(output), :by_parser)
+      true
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.parse_flag?(p, :normal)
+      true
   """
   @spec parse_flag?(t(), Gumbo.Types.parse_flag()) :: boolean()
   def parse_flag?(%__MODULE__{} = node, :normal), do: parse_flags(node) == []
   def parse_flag?(%__MODULE__{} = node, flag), do: flag in parse_flags(node)
 
-  @doc "The node's start position in the source."
+  @doc """
+  The node's start position in the source.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.position(p)
+      %Gumbo.Position{line: 1, column: 16, offset: 15}
+  """
   @spec position(t()) :: Gumbo.Position.t()
   def position(%__MODULE__{} = node), do: fetch!(node, :position)
 
-  @doc "Whether the document had an explicit doctype; `nil` off the document."
+  @doc """
+  Whether the document had an explicit doctype; `nil` off the document.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.has_doctype?(Gumbo.Output.document(output))
+      true
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.has_doctype?(Gumbo.Output.root(output))
+      nil
+  """
   @spec has_doctype?(t()) :: boolean() | nil
   def has_doctype?(%__MODULE__{} = node), do: fetch!(node, :has_doctype)
 
-  @doc "The doctype's name (lowercased by the tokenizer); `nil` without one."
+  @doc """
+  The doctype's name (lowercased by the tokenizer); `nil` without one.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.doctype_name(Gumbo.Output.document(output))
+      "html"
+  """
   @spec doctype_name(t()) :: binary() | nil
   def doctype_name(%__MODULE__{} = node), do: fetch!(node, :doctype_name)
 
-  @doc "The doctype's public identifier, verbatim; `nil` when absent."
+  @doc """
+  The doctype's public identifier, verbatim; `nil` when absent.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.public_identifier(Gumbo.Output.document(output))
+      ""
+  """
   @spec public_identifier(t()) :: binary() | nil
   def public_identifier(%__MODULE__{} = node), do: fetch!(node, :public_identifier)
 
-  @doc "The doctype's system identifier, verbatim; `nil` when absent."
+  @doc """
+  The doctype's system identifier, verbatim; `nil` when absent.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.system_identifier(Gumbo.Output.document(output))
+      ""
+  """
   @spec system_identifier(t()) :: binary() | nil
   def system_identifier(%__MODULE__{} = node), do: fetch!(node, :system_identifier)
 
-  @doc "The document's quirks mode; `nil` off the document."
+  @doc """
+  The document's quirks mode; `nil` off the document.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.quirks_mode(Gumbo.Output.document(output))
+      :no_quirks
+  """
   @spec quirks_mode(t()) :: Gumbo.Types.quirks_mode() | nil
   def quirks_mode(%__MODULE__{} = node), do: fetch!(node, :quirks_mode)
 
   @doc """
   The element's tag, `:unknown` for names outside gumbo's tag table; `nil`
   off elements.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<my-tag>x</my-tag>")
+      iex> node = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag(&1) == :unknown))
+      iex> Gumbo.Node.tag(node)
+      :unknown
   """
   @spec tag(t()) :: Gumbo.Tag.t() | nil
   def tag(%__MODULE__{} = node), do: fetch!(node, :tag)
@@ -143,15 +278,40 @@ defmodule Gumbo.Node do
   For known tags this is gumbo's normalized name; for `:unknown` tags the
   name is recovered from `original_tag/1`. Parser-inserted elements have no
   source, so an `:unknown` tag there yields `nil`.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<my-tag>x</my-tag>")
+      iex> node = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag(&1) == :unknown))
+      iex> Gumbo.Node.tag_name(node)
+      "my-tag"
   """
   @spec tag_name(t()) :: binary() | nil
   def tag_name(%__MODULE__{} = node), do: fetch!(node, :tag_name)
 
-  @doc "The element's namespace; `nil` off elements."
+  @doc """
+  The element's namespace; `nil` off elements.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse_fragment("<circle/>", :svg, fragment_namespace: :svg)
+      iex> [circle] = Gumbo.Output.fragment_nodes(output)
+      iex> Gumbo.Node.namespace(circle)
+      :svg
+  """
   @spec namespace(t()) :: Gumbo.Types.namespace() | nil
   def namespace(%__MODULE__{} = node), do: fetch!(node, :namespace)
 
-  @doc "The element's attributes in source order; `[]` off elements."
+  @doc """
+  The element's attributes in source order; `[]` off elements.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a" id="b">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> length(Gumbo.Node.attributes(p))
+      2
+  """
   @spec attributes(t()) :: [Gumbo.Attribute.t()]
   def attributes(%__MODULE__{output: output, index: index} = node) do
     output.resource
@@ -167,6 +327,13 @@ defmodule Gumbo.Node do
   `name` must not contain a NUL byte: the search is a C-string comparison, so
   a NUL would silently truncate the lookup and could match a different
   attribute. A name containing one is rejected and `nil` is returned.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.attribute(p, "CLASS") |> Gumbo.Attribute.name()
+      "class"
   """
   @spec attribute(t(), binary()) :: Gumbo.Attribute.t() | nil
   def attribute(%__MODULE__{output: output, index: index} = node, name) do
@@ -183,6 +350,13 @@ defmodule Gumbo.Node do
   Lossy: the keys are the normalized names, so namespaces are folded away
   (an `xlink:href` and a plain `href` collide) and the map cannot represent
   duplicate names. `attributes/1` is the lossless path.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.attribute_map(p)
+      %{"class" => "a"}
   """
   @spec attribute_map(t()) :: %{binary() => binary()}
   def attribute_map(%__MODULE__{} = node) do
@@ -195,6 +369,13 @@ defmodule Gumbo.Node do
   @doc """
   The start tag as written, including the trailing `>`; the empty binary for
   parser-inserted elements, `nil` off elements.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.original_tag(p)
+      "<p class=\\"a\\">"
   """
   @spec original_tag(t()) :: binary() | nil
   def original_tag(%__MODULE__{} = node), do: fetch!(node, :original_tag)
@@ -202,19 +383,53 @@ defmodule Gumbo.Node do
   @doc """
   The end tag as written, including the `>`; the empty binary when the end
   tag was implied, `nil` off elements.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.original_end_tag(p)
+      "</p>"
   """
   @spec original_end_tag(t()) :: binary() | nil
   def original_end_tag(%__MODULE__{} = node), do: fetch!(node, :original_end_tag)
 
-  @doc "The element's end-tag position; `nil` off elements."
+  @doc """
+  The element's end-tag position; `nil` off elements.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse(~s(<p class="a">x</p>))
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.end_position(p)
+      %Gumbo.Position{line: 1, column: 15, offset: 14}
+  """
   @spec end_position(t()) :: Gumbo.Position.t() | nil
   def end_position(%__MODULE__{} = node), do: fetch!(node, :end_position)
 
-  @doc "The node's text after entity decoding; `nil` off text-like nodes."
+  @doc """
+  The node's text after entity decoding; `nil` off text-like nodes.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.text(Enum.at(Gumbo.Node.children(p), 0))
+      "x"
+  """
   @spec text(t()) :: binary() | nil
   def text(%__MODULE__{} = node), do: fetch!(node, :text)
 
-  @doc "The node's text as written in the source; `nil` off text-like nodes."
+  @doc """
+  The node's text as written in the source; `nil` off text-like nodes.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
+      iex> Gumbo.Node.original_text(Enum.at(Gumbo.Node.children(p), 0))
+      "x"
+  """
   @spec original_text(t()) :: binary() | nil
   def original_text(%__MODULE__{} = node), do: fetch!(node, :original_text)
 
@@ -225,6 +440,13 @@ defmodule Gumbo.Node do
   type does not carry, so `details(n)[:tag] == tag(n)` for every key. The
   deliberate exception to the `ArgumentError` contract: a caller asking for a
   whole node branches on `{:error, :invalid_node}` rather than rescues.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> {:ok, details} = Gumbo.Output.root(output) |> Gumbo.Node.details()
+      iex> details[:type]
+      :element
   """
   @spec details(t()) :: {:ok, map()} | {:error, :invalid_node}
   def details(%__MODULE__{output: %Output{resource: resource}, index: index}) do

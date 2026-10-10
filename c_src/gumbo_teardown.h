@@ -10,7 +10,7 @@
    (c_src/test/teardown_probe.c) so a regression in one cannot go unseen by
    the other. This header is ERTS-free: the pass takes plain gumbo types
    and both callers supply what they hold. */
-void gumbo_teardown_pass(GumboOptions* options, GumboOutput* output,
+void gumbo_teardown_pass(const GumboOptions* options, GumboOutput* output,
                          GumboNode** nodes, size_t node_count);
 
 #endif /* GUMBO_TEARDOWN_H_ */
