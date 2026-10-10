@@ -70,8 +70,23 @@ static ERL_NIF_TERM nif_tag_all(ErlNifEnv* env, int argc,
   return gumbo_nif_tag_all(env, &priv->atoms, argc, argv);
 }
 
-static ERL_NIF_TERM nif_parse(ErlNifEnv* env, int argc,
-                              const ERL_NIF_TERM argv[]) {
+/* Parse and materialize are registered twice against the same body, once
+   plain and once with ERL_NIF_DIRTY_JOB_CPU_BOUND. The normal wrappers call
+   enif_consume_timeslice: on a normal scheduler the hint is meaningful —
+   these NIFs are one blocking call with no inner loop to hint from, so the
+   hint announces the whole timeslice up front. The dirty wrappers do not
+   call it: on a dirty scheduler the accounting is meaningless and would
+   report the wrong thing, so the split is by entry point, not a runtime
+   branch on the thread type. */
+static ERL_NIF_TERM nif_parse_normal(ErlNifEnv* env, int argc,
+                                     const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  enif_consume_timeslice(env, 100);
+  return gumbo_nif_parse(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_parse_dirty(ErlNifEnv* env, int argc,
+                                    const ERL_NIF_TERM argv[]) {
   gumbo_nif_priv_t* priv = enif_priv_data(env);
   return gumbo_nif_parse(env, &priv->atoms, argc, argv);
 }
@@ -166,14 +181,28 @@ static ERL_NIF_TERM nif_error_details(ErlNifEnv* env, int argc,
   return gumbo_nif_error_details(env, &priv->atoms, argc, argv);
 }
 
-static ERL_NIF_TERM nif_materialize_output(ErlNifEnv* env, int argc,
-                                           const ERL_NIF_TERM argv[]) {
+static ERL_NIF_TERM nif_materialize_output_normal(ErlNifEnv* env, int argc,
+                                                  const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  enif_consume_timeslice(env, 100);
+  return gumbo_nif_materialize_output(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_materialize_output_dirty(ErlNifEnv* env, int argc,
+                                                 const ERL_NIF_TERM argv[]) {
   gumbo_nif_priv_t* priv = enif_priv_data(env);
   return gumbo_nif_materialize_output(env, &priv->atoms, argc, argv);
 }
 
-static ERL_NIF_TERM nif_materialize_node(ErlNifEnv* env, int argc,
-                                         const ERL_NIF_TERM argv[]) {
+static ERL_NIF_TERM nif_materialize_node_normal(ErlNifEnv* env, int argc,
+                                                const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  enif_consume_timeslice(env, 100);
+  return gumbo_nif_materialize_node(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_materialize_node_dirty(ErlNifEnv* env, int argc,
+                                               const ERL_NIF_TERM argv[]) {
   gumbo_nif_priv_t* priv = enif_priv_data(env);
   return gumbo_nif_materialize_node(env, &priv->atoms, argc, argv);
 }
@@ -211,7 +240,8 @@ static ErlNifFunc nif_funcs[] = {
     {"tag_svg_name", 1, nif_tag_svg_name, 0},
     {"tag_from_original_text", 1, nif_tag_from_original_text, 0},
     {"tag_all", 0, nif_tag_all, 0},
-    {"parse", 2, nif_parse, 0},
+    {"parse", 2, nif_parse_normal, 0},
+    {"parse_dirty", 2, nif_parse_dirty, ERL_NIF_DIRTY_JOB_CPU_BOUND},
     {"output_document", 1, nif_output_document, 0},
     {"output_root", 1, nif_output_root, 0},
     {"output_input", 1, nif_output_input, 0},
@@ -227,8 +257,12 @@ static ErlNifFunc nif_funcs[] = {
     {"attr_details", 3, nif_attr_details, 0},
     {"output_errors", 1, nif_output_errors, 0},
     {"error_details", 2, nif_error_details, 0},
-    {"materialize_output", 2, nif_materialize_output, 0},
-    {"materialize_node", 3, nif_materialize_node, 0},
+    {"materialize_output", 2, nif_materialize_output_normal, 0},
+    {"materialize_output_dirty", 2, nif_materialize_output_dirty,
+     ERL_NIF_DIRTY_JOB_CPU_BOUND},
+    {"materialize_node", 3, nif_materialize_node_normal, 0},
+    {"materialize_node_dirty", 3, nif_materialize_node_dirty,
+     ERL_NIF_DIRTY_JOB_CPU_BOUND},
 };
 
 ERL_NIF_INIT(Elixir.Gumbo.Native, nif_funcs, gumbo_nif_load, NULL, NULL,
