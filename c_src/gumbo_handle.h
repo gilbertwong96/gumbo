@@ -1,0 +1,72 @@
+#ifndef GUMBO_HANDLE_H_
+#define GUMBO_HANDLE_H_
+
+#include <stddef.h>
+
+#include <erl_nif.h>
+
+#include "gumbo.h"
+#include "gumbo_atoms.h"
+
+/* The :dirty option, decoded into the handle so output_options/1 can
+   round-trip the full Gumbo.Options.t. It is this library's scheduler
+   policy, not a gumbo field, so it cannot live in GumboOptions. */
+typedef enum {
+  GUMBO_DIRTY_AUTO = 0, /* :auto */
+  GUMBO_DIRTY_NORMAL,   /* false  */
+  GUMBO_DIRTY_FORCE     /* true   */
+} gumbo_dirty_t;
+
+typedef struct {
+  GumboOptions options; /* by value: destroy_output re-reads the allocator */
+  gumbo_dirty_t dirty;  /* the :dirty option, for options/1 round-tripping */
+  GumboOutput* output;
+  ErlNifBinary input; /* private copy: the tree points into it */
+  GumboNode** nodes;  /* preorder; node identity is an index into this */
+  size_t node_count;
+  size_t capacity;
+} gumbo_handle_t;
+
+/* Opens the resource type. Returns 0 on success; a nonzero return makes the
+   NIF load fail. The type pointer is kept file-private; the NIF entry points
+   in this file reach it through the helpers below. */
+int gumbo_handle_init(ErlNifEnv* env);
+
+/* enif_get_resource wrapper. Returns nonzero and sets *out on success;
+   returns 0 when term is not a handle, in which case the caller answers
+   {:error, :invalid_handle}. */
+int gumbo_handle_get(ErlNifEnv* env, ERL_NIF_TERM term, gumbo_handle_t** out);
+
+/* Node lookup status codes for gumbo_node_get. */
+#define GUMBO_NODE_OK 0
+#define GUMBO_NODE_INVALID_HANDLE 1
+#define GUMBO_NODE_INVALID_NODE 2
+
+/* Resolves (handle, index) to a node pointer with bounds checking. Returns
+   GUMBO_NODE_OK on success, GUMBO_NODE_INVALID_HANDLE when the first term is
+   not a handle, or GUMBO_NODE_INVALID_NODE when the index is not a node in
+   that handle's table. The caller maps the code to
+   {:error, :invalid_handle} / {:error, :invalid_node}. */
+int gumbo_node_get(ErlNifEnv* env, ERL_NIF_TERM handle_term,
+                   ERL_NIF_TERM index_term, GumboNode** out);
+
+/* parse(binary, options_map) -> {:ok, resource} | {:error, term}. */
+ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                             int argc, const ERL_NIF_TERM argv[]);
+
+/* Gumbo.Output accessors, one per NIF. */
+ERL_NIF_TERM gumbo_nif_output_document(ErlNifEnv* env,
+                                       const gumbo_atoms_t* atoms, int argc,
+                                       const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM gumbo_nif_output_root(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                   int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM gumbo_nif_output_input(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                    int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM gumbo_nif_output_node_count(ErlNifEnv* env,
+                                         const gumbo_atoms_t* atoms, int argc,
+                                         const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM gumbo_nif_output_options(ErlNifEnv* env,
+                                      const gumbo_atoms_t* atoms, int argc,
+                                      const ERL_NIF_TERM argv[]);
+
+#endif /* GUMBO_HANDLE_H_ */

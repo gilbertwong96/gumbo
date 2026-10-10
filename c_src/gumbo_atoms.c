@@ -355,5 +355,15 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->nil = enif_make_atom(env, "nil");
   atoms->not_a_tag = enif_make_atom(env, "not_a_tag");
 
+  atoms->tab_stop = enif_make_atom(env, "tab_stop");
+  atoms->stop_on_first_error = enif_make_atom(env, "stop_on_first_error");
+  atoms->max_errors = enif_make_atom(env, "max_errors");
+  atoms->fragment_context = enif_make_atom(env, "fragment_context");
+  atoms->fragment_namespace = enif_make_atom(env, "fragment_namespace");
+  atoms->dirty = enif_make_atom(env, "dirty");
+  atoms->auto_ = enif_make_atom(env, "auto");
+  atoms->invalid_handle = enif_make_atom(env, "invalid_handle");
+  atoms->invalid_option = enif_make_atom(env, "invalid_option");
+
   return 0;
 }

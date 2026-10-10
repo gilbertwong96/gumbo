@@ -4,11 +4,12 @@
 
 #include "gumbo.h"
 #include "gumbo_atoms.h"
+#include "gumbo_handle.h"
 #include "gumbo_tags.h"
 
 typedef struct {
-  /* NIF-wide private state. Atom tables live here; resource types will
-     follow in later tasks. */
+  /* NIF-wide private state. The atom tables live here; the parse resource
+     type is file-private in gumbo_handle.c behind gumbo_handle_init. */
   gumbo_atoms_t atoms;
 } gumbo_nif_priv_t;
 
@@ -65,6 +66,42 @@ static ERL_NIF_TERM nif_tag_all(ErlNifEnv* env, int argc,
   return gumbo_nif_tag_all(env, &priv->atoms, argc, argv);
 }
 
+static ERL_NIF_TERM nif_parse(ErlNifEnv* env, int argc,
+                              const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_parse(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_output_document(ErlNifEnv* env, int argc,
+                                        const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_output_document(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_output_root(ErlNifEnv* env, int argc,
+                                    const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_output_root(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_output_input(ErlNifEnv* env, int argc,
+                                     const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_output_input(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_output_node_count(ErlNifEnv* env, int argc,
+                                          const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_output_node_count(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_output_options(ErlNifEnv* env, int argc,
+                                       const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_output_options(env, &priv->atoms, argc, argv);
+}
+
 static int gumbo_nif_load(ErlNifEnv* env, void** priv_data,
                           ERL_NIF_TERM load_info) {
   (void)load_info;
@@ -74,6 +111,10 @@ static int gumbo_nif_load(ErlNifEnv* env, void** priv_data,
     return 1;
   }
   if (gumbo_atoms_init(env, &priv->atoms) != 0) {
+    enif_free(priv);
+    return 1;
+  }
+  if (gumbo_handle_init(env) != 0) {
     enif_free(priv);
     return 1;
   }
@@ -94,6 +135,12 @@ static ErlNifFunc nif_funcs[] = {
     {"tag_svg_name", 1, nif_tag_svg_name, 0},
     {"tag_from_original_text", 1, nif_tag_from_original_text, 0},
     {"tag_all", 0, nif_tag_all, 0},
+    {"parse", 2, nif_parse, 0},
+    {"output_document", 1, nif_output_document, 0},
+    {"output_root", 1, nif_output_root, 0},
+    {"output_input", 1, nif_output_input, 0},
+    {"output_node_count", 1, nif_output_node_count, 0},
+    {"output_options", 1, nif_output_options, 0},
 };
 
 ERL_NIF_INIT(Elixir.Gumbo.Native, nif_funcs, gumbo_nif_load, NULL, NULL,

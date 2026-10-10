@@ -7,8 +7,10 @@ defmodule Gumbo.MixProject do
       version: "0.1.0",
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
+      elixirc_paths: elixirc_paths(Mix.env()),
       compilers: [:elixir_make] ++ Mix.compilers(),
       make_clean: ["clean"],
+      aliases: aliases(),
       deps: deps(),
       package: package(),
       docs: docs()
@@ -19,6 +21,22 @@ defmodule Gumbo.MixProject do
   def application do
     [
       extra_applications: [:logger]
+    ]
+  end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
+  defp aliases do
+    [
+      "test.small_stack": fn _ ->
+        System.cmd(
+          "elixir",
+          ["--erl", "+sssdcpu 20", "-S", "mix", "test", "--only", "small_stack"],
+          into: IO.stream(),
+          stderr_to_stdout: true
+        )
+      end
     ]
   end
 
