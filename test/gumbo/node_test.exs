@@ -158,6 +158,15 @@ defmodule Gumbo.NodeTest do
     assert Node.parent(text) == first
   end
 
+  test "index_within_parent/1 is nil for the document and 0-based for appended nodes" do
+    output = parse!("<!doctype html><p>x</p>")
+
+    assert Node.index_within_parent(Output.document(output)) == nil
+
+    p = descendants(output) |> Enum.find(&(Node.tag(&1) == :p))
+    assert Node.index_within_parent(p) == 0
+  end
+
   test "document: doctype accessors are populated and other accessors are nil" do
     output =
       parse!(

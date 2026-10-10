@@ -131,14 +131,21 @@ defmodule Gumbo.Node do
   @doc """
   The node's position within its parent's `children/1`, 0-based.
 
+  `nil` for the document node and any other node gumbo never appended to a
+  parent.
+
   ## Examples
 
       iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
       iex> p = output |> Gumbo.Output.root() |> Gumbo.Node.descendants() |> Enum.find(&(Gumbo.Node.tag_name(&1) == "p"))
       iex> Gumbo.Node.index_within_parent(p)
       0
+
+      iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
+      iex> Gumbo.Node.index_within_parent(Gumbo.Output.document(output))
+      nil
   """
-  @spec index_within_parent(t()) :: non_neg_integer()
+  @spec index_within_parent(t()) :: non_neg_integer() | nil
   def index_within_parent(%__MODULE__{} = node), do: fetch!(node, :index_within_parent)
 
   @doc """

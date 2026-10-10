@@ -119,7 +119,12 @@ ERL_NIF_TERM gumbo_node_type_term(ErlNifEnv* env,
 
 ERL_NIF_TERM gumbo_node_index_within_parent_term(
     ErlNifEnv* env, const gumbo_atoms_t* atoms, const GumboNode* node) {
-  (void)atoms;
+  /* create_node sets parent to NULL and index_within_parent to (size_t)-1
+     for never-appended nodes (the document node above all); without a
+     parent there is no position, so nil — not SIZE_MAX as an integer. */
+  if (node->parent == NULL) {
+    return atoms->nil;
+  }
   return enif_make_ulong(env, (unsigned long)node->index_within_parent);
 }
 
