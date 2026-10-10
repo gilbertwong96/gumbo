@@ -24,6 +24,24 @@ defmodule Gumbo.Native do
   @spec tag_all() :: [atom()]
   def tag_all(), do: :erlang.nif_error(:nif_not_loaded)
 
+  @spec parse(binary(), map()) :: {:ok, reference()} | {:error, term()}
+  def parse(_html, _options), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec output_document(reference()) :: non_neg_integer()
+  def output_document(_resource), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec output_root(reference()) :: non_neg_integer()
+  def output_root(_resource), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec output_input(reference()) :: binary()
+  def output_input(_resource), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec output_node_count(reference()) :: non_neg_integer()
+  def output_node_count(_resource), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec output_options(reference()) :: map()
+  def output_options(_resource), do: :erlang.nif_error(:nif_not_loaded)
+
   defp load_nif do
     path = :filename.join(:code.priv_dir(:gumbo), ~c"gumbo_nif")
 

@@ -66,6 +66,18 @@ typedef struct {
   ERL_NIF_TERM false_;
   ERL_NIF_TERM nil;
   ERL_NIF_TERM not_a_tag;
+
+  /* Parse and option atoms: the to_nif/1 map keys, the :dirty values that are
+     not already true_/false_/nil, and the handle/option error reasons. */
+  ERL_NIF_TERM tab_stop;
+  ERL_NIF_TERM stop_on_first_error;
+  ERL_NIF_TERM max_errors;
+  ERL_NIF_TERM fragment_context;
+  ERL_NIF_TERM fragment_namespace;
+  ERL_NIF_TERM dirty;
+  ERL_NIF_TERM auto_;
+  ERL_NIF_TERM invalid_handle;
+  ERL_NIF_TERM invalid_option;
 } gumbo_atoms_t;
 
 /* Interns every table above. Returns 0 on success; a nonzero return makes
