@@ -117,6 +117,11 @@ defmodule Gumbo.FragmentTest do
              Gumbo.parse_fragment("<circle/>", :svg, fragment_namespace: :mathml)
   end
 
+  test "an invalid fragment_namespace value is reported as invalid, not as a conflict" do
+    assert {:error, {:invalid_option, :fragment_namespace, :xhtml}} =
+             Gumbo.parse_fragment("<p>", :div, fragment_namespace: :xhtml)
+  end
+
   test "a context that is not a gumbo tag is rejected" do
     assert {:error, {:invalid_option, :fragment_context, :circle}} =
              Gumbo.parse_fragment("<circle/>", :circle)
