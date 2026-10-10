@@ -214,7 +214,8 @@ static ERL_NIF_TERM gumbo_materialize_node_full(ErlNifEnv* env,
    each node's map at terms[i]. Children are read from positions greater
    than i, which the pass has already built; scratch is the shared
    child-terms buffer, allocated by gumbo_materialize_scratch to fit any
-   children vector in the range. Failures raise rather than return. */
+   children vector in the range. Allocation failures surface as badarg
+   terms rather than raising. */
 static void gumbo_materialize_range(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                     const gumbo_handle_t* h, size_t start,
                                     size_t count, int detail,

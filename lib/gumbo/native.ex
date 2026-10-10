@@ -27,6 +27,9 @@ defmodule Gumbo.Native do
   @spec parse(binary(), map()) :: {:ok, reference()} | {:error, term()}
   def parse(_html, _options), do: :erlang.nif_error(:nif_not_loaded)
 
+  @spec parse_dirty(binary(), map()) :: {:ok, reference()} | {:error, term()}
+  def parse_dirty(_html, _options), do: :erlang.nif_error(:nif_not_loaded)
+
   @spec output_document(reference()) :: non_neg_integer()
   def output_document(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
@@ -79,10 +82,26 @@ defmodule Gumbo.Native do
           map() | {:error, :invalid_handle}
   def materialize_output(_resource, _detail), do: :erlang.nif_error(:nif_not_loaded)
 
+  @spec materialize_output_dirty(reference(), non_neg_integer()) ::
+          map() | {:error, :invalid_handle}
+  def materialize_output_dirty(_resource, _detail),
+    do: :erlang.nif_error(:nif_not_loaded)
+
   @spec materialize_node(reference(), non_neg_integer(), non_neg_integer()) ::
           {:ok, map()} | {:error, :invalid_node}
   def materialize_node(_resource, _index, _detail),
     do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec materialize_node_dirty(reference(), non_neg_integer(), non_neg_integer()) ::
+          {:ok, map()} | {:error, :invalid_node}
+  def materialize_node_dirty(_resource, _index, _detail),
+    do: :erlang.nif_error(:nif_not_loaded)
+
+  # The dispatch guard. Not a NIF: OTP 29 removed enif_have_dirty_schedulers
+  # from the NIF API, so the VM-side query is the guard's body and this
+  # keeps the call site in run/4 a plain function call.
+  @spec dirty_schedulers?() :: boolean()
+  def dirty_schedulers?(), do: :erlang.system_info(:dirty_cpu_schedulers) > 0
 
   defp load_nif do
     path = :filename.join(:code.priv_dir(:gumbo), ~c"gumbo_nif")

@@ -38,7 +38,12 @@ NIF_OBJS := $(C_SRCS:c_src/%.c=$(OBJ_DIR)/%.o)
 OBJS := $(GUMBO_OBJS) $(NIF_OBJS)
 
 CFLAGS ?= -O2
-ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -Wall -Wextra \
+# -MMD -MP makes the compiler emit one dependency file per object, covering
+# our own headers too. Without them, $(OBJS): $(GUMBO_HEADER) below only
+# tracked the vendored gumbo.h, so editing c_src/gumbo_handle.h silently
+# skipped rebuilds and the link could stitch objects compiled against
+# different struct layouts.
+ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -Wall -Wextra -MMD -MP \
 	-Ic_src -I$(GUMBO_DIR)/src -I$(ERTS_INCLUDE_DIR)
 
 # The vendored gumbo-parser sources trip -Wunused-parameter and
@@ -96,11 +101,18 @@ $(TEARDOWN_PROBE): $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS)
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE)
 
+# Pull in the compiler-emitted dependency files: -MMD writes one .d next to
+# every object (and the probe's next to its binary), naming the headers each
+# translation unit includes, ours as well as the vendored gumbo-parser's.
+-include $(OBJS:.o=.d) $(TEARDOWN_PROBE).d
+
 gumbo-fetch:
 	rm -rf $(GUMBO_DIR)
 	git clone --depth 1 --branch 0.14.1 https://codeberg.org/gumbo-parser/gumbo-parser.git $(GUMBO_DIR)
 	rm -rf $(GUMBO_DIR)/.git
 
+# The -MMD dependency files live next to the objects under $(OBJ_DIR) — and
+# the probe's next to its binary — so removing the directory removes them.
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 

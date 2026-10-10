@@ -14,12 +14,24 @@ defmodule Gumbo do
   `options` are validated by `Gumbo.Options.new/1`; an unknown key or an
   out-of-range value returns `{:error, {:invalid_option, key, value}}`.
   Buffers over 4 GB are rejected with `{:error, :input_too_large}`.
+
+  Parses of 20 KiB or more (`Gumbo.Options.dirty_threshold/0` bytes) run
+  on a dirty CPU scheduler so a large document does not block a normal
+  scheduler; `dirty: false` forces the normal scheduler, `dirty: true`
+  the dirty one. On a VM without dirty schedulers the dirty choice falls
+  back to the normal path invisibly.
   """
   @spec parse(binary(), keyword()) :: {:ok, Gumbo.Output.t()} | {:error, term()}
   def parse(html, options \\ []) when is_binary(html) do
     with :ok <- Gumbo.Options.check_size(byte_size(html)),
          {:ok, opts} <- Gumbo.Options.new(options),
-         {:ok, resource} <- Gumbo.Native.parse(html, Gumbo.Options.to_nif(opts)) do
+         {:ok, resource} <-
+           run(
+             fn -> Gumbo.Native.parse(html, Gumbo.Options.to_nif(opts)) end,
+             fn -> Gumbo.Native.parse_dirty(html, Gumbo.Options.to_nif(opts)) end,
+             opts,
+             byte_size(html)
+           ) do
       {:ok,
        %Gumbo.Output{
          resource: resource,
@@ -110,6 +122,11 @@ defmodule Gumbo do
 
   `detail:` is validated here and raises `ArgumentError` for anything but
   `:full | :content`.
+
+  Like `parse/2`, materializations of 20 480 nodes or more run on a dirty
+  CPU scheduler — the size proxy is the handle's cached node count, so the
+  dispatch costs no NIF call — with the same `dirty:` override; it raises
+  `ArgumentError` for anything but `:auto | true | false`.
   """
   @spec materialize(
           Gumbo.Output.t() | Gumbo.Node.t() | [Gumbo.Node.t()] | nil,
@@ -117,23 +134,37 @@ defmodule Gumbo do
         ) :: term()
   def materialize(value, options \\ []) do
     detail = detail_code(options)
-    do_materialize(value, detail)
+    dispatch = dispatch_options(options)
+    do_materialize(value, detail, dispatch)
   end
 
-  defp do_materialize(nil, _detail), do: nil
+  defp do_materialize(nil, _detail, _dispatch), do: nil
 
-  defp do_materialize(values, detail) when is_list(values),
-    do: Enum.map(values, &do_materialize(&1, detail))
+  defp do_materialize(values, detail, dispatch) when is_list(values),
+    do: Enum.map(values, &do_materialize(&1, detail, dispatch))
 
-  defp do_materialize(%Gumbo.Node{output: output, index: index}, detail) do
-    case Gumbo.Native.materialize_node(output.resource, index, detail) do
+  defp do_materialize(%Gumbo.Node{output: output, index: index}, detail, dispatch) do
+    result =
+      run(
+        fn -> Gumbo.Native.materialize_node(output.resource, index, detail) end,
+        fn -> Gumbo.Native.materialize_node_dirty(output.resource, index, detail) end,
+        dispatch,
+        output.node_count
+      )
+
+    case result do
       {:ok, map} -> map
       {:error, _reason} = error -> error
     end
   end
 
-  defp do_materialize(%Gumbo.Output{resource: resource}, detail) do
-    Gumbo.Native.materialize_output(resource, detail)
+  defp do_materialize(%Gumbo.Output{resource: resource, node_count: node_count}, detail, dispatch) do
+    run(
+      fn -> Gumbo.Native.materialize_output(resource, detail) end,
+      fn -> Gumbo.Native.materialize_output_dirty(resource, detail) end,
+      dispatch,
+      node_count
+    )
   end
 
   defp detail_code(options) do
@@ -141,6 +172,26 @@ defmodule Gumbo do
       :full -> 0
       :content -> 1
       other -> raise ArgumentError, "invalid detail: #{inspect(other)}"
+    end
+  end
+
+  defp dispatch_options(options) do
+    case Gumbo.Options.new(Keyword.take(options, [:dirty])) do
+      {:ok, dispatch} ->
+        dispatch
+
+      {:error, {:invalid_option, :dirty, value}} ->
+        raise ArgumentError, "invalid dirty: #{inspect(value)}"
+    end
+  end
+
+  defp run(normal_fun, dirty_fun, options, size) do
+    case Gumbo.Options.dispatch(options, size) do
+      :dirty ->
+        if Gumbo.Native.dirty_schedulers?(), do: dirty_fun.(), else: normal_fun.()
+
+      :normal ->
+        normal_fun.()
     end
   end
 
