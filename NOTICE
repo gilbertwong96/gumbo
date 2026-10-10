@@ -1,0 +1,10 @@
+gumbo
+
+This product bundles gumbo-parser, an HTML parsing library, vendored
+unpatched at c_src/gumbo-parser/ (tag 0.14.1).
+
+gumbo-parser is Copyright 2010 Google Inc.
+gumbo-parser is maintained by Grigory Kirillov <me@txgk.in>.
+
+gumbo-parser is licensed under the Apache License, Version 2.0; its
+license text is in c_src/gumbo-parser/doc/COPYING.
