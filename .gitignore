@@ -19,6 +19,11 @@ erl_crash.dump
 # Also ignore archive artifacts (built via "mix archive.build").
 *.ez
 
+# NIF shared libraries compiled from c_src/.
+/priv/*.so
+/priv/*.dylib
+/priv/obj/
+
 # Ignore package tarball (built via "mix hex.build").
 gumbo-*.tar
 
