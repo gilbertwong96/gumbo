@@ -187,12 +187,14 @@ int main(void) {
 
   /* Exercises every teardown branch: doctype strings, attributes, text,
      comment, template content, element and document children vectors, and
-     the error vector (the duplicate attribute produces an error, and the
-     premature EOF at the end of the tree produces a parser error with a
-     tag_stack vector). */
+     the error vector (the duplicate attribute produces one error, and the
+     unclosed <div> makes handle_in_body's EOF branch add a parser error
+     whose tag_stack holds the open elements — a populated by-value vector,
+     so gumbo_error_destroy's parser branch frees real data, not a NULL
+     vector). */
   const char* html = "<!DOCTYPE html PUBLIC \"pub\" \"sys\">"
                      "<div id=\"a\" class=\"b\" class=\"c\">text<!--c-->"
-                     "<template><p>x</p></template></div>";
+                     "<template><p>x</p></template>";
 
   GumboOutput* output =
       gumbo_parse_with_options(&options, html, strlen(html));
