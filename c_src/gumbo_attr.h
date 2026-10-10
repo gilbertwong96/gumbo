@@ -15,4 +15,10 @@
 ERL_NIF_TERM gumbo_nif_attr_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                     int argc, const ERL_NIF_TERM argv[]);
 
+/* The full attribute map, built from the one-extractor-per-field builders.
+   Exported so gumbo_materialize.c's :full attribute lists come from the
+   same builder as attr_details, and the two surfaces cannot disagree. */
+int gumbo_attr_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                           const GumboAttribute* attr, ERL_NIF_TERM* out);
+
 #endif /* GUMBO_ATTR_H_ */

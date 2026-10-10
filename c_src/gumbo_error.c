@@ -262,21 +262,11 @@ static ERL_NIF_TERM gumbo_error_parser_error_term(ErlNifEnv* env,
 
 #define GUMBO_ERROR_DETAILS_COUNT 10
 
-ERL_NIF_TERM gumbo_nif_error_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                     int argc, const ERL_NIF_TERM argv[]) {
-  (void)argc;
-
-  gumbo_handle_t* h;
-  if (!gumbo_handle_get(env, argv[0], &h)) {
-    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
-  }
-  unsigned long index;
-  if (!enif_get_ulong(env, argv[1], &index) ||
-      index >= h->output->errors.length) {
-    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
-  }
-  const GumboError* error = h->output->errors.data[index];
-
+/* The full error map, shared by error_details and materialize's errors list
+   so the two surfaces cannot disagree. */
+int gumbo_error_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                            const gumbo_handle_t* h, const GumboError* error,
+                            ERL_NIF_TERM* out) {
   ERL_NIF_TERM keys[GUMBO_ERROR_DETAILS_COUNT] = {
       atoms->error_.type,
       atoms->error_.position,
@@ -301,9 +291,27 @@ ERL_NIF_TERM gumbo_nif_error_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       gumbo_error_duplicate_attr_term(env, atoms, error),
       gumbo_error_parser_error_term(env, atoms, error),
   };
+  return enif_make_map_from_arrays(env, keys, values,
+                                   GUMBO_ERROR_DETAILS_COUNT, out);
+}
+
+ERL_NIF_TERM gumbo_nif_error_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                     int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  gumbo_handle_t* h;
+  if (!gumbo_handle_get(env, argv[0], &h)) {
+    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+  }
+  unsigned long index;
+  if (!enif_get_ulong(env, argv[1], &index) ||
+      index >= h->output->errors.length) {
+    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+  }
+  const GumboError* error = h->output->errors.data[index];
+
   ERL_NIF_TERM map;
-  if (!enif_make_map_from_arrays(env, keys, values, GUMBO_ERROR_DETAILS_COUNT,
-                                 &map)) {
+  if (!gumbo_error_details_map(env, atoms, h, error, &map)) {
     return enif_raise_exception(env, enif_make_badarg(env));
   }
   return enif_make_tuple2(env, atoms->ok, map);

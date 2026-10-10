@@ -81,8 +81,11 @@ typedef struct {
 
   /* Node accessor atoms, grouped so the details-map key :parse_flags and the
      enum table parse_flags[] cannot be confused. Includes the
-     %Gumbo.Position{} struct keys (struct_ + the position module atom) and
-     the error atoms the node NIFs return or raise. */
+     %Gumbo.Position{} struct keys (struct_ + the position module atom), the
+     error atoms the node NIFs return or raise, and materialize's key
+     renames of the details-map keys (:position -> :start_position,
+     :doctype_name -> :name) plus the :attributes/:children keys only the
+     materialized maps carry. */
   struct {
     ERL_NIF_TERM type;
     ERL_NIF_TERM index_within_parent;
@@ -101,6 +104,10 @@ typedef struct {
     ERL_NIF_TERM end_position;
     ERL_NIF_TERM text;
     ERL_NIF_TERM original_text;
+    ERL_NIF_TERM start_position;
+    ERL_NIF_TERM name;
+    ERL_NIF_TERM attributes;
+    ERL_NIF_TERM children;
     ERL_NIF_TERM struct_;
     ERL_NIF_TERM position_module;
     ERL_NIF_TERM line;
@@ -111,6 +118,13 @@ typedef struct {
     ERL_NIF_TERM message;
     ERL_NIF_TERM invalid_node;
   } node;
+
+  /* Materialize result atoms: materialize_output's result-map keys. */
+  struct {
+    ERL_NIF_TERM document;
+    ERL_NIF_TERM root;
+    ERL_NIF_TERM errors;
+  } materialize;
 
   /* Attribute accessor atoms: the attr_details-map keys named after the
      accessors they feed, plus the error atom a bad attribute index

@@ -7,8 +7,9 @@
    plus attr_details, which assembles the full map from them. The extractors
    are the single source of truth, exactly as in gumbo_node.c, so a field
    cannot be right in one place and wrong in another; Task 8's materialize
-   reuses them through attr_details. Every term is built in the caller's
-   environment per call, and the string and position extractors are the same
+   reuses them through gumbo_attr_details_map. Every term is built in the
+   caller's environment per call, and the string and position extractors are
+   the same
    exported helpers gumbo_node.c uses, so a node field and an attribute field
    of the same shape follow the same code path.
 
@@ -110,23 +111,10 @@ static ERL_NIF_TERM gumbo_attr_value_end_term(ErlNifEnv* env,
 
 #define GUMBO_ATTR_DETAILS_COUNT 9
 
-ERL_NIF_TERM gumbo_nif_attr_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                    int argc, const ERL_NIF_TERM argv[]) {
-  (void)argc;
-
-  gumbo_handle_t* h;
-  GumboNode* node;
-  if (gumbo_node_get(env, argv[0], argv[1], &h, &node) != GUMBO_NODE_OK) {
-    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
-  }
-  (void)h; /* only the attribute is needed here */
-
-  GumboAttribute* attr;
-  if (!gumbo_attr_get(env, argv[2], node, &attr)) {
-    return enif_make_tuple2(env, atoms->error,
-                            atoms->attribute.invalid_attribute);
-  }
-
+/* The full attribute map, shared by attr_details and materialize's :full
+   attribute lists so the two surfaces cannot disagree. */
+int gumbo_attr_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                           const GumboAttribute* attr, ERL_NIF_TERM* out) {
   ERL_NIF_TERM keys[GUMBO_ATTR_DETAILS_COUNT] = {
       atoms->attribute.namespace,
       atoms->attribute.name,
@@ -149,9 +137,29 @@ ERL_NIF_TERM gumbo_nif_attr_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       gumbo_attr_value_start_term(env, atoms, attr),
       gumbo_attr_value_end_term(env, atoms, attr),
   };
+  return enif_make_map_from_arrays(env, keys, values, GUMBO_ATTR_DETAILS_COUNT,
+                                   out);
+}
+
+ERL_NIF_TERM gumbo_nif_attr_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                    int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  gumbo_handle_t* h;
+  GumboNode* node;
+  if (gumbo_node_get(env, argv[0], argv[1], &h, &node) != GUMBO_NODE_OK) {
+    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+  }
+  (void)h; /* only the attribute is needed here */
+
+  GumboAttribute* attr;
+  if (!gumbo_attr_get(env, argv[2], node, &attr)) {
+    return enif_make_tuple2(env, atoms->error,
+                            atoms->attribute.invalid_attribute);
+  }
+
   ERL_NIF_TERM map;
-  if (!enif_make_map_from_arrays(env, keys, values, GUMBO_ATTR_DETAILS_COUNT,
-                                 &map)) {
+  if (!gumbo_attr_details_map(env, atoms, attr, &map)) {
     return enif_raise_exception(env, enif_make_badarg(env));
   }
   return enif_make_tuple2(env, atoms->ok, map);

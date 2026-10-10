@@ -384,6 +384,13 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->node.end_position = enif_make_atom(env, "end_position");
   atoms->node.text = enif_make_atom(env, "text");
   atoms->node.original_text = enif_make_atom(env, "original_text");
+  /* Materialize's renames of :position and :doctype_name, plus the two keys
+     only the materialized maps carry. The values are still the shared
+     extractors' output, so the renames change names, never data. */
+  atoms->node.start_position = enif_make_atom(env, "start_position");
+  atoms->node.name = enif_make_atom(env, "name");
+  atoms->node.attributes = enif_make_atom(env, "attributes");
+  atoms->node.children = enif_make_atom(env, "children");
   atoms->node.struct_ = enif_make_atom(env, "__struct__");
   atoms->node.position_module = enif_make_atom(env, "Elixir.Gumbo.Position");
   atoms->node.line = enif_make_atom(env, "line");
@@ -393,6 +400,11 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->node.exception_ = enif_make_atom(env, "__exception__");
   atoms->node.message = enif_make_atom(env, "message");
   atoms->node.invalid_node = enif_make_atom(env, "invalid_node");
+
+  /* Materialize result-map keys. */
+  atoms->materialize.document = enif_make_atom(env, "document");
+  atoms->materialize.root = enif_make_atom(env, "root");
+  atoms->materialize.errors = enif_make_atom(env, "errors");
 
   /* Attribute accessors: details-map keys and the error atom. */
   atoms->attribute.namespace = enif_make_atom(env, "namespace");
