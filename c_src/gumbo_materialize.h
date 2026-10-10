@@ -7,7 +7,8 @@
 
 /* The two materialize NIFs. detail is 0 for :full (the default) and 1 for
    :content; the Elixir side validates the atom and passes the code.
-   materialize_output answers %{document:, root:, errors:} (or {:error,
+   materialize_output answers %{document:, root:, errors:} — root: nil when
+   the parse stopped before any element was built — (or {:error,
    :invalid_handle} for a non-handle) and materialize_node answers {:ok,
    map} | {:error, :invalid_node}, the same invalid-node contract
    node_details uses. Both walk the handle's preorder node table in one

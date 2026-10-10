@@ -156,7 +156,12 @@ static int gumbo_stack_push(GumboNode*** stack, size_t* count,
 }
 
 /* Flattens the tree into h->nodes in preorder: index 0 is the document node
-   and index 1 is output->root. Growth is geometric. */
+   and the document's first child follows it, whatever that is. Growth is
+   geometric. Resolves h->root_index by pointer at the end, because
+   output->root is NOT necessarily index 1: a comment or processing
+   instruction before <html> is appended to the document's children first
+   (parser.c:2390-2392 then append_node at :864-877), so the html element
+   lands later in preorder. */
 static int gumbo_node_table_build(gumbo_handle_t* h) {
   GumboNode** stack = NULL;
   size_t stack_count = 0;
@@ -200,7 +205,27 @@ static int gumbo_node_table_build(gumbo_handle_t* h) {
   }
 
   enif_free(stack);
-  return 0;
+
+  /* Resolve by pointer rather than assuming: output->root is the document's
+     first <html> element, but a comment or PI before it shifts it past
+     index 1. A NULL output->root is legitimate — stop_on_first_error halts
+     before any element exists (parser.c:513) — and becomes GUMBO_NO_ROOT;
+     the errors vector is the whole point of stopping that early, so the
+     parse must not fail. A non-NULL root missing from the table cannot
+     happen — the walk starts at the document and visits every descendant —
+     but a silent 0 would corrupt every root consumer, so fail the build. */
+  if (h->output->root == NULL) {
+    h->root_index = GUMBO_NO_ROOT;
+    return 0;
+  }
+  size_t i;
+  for (i = 0; i < h->node_count; ++i) {
+    if (h->nodes[i] == h->output->root) {
+      h->root_index = i;
+      return 0;
+    }
+  }
+  return 1;
 }
 
 /* Second pass over the finished table, filling the two index-arithmetic
@@ -258,7 +283,7 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   if (h == NULL) {
     /* Allocation failure surfaces as an ArgumentError; it is unreachable in
        practice and this path must not create atoms. */
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   /* The destructor is safe on a partially constructed handle because it
      releases only what this zeroing leaves set. */
@@ -272,7 +297,7 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
      size stays the caller's byte count; the terminator is never parsed. */
   if (!enif_alloc_binary(caller.size + 1, &h->input)) {
     enif_release_resource(h);
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   h->input.size = caller.size;
   if (caller.size > 0) {
@@ -290,18 +315,19 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                        h->input.size);
   if (h->output == NULL) {
     enif_release_resource(h);
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
 
   if (gumbo_node_table_build(h) != 0) {
     /* The table only partially covers the tree, so the teardown above
        cannot empty every children vector and destroy_node inside
        gumbo_destroy_output would still recurse into unvisited subtrees
-       on a GC thread. This is an unreachable OOM path, and the parse
-       already raises; leak the tree rather than risk that recursion. */
+       on a GC thread. This is unreachable — OOM, or a non-NULL output->root
+       missing from the table — and the parse already raises; leak the tree
+       rather than risk that recursion. */
     h->output = NULL;
     enif_release_resource(h);
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   if (gumbo_node_table_size(h) != 0) {
     /* Same unreachable OOM path as the table build: a partially filled
@@ -309,7 +335,7 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
        arithmetic. Leak the tree rather than ship that. */
     h->output = NULL;
     enif_release_resource(h);
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
 
   ERL_NIF_TERM resource = enif_make_resource(env, h);
@@ -339,9 +365,13 @@ ERL_NIF_TERM gumbo_nif_output_root(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   if (!gumbo_handle_get(env, argv[0], &h)) {
     return enif_make_tuple2(env, atoms->error, atoms->invalid_handle);
   }
-  /* ... and its first child, output->root (the real or implied <html>), is
-     always index 1. */
-  return enif_make_int(env, 1);
+  /* Resolved by pointer during the table build, not assumed to be 1: a
+     comment or PI before <html> sits at index 1 instead, and a parse that
+     stopped before any element has no root at all. */
+  if (h->root_index == GUMBO_NO_ROOT) {
+    return atoms->nil;
+  }
+  return enif_make_ulong(env, (unsigned long)h->root_index);
 }
 
 ERL_NIF_TERM gumbo_nif_output_input(ErlNifEnv* env, const gumbo_atoms_t* atoms,
@@ -355,7 +385,7 @@ ERL_NIF_TERM gumbo_nif_output_input(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   ERL_NIF_TERM out;
   if (!gumbo_make_binary(env, (const char*)h->input.data, h->input.size,
                          &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }
@@ -383,7 +413,7 @@ ERL_NIF_TERM gumbo_nif_output_options(ErlNifEnv* env,
   }
   ERL_NIF_TERM out;
   if (!gumbo_options_encode(env, atoms, h, &out)) {
-    return enif_raise_exception(env, enif_make_badarg(env));
+    return enif_make_badarg(env);
   }
   return out;
 }

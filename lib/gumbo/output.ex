@@ -24,11 +24,24 @@ defmodule Gumbo.Output do
 
   @doc """
   The root `<html>` element — real, or the implied one in fragment mode —
-  index 1 of the node table.
+  or `nil` when the parse stopped before any element was built.
+
+  `stop_on_first_error: true` can halt the parse that early, and gumbo then
+  has no root element (`output->root` stays NULL); the errors vector is
+  exactly what a caller stopping on the first error wants, so the handle
+  survives with no root rather than failing the parse.
+
+  The root is also not necessarily node table index 1: a comment or
+  processing instruction before `<html>` is a document child and occupies
+  index 1 instead, so the index is resolved by pointer when the tree is
+  built.
   """
-  @spec root(t()) :: Gumbo.Node.t()
+  @spec root(t()) :: Gumbo.Node.t() | nil
   def root(%__MODULE__{resource: resource} = output) do
-    %Gumbo.Node{output: output, index: Gumbo.Native.output_root(resource)}
+    case Gumbo.Native.output_root(resource) do
+      nil -> nil
+      index -> %Gumbo.Node{output: output, index: index}
+    end
   end
 
   @doc """
@@ -72,9 +85,15 @@ defmodule Gumbo.Output do
   never appears in the tree. The children of that implied root are the nodes
   the fragment parse produced, which is what callers almost always want.
   Outside fragment mode this is the children of the real `<html>` element.
+
+  `[]` when `root/1` is `nil`: a `stop_on_first_error` parse that halted
+  before any element was built has no root, so it has no fragment nodes.
   """
   @spec fragment_nodes(t()) :: [Gumbo.Node.t()]
   def fragment_nodes(%__MODULE__{} = output) do
-    output |> root() |> Gumbo.Node.children()
+    case root(output) do
+      nil -> []
+      root -> Gumbo.Node.children(root)
+    end
   end
 end

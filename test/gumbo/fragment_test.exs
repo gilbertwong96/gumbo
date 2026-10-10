@@ -1,6 +1,20 @@
 defmodule Gumbo.FragmentTest do
   use ExUnit.Case, async: true
 
+  test "a leading comment does not make fragment_nodes/1 return the comment's children" do
+    # In fragment mode the comment is appended to the implied <html> root
+    # itself (there is no document-level initial mode), so it is one of the
+    # fragment's nodes — not the old failure where the comment was mistaken
+    # for the root and its (empty) children became the fragment.
+    {:ok, output} = Gumbo.parse_fragment("<!--c--><li>a</li><li>b</li>", :ul)
+
+    assert Enum.map(
+             Gumbo.Output.fragment_nodes(output),
+             &{Gumbo.Node.type(&1), Gumbo.Node.tag(&1)}
+           ) ==
+             [{:comment, nil}, {:element, :li}, {:element, :li}]
+  end
+
   test "in fragment mode root is gumbo's implied <html>, not the context element" do
     {:ok, output} = Gumbo.parse_fragment("<p>hi</p>", :div)
     root = Gumbo.Output.root(output)
