@@ -78,6 +78,39 @@ typedef struct {
   ERL_NIF_TERM auto_;
   ERL_NIF_TERM invalid_handle;
   ERL_NIF_TERM invalid_option;
+
+  /* Node accessor atoms, grouped so the details-map key :parse_flags and the
+     enum table parse_flags[] cannot be confused. Includes the
+     %Gumbo.Position{} struct keys (struct_ + the position module atom) and
+     the error atoms the node NIFs return or raise. */
+  struct {
+    ERL_NIF_TERM type;
+    ERL_NIF_TERM index_within_parent;
+    ERL_NIF_TERM parse_flags;
+    ERL_NIF_TERM position;
+    ERL_NIF_TERM has_doctype;
+    ERL_NIF_TERM doctype_name;
+    ERL_NIF_TERM public_identifier;
+    ERL_NIF_TERM system_identifier;
+    ERL_NIF_TERM quirks_mode;
+    ERL_NIF_TERM tag;
+    ERL_NIF_TERM tag_name;
+    ERL_NIF_TERM namespace;
+    ERL_NIF_TERM original_tag;
+    ERL_NIF_TERM original_end_tag;
+    ERL_NIF_TERM end_position;
+    ERL_NIF_TERM text;
+    ERL_NIF_TERM original_text;
+    ERL_NIF_TERM struct_;
+    ERL_NIF_TERM position_module;
+    ERL_NIF_TERM line;
+    ERL_NIF_TERM column;
+    ERL_NIF_TERM offset;
+    ERL_NIF_TERM argument_error_module;
+    ERL_NIF_TERM exception_;
+    ERL_NIF_TERM message;
+    ERL_NIF_TERM invalid_node;
+  } node;
 } gumbo_atoms_t;
 
 /* Interns every table above. Returns 0 on success; a nonzero return makes

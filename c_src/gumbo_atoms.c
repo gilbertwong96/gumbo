@@ -365,5 +365,34 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->invalid_handle = enif_make_atom(env, "invalid_handle");
   atoms->invalid_option = enif_make_atom(env, "invalid_option");
 
+  /* Node accessors: details-map keys named after the accessors they feed,
+     the %Gumbo.Position{} struct keys, and the error atoms. */
+  atoms->node.type = enif_make_atom(env, "type");
+  atoms->node.index_within_parent = enif_make_atom(env, "index_within_parent");
+  atoms->node.parse_flags = enif_make_atom(env, "parse_flags");
+  atoms->node.position = enif_make_atom(env, "position");
+  atoms->node.has_doctype = enif_make_atom(env, "has_doctype");
+  atoms->node.doctype_name = enif_make_atom(env, "doctype_name");
+  atoms->node.public_identifier = enif_make_atom(env, "public_identifier");
+  atoms->node.system_identifier = enif_make_atom(env, "system_identifier");
+  atoms->node.quirks_mode = enif_make_atom(env, "quirks_mode");
+  atoms->node.tag = enif_make_atom(env, "tag");
+  atoms->node.tag_name = enif_make_atom(env, "tag_name");
+  atoms->node.namespace = enif_make_atom(env, "namespace");
+  atoms->node.original_tag = enif_make_atom(env, "original_tag");
+  atoms->node.original_end_tag = enif_make_atom(env, "original_end_tag");
+  atoms->node.end_position = enif_make_atom(env, "end_position");
+  atoms->node.text = enif_make_atom(env, "text");
+  atoms->node.original_text = enif_make_atom(env, "original_text");
+  atoms->node.struct_ = enif_make_atom(env, "__struct__");
+  atoms->node.position_module = enif_make_atom(env, "Elixir.Gumbo.Position");
+  atoms->node.line = enif_make_atom(env, "line");
+  atoms->node.column = enif_make_atom(env, "column");
+  atoms->node.offset = enif_make_atom(env, "offset");
+  atoms->node.argument_error_module = enif_make_atom(env, "Elixir.ArgumentError");
+  atoms->node.exception_ = enif_make_atom(env, "__exception__");
+  atoms->node.message = enif_make_atom(env, "message");
+  atoms->node.invalid_node = enif_make_atom(env, "invalid_node");
+
   return 0;
 }

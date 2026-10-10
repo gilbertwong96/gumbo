@@ -18,8 +18,8 @@ static ErlNifResourceType* gumbo_handle_resource_type = NULL;
 
 /* The children vector per node type. GUMBO_NODE_TEMPLATE's v is a
    GumboElement, so it shares the element branch; every other type is a
-   leaf. */
-static GumboVector* gumbo_node_children(GumboNode* node) {
+   leaf. Shared with gumbo_node.c, which indexes children by table index. */
+GumboVector* gumbo_node_children(GumboNode* node) {
   switch (node->type) {
     case GUMBO_NODE_DOCUMENT:
       return &node->v.document.children;
@@ -102,6 +102,8 @@ static void gumbo_handle_dtor(ErlNifEnv* env, void* obj) {
     gumbo_destroy_output(&h->options, h->output);
   }
   enif_free(h->nodes);
+  enif_free(h->parent_indices);
+  enif_free(h->subtree_sizes);
   if (h->input.data != NULL) {
     enif_release_binary(&h->input);
   }
@@ -120,19 +122,19 @@ int gumbo_handle_get(ErlNifEnv* env, ERL_NIF_TERM term,
 }
 
 int gumbo_node_get(ErlNifEnv* env, ERL_NIF_TERM handle_term,
-                   ERL_NIF_TERM index_term, GumboNode** out) {
-  gumbo_handle_t* h;
-  if (!gumbo_handle_get(env, handle_term, &h)) {
+                   ERL_NIF_TERM index_term, gumbo_handle_t** handle_out,
+                   GumboNode** out) {
+  if (!gumbo_handle_get(env, handle_term, handle_out)) {
     return GUMBO_NODE_INVALID_HANDLE;
   }
   unsigned long index;
   if (!enif_get_ulong(env, index_term, &index)) {
     return GUMBO_NODE_INVALID_NODE;
   }
-  if (index >= h->node_count) {
+  if (index >= (*handle_out)->node_count) {
     return GUMBO_NODE_INVALID_NODE;
   }
-  *out = h->nodes[index];
+  *out = (*handle_out)->nodes[index];
   return GUMBO_NODE_OK;
 }
 
@@ -201,6 +203,47 @@ static int gumbo_node_table_build(gumbo_handle_t* h) {
   return 0;
 }
 
+/* Second pass over the finished table, filling the two index-arithmetic
+   arrays the node accessors use: parent_indices[i] is the table index of
+   nodes[i]'s parent (GUMBO_NO_PARENT for the document) and subtree_sizes[i]
+   is the size of the subtree rooted at nodes[i]. The stack holds the indices
+   of open subtrees, i.e. the ancestor chain of the node at index i, so when
+   node i is not a child of the stack top, that top's subtree ended at i.
+   Iterative and O(node_count): same no-recursion rule as the build. */
+int gumbo_node_table_size(gumbo_handle_t* h) {
+  size_t n = h->node_count;
+  size_t* stack = enif_alloc((n + 1) * sizeof(size_t));
+  h->parent_indices = enif_alloc(n * sizeof(size_t));
+  h->subtree_sizes = enif_alloc(n * sizeof(size_t));
+  if (stack == NULL || h->parent_indices == NULL || h->subtree_sizes == NULL) {
+    enif_free(stack);
+    enif_free(h->parent_indices);
+    enif_free(h->subtree_sizes);
+    h->parent_indices = NULL;
+    h->subtree_sizes = NULL;
+    return 1;
+  }
+
+  size_t sp = 0;
+  size_t i;
+  for (i = 0; i < n; ++i) {
+    GumboNode* parent = h->nodes[i]->parent;
+    while (sp > 0 && h->nodes[stack[sp - 1]] != parent) {
+      --sp;
+      h->subtree_sizes[stack[sp]] = i - stack[sp];
+    }
+    h->parent_indices[i] = (sp > 0) ? stack[sp - 1] : GUMBO_NO_PARENT;
+    stack[sp++] = i;
+  }
+  while (sp > 0) {
+    --sp;
+    h->subtree_sizes[stack[sp]] = n - stack[sp];
+  }
+
+  enif_free(stack);
+  return 0;
+}
+
 ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                              int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
@@ -250,6 +293,14 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
        gumbo_destroy_output would still recurse into unvisited subtrees
        on a GC thread. This is an unreachable OOM path, and the parse
        already raises; leak the tree rather than risk that recursion. */
+    h->output = NULL;
+    enif_release_resource(h);
+    return enif_raise_exception(env, enif_make_badarg(env));
+  }
+  if (gumbo_node_table_size(h) != 0) {
+    /* Same unreachable OOM path as the table build: a partially filled
+       parent/size pair would silently corrupt the node accessors' index
+       arithmetic. Leak the tree rather than ship that. */
     h->output = NULL;
     enif_release_resource(h);
     return enif_raise_exception(env, enif_make_badarg(env));

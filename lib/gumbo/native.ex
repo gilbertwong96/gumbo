@@ -42,6 +42,21 @@ defmodule Gumbo.Native do
   @spec output_options(reference()) :: map()
   def output_options(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
+  @spec node_details(reference(), non_neg_integer()) :: {:ok, map()} | {:error, :invalid_node}
+  def node_details(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec node_children(reference(), non_neg_integer()) :: [non_neg_integer()]
+  def node_children(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec node_parent(reference(), non_neg_integer()) :: non_neg_integer() | nil
+  def node_parent(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec node_next(reference(), non_neg_integer()) :: non_neg_integer() | nil
+  def node_next(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec node_previous(reference(), non_neg_integer()) :: non_neg_integer() | nil
+  def node_previous(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
+
   defp load_nif do
     path = :filename.join(:code.priv_dir(:gumbo), ~c"gumbo_nif")
 

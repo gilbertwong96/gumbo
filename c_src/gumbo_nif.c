@@ -5,6 +5,7 @@
 #include "gumbo.h"
 #include "gumbo_atoms.h"
 #include "gumbo_handle.h"
+#include "gumbo_node.h"
 #include "gumbo_tags.h"
 
 typedef struct {
@@ -102,6 +103,36 @@ static ERL_NIF_TERM nif_output_options(ErlNifEnv* env, int argc,
   return gumbo_nif_output_options(env, &priv->atoms, argc, argv);
 }
 
+static ERL_NIF_TERM nif_node_details(ErlNifEnv* env, int argc,
+                                     const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_node_details(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_node_children(ErlNifEnv* env, int argc,
+                                      const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_node_children(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_node_parent(ErlNifEnv* env, int argc,
+                                    const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_node_parent(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_node_next(ErlNifEnv* env, int argc,
+                                  const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_node_next(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_node_previous(ErlNifEnv* env, int argc,
+                                      const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_node_previous(env, &priv->atoms, argc, argv);
+}
+
 static int gumbo_nif_load(ErlNifEnv* env, void** priv_data,
                           ERL_NIF_TERM load_info) {
   (void)load_info;
@@ -141,6 +172,11 @@ static ErlNifFunc nif_funcs[] = {
     {"output_input", 1, nif_output_input, 0},
     {"output_node_count", 1, nif_output_node_count, 0},
     {"output_options", 1, nif_output_options, 0},
+    {"node_details", 2, nif_node_details, 0},
+    {"node_children", 2, nif_node_children, 0},
+    {"node_parent", 2, nif_node_parent, 0},
+    {"node_next", 2, nif_node_next, 0},
+    {"node_previous", 2, nif_node_previous, 0},
 };
 
 ERL_NIF_INIT(Elixir.Gumbo.Native, nif_funcs, gumbo_nif_load, NULL, NULL,

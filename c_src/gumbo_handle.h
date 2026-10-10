@@ -25,7 +25,18 @@ typedef struct {
   GumboNode** nodes;  /* preorder; node identity is an index into this */
   size_t node_count;
   size_t capacity;
+  /* Index arithmetic for the O(1) node accessors, filled once by
+     gumbo_node_table_size: parent_indices[i] is the table index of
+     nodes[i]'s parent (GUMBO_NO_PARENT for the document node) and
+     subtree_sizes[i] the number of table entries in the subtree rooted at
+     nodes[i]. Preorder makes every subtree a contiguous table range, so a
+     sibling or child index is addition, never a pointer scan. */
+  size_t* parent_indices;
+  size_t* subtree_sizes;
 } gumbo_handle_t;
+
+/* Sentinel for parent_indices[i] when nodes[i] is the document node. */
+#define GUMBO_NO_PARENT SIZE_MAX
 
 /* Opens the resource type. Returns 0 on success; a nonzero return makes the
    NIF load fail. The type pointer is kept file-private; the NIF entry points
@@ -45,10 +56,16 @@ int gumbo_handle_get(ErlNifEnv* env, ERL_NIF_TERM term, gumbo_handle_t** out);
 /* Resolves (handle, index) to a node pointer with bounds checking. Returns
    GUMBO_NODE_OK on success, GUMBO_NODE_INVALID_HANDLE when the first term is
    not a handle, or GUMBO_NODE_INVALID_NODE when the index is not a node in
-   that handle's table. The caller maps the code to
-   {:error, :invalid_handle} / {:error, :invalid_node}. */
+   that handle's table. On success *handle_out is the resolved handle too, so
+   callers needing the parent/size arrays do not do a second resource lookup.
+   The caller maps the failure codes to {:error, :invalid_handle} /
+   {:error, :invalid_node}. */
 int gumbo_node_get(ErlNifEnv* env, ERL_NIF_TERM handle_term,
-                   ERL_NIF_TERM index_term, GumboNode** out);
+                   ERL_NIF_TERM index_term, gumbo_handle_t** handle_out,
+                   GumboNode** out);
+
+/* The children vector per node type, or NULL for leaf types. */
+GumboVector* gumbo_node_children(GumboNode* node);
 
 /* parse(binary, options_map) -> {:ok, resource} | {:error, term}. */
 ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
