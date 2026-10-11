@@ -93,7 +93,9 @@ $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
 # is exactly zero. A second mode is the crash canary: it calls
 # gumbo_destroy_output directly — no pass — on a deep document under a
 # deliberately small stack and reports whether gumbo's own teardown still
-# recurses; that mode is informational and never fails the build.
+# recurses; a clean survival or a signal death is informational, but a
+# canary error exit (parse or allocation failure) fails the build because
+# it proves nothing either way.
 # The binary lives in priv/obj (gitignored). gumbo_teardown.c is compiled
 # explicitly here; it is shared with the NIF, which the wildcard above
 # picks up legitimately because the unit has no ERTS dependency.
@@ -107,9 +109,16 @@ $(TEARDOWN_PROBE): $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS) c_src/gumbo_teardown.c
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
 	@echo "--- crash canary: does gumbo's teardown still recurse? ---"
-	@( ulimit -s 320; $(TEARDOWN_PROBE) canary 20000 ) \
-	  && echo "NOTE: teardown survived; gumbo may no longer recurse (the pass stays correct)" \
-	  || echo "OK: teardown still recurses, so the teardown pass remains required"
+	@( ulimit -s 320; $(TEARDOWN_PROBE) canary 20000 ); \
+	  status=$$?; \
+	  if [ $$status -eq 0 ]; then \
+	    echo "NOTE: teardown survived; gumbo may no longer recurse (the pass stays correct)"; \
+	  elif [ $$status -ge 128 ]; then \
+	    echo "OK: teardown still recurses, so the teardown pass remains required"; \
+	  else \
+	    echo "FAIL: canary exited $$status (neither survived nor recursed)"; \
+	    exit $$status; \
+	  fi
 
 # Pull in the compiler-emitted dependency files: -MMD writes one .d next to
 # every object (and the probe's next to its binary), naming the headers each
