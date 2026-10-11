@@ -111,6 +111,17 @@ defmodule Gumbo.AttributeTest do
     assert Node.attribute_map(text) == %{}
   end
 
+  test "attribute/2 raises ArgumentError for a non-binary name on any node type" do
+    output = parse!("<p>x</p>")
+    document = Output.document(output)
+    text = descendants(output) |> Enum.find(&(Node.type(&1) == :text))
+
+    # The argument check comes before the element check: nil documents "off
+    # elements", never a different failure mode for the same bad argument.
+    assert_raise ArgumentError, fn -> Node.attribute(document, 123) end
+    assert_raise ArgumentError, fn -> Node.attribute(text, 123) end
+  end
+
   test "details/1 returns the same values the individual accessors return" do
     output = parse!(~s(<div class="a" data-x='b'>x</div>))
     div = descendants(output) |> Enum.find(&(Node.tag(&1) == :div))
