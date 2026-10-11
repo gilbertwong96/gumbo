@@ -29,16 +29,23 @@ static ERL_NIF_TERM gumbo_node_invalid(ErlNifEnv* env,
                                        const gumbo_atoms_t* atoms, int status,
                                        const ERL_NIF_TERM argv[]) {
   char message[64];
-  int len;
   if (status == GUMBO_NODE_INVALID_HANDLE) {
-    len = snprintf(message, sizeof(message), "invalid output handle");
+    snprintf(message, sizeof(message), "invalid output handle");
   } else {
-    unsigned long index = 0;
-    (void)enif_get_ulong(env, argv[1], &index);
-    len = snprintf(message, sizeof(message), "invalid node index: %lu", index);
+    unsigned long index;
+    if (enif_get_ulong(env, argv[1], &index)) {
+      snprintf(message, sizeof(message), "invalid node index: %lu", index);
+    } else {
+      /* A negative or bignum index has no ulong value, so report the
+         failure without a bogus index of 0. */
+      snprintf(message, sizeof(message), "invalid node index");
+    }
   }
   ERL_NIF_TERM message_term;
-  if (!gumbo_make_binary(env, message, (size_t)len, &message_term)) {
+  /* strlen, not snprintf's return value: snprintf reports the length it
+     would have written, unbounded by the 64-byte buffer, and using it as
+     a length would read past the buffer on truncation. */
+  if (!gumbo_make_binary(env, message, strlen(message), &message_term)) {
     return enif_make_badarg(env);
   }
   ERL_NIF_TERM keys[] = {atoms->node.struct_, atoms->node.exception_,
@@ -562,14 +569,18 @@ ERL_NIF_TERM gumbo_nif_node_attribute(ErlNifEnv* env,
   }
   (void)h;
 
-  if (!gumbo_node_is_element(node)) {
-    return atoms->nil;
-  }
-
+  /* The argument check comes before the element check so an invalid name
+     behaves the same on every node type: nil documents "off elements",
+     not a different failure mode for the same bad argument. */
   ErlNifBinary name;
   if (!enif_inspect_binary(env, argv[2], &name)) {
     return enif_make_badarg(env);
   }
+
+  if (!gumbo_node_is_element(node)) {
+    return atoms->nil;
+  }
+
   if (memchr(name.data, '\0', name.size) != NULL) {
     return atoms->nil;
   }
