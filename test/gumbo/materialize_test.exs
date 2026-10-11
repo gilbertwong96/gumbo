@@ -127,6 +127,12 @@ defmodule Gumbo.MaterializeTest do
     assert Gumbo.materialize(forged) == {:error, :invalid_node}
   end
 
+  test "materializing a forged output raises ArgumentError, not a tuple" do
+    forged = %Gumbo.Output{resource: self(), node_count: 0}
+
+    assert_raise ArgumentError, fn -> Gumbo.materialize(forged) end
+  end
+
   test "errors materialize as the maps Error.details/1 returns" do
     {:ok, output} = Gumbo.parse(~s(<div a=1 a=2></div>))
     [error | _] = Gumbo.materialize(output).errors

@@ -7,6 +7,16 @@ defmodule Gumbo.Output do
   count. Node structs returned by `document/1`, `root/1`, `fragment_nodes/1`
   and the node accessors reference this handle; the handle must outlive
   them, and the tree is freed when the handle is garbage collected.
+
+  The struct is opaque but forgeable, and `resource` is not checked at
+  construction: a hand-built struct can carry a non-resource term, and even
+  a reference can be a stale one whose tree is gone. That is a programmer
+  error, so every accessor that reads through the resource — `document/1`,
+  `root/1`, `fragment_nodes/1`, `errors/1`, `input/1`, `options/1`, and
+  `Gumbo.materialize/2` on an output — raises `ArgumentError` on it, exactly
+  as the node accessors do on a forged index; the NIF-internal
+  `{:error, :invalid_handle}` never reaches a caller. `node_count/1` reads
+  only the cached struct field and does not raise.
   """
 
   @enforce_keys [:resource, :node_count]
@@ -24,8 +34,8 @@ defmodule Gumbo.Output do
       :document
   """
   @spec document(t()) :: Gumbo.Node.t()
-  def document(%__MODULE__{resource: resource} = output) do
-    %Gumbo.Node{output: output, index: Gumbo.Native.output_document(resource)}
+  def document(%__MODULE__{} = output) do
+    %Gumbo.Node{output: output, index: fetch_handle!(output, &Gumbo.Native.output_document/1)}
   end
 
   @doc """
@@ -53,8 +63,8 @@ defmodule Gumbo.Output do
       nil
   """
   @spec root(t()) :: Gumbo.Node.t() | nil
-  def root(%__MODULE__{resource: resource} = output) do
-    case Gumbo.Native.output_root(resource) do
+  def root(%__MODULE__{} = output) do
+    case fetch_handle!(output, &Gumbo.Native.output_root/1) do
       nil -> nil
       index -> %Gumbo.Node{output: output, index: index}
     end
@@ -81,9 +91,9 @@ defmodule Gumbo.Output do
       :duplicate_attr
   """
   @spec errors(t()) :: [Gumbo.Error.t()]
-  def errors(%__MODULE__{resource: resource} = output) do
-    resource
-    |> Gumbo.Native.output_errors()
+  def errors(%__MODULE__{} = output) do
+    output
+    |> fetch_handle!(&Gumbo.Native.output_errors/1)
     |> Enum.map(&%Gumbo.Error{output: output, index: &1})
   end
 
@@ -97,7 +107,7 @@ defmodule Gumbo.Output do
       "<p>x</p>"
   """
   @spec input(t()) :: binary()
-  def input(%__MODULE__{resource: resource}), do: Gumbo.Native.output_input(resource)
+  def input(%__MODULE__{} = output), do: fetch_handle!(output, &Gumbo.Native.output_input/1)
 
   @doc """
   The options the parse ran with, including the `:dirty` policy.
@@ -109,8 +119,10 @@ defmodule Gumbo.Output do
       3
   """
   @spec options(t()) :: Gumbo.Options.t()
-  def options(%__MODULE__{resource: resource}) do
-    struct(Gumbo.Options, Gumbo.Native.output_options(resource))
+  def options(%__MODULE__{} = output) do
+    output
+    |> fetch_handle!(&Gumbo.Native.output_options/1)
+    |> then(&struct(Gumbo.Options, &1))
   end
 
   @doc """
@@ -154,6 +166,17 @@ defmodule Gumbo.Output do
     case root(output) do
       nil -> []
       root -> Gumbo.Node.children(root)
+    end
+  end
+
+  # A forged or stale resource is a programmer error: the NIF answers
+  # {:error, :invalid_handle} for both, and that internal tuple must not
+  # reach a caller — not as a return value and not wrapped into a struct
+  # field. The accessors raise ArgumentError like the node accessors do.
+  defp fetch_handle!(%__MODULE__{resource: resource}, nif) do
+    case nif.(resource) do
+      {:error, :invalid_handle} -> raise ArgumentError, "invalid output handle"
+      value -> value
     end
   end
 end

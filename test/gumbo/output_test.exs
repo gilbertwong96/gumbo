@@ -81,4 +81,29 @@ defmodule Gumbo.OutputTest do
     assert node_count > 0
     assert Output.node_count(output) == node_count
   end
+
+  test "the accessors raise ArgumentError on a forged resource" do
+    forged = %Gumbo.Output{resource: self(), node_count: 0}
+
+    assert_raise ArgumentError, fn -> Output.document(forged) end
+    assert_raise ArgumentError, fn -> Output.root(forged) end
+    assert_raise ArgumentError, fn -> Output.errors(forged) end
+    assert_raise ArgumentError, fn -> Output.input(forged) end
+    assert_raise ArgumentError, fn -> Output.options(forged) end
+    assert_raise ArgumentError, fn -> Output.fragment_nodes(forged) end
+
+    # node_count/1 reads only the cached field, so it does not raise.
+    assert Output.node_count(forged) == 0
+  end
+
+  test "the accessors raise ArgumentError on a stale resource" do
+    # A reference to a collected tree is still a reference: the NIF answers
+    # {:error, :invalid_handle}, and errors/1 must raise rather than feed
+    # that tuple to Enum.map as a protocol error.
+    stale = %Gumbo.Output{resource: make_ref(), node_count: 0}
+
+    assert_raise ArgumentError, fn -> Output.document(stale) end
+    assert_raise ArgumentError, fn -> Output.root(stale) end
+    assert_raise ArgumentError, fn -> Output.errors(stale) end
+  end
 end
