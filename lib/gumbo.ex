@@ -194,12 +194,15 @@ defmodule Gumbo do
   end
 
   defp do_materialize(%Gumbo.Output{resource: resource, node_count: node_count}, detail, dispatch) do
-    run(
-      fn -> Gumbo.Native.materialize_output(resource, detail) end,
-      fn -> Gumbo.Native.materialize_output_dirty(resource, detail) end,
-      dispatch,
-      node_count
-    )
+    case run(
+           fn -> Gumbo.Native.materialize_output(resource, detail) end,
+           fn -> Gumbo.Native.materialize_output_dirty(resource, detail) end,
+           dispatch,
+           node_count
+         ) do
+      map when is_map(map) -> map
+      {:error, :invalid_handle} -> raise ArgumentError, "invalid output handle"
+    end
   end
 
   defp detail_code(options) do
