@@ -19,9 +19,13 @@
    call gumbo_destroy_output WITHOUT the pass, and report whether the
    process dies under a deliberately small stack (ulimit -s 320). Surviving
    proves liveness, balancing proves reclamation — together they are the
-   contract. This mode is informational: if upstream ever makes teardown
-   non-recursive that is not a bug, and the pass stays correct either way,
-   so its exit code only feeds a Makefile echo and never fails the build.
+   contract. The three outcomes are told apart by exit status: 0 means
+   survived, a signal death (status >= 128) means teardown still recurses,
+   and a small non-zero status is a canary error — a parse or allocation
+   failure that proves nothing either way — which the Makefile fails the
+   build on rather than reporting as recursion. If upstream ever makes
+   teardown non-recursive that is not a bug, and the pass stays correct
+   either way, so a clean survival or a signal death never fails the build.
 
    The node-table build below must stay in sync with gumbo_node_table_build
    in gumbo_handle.c; the teardown itself is not duplicated here. */
@@ -192,7 +196,9 @@ static int gumbo_probe_balance_mode(void) {
    directly — deliberately no gumbo_teardown_pass — to find out whether
    gumbo's own teardown still recurses by tree depth. On a small stack the
    recursion dies and the process never reaches the second printf; the
-   Makefile prints the "still recurses" branch from the shell. */
+   Makefile prints the "still recurses" branch from the shell, keyed on the
+   signal-death exit status rather than any non-zero status, so a parse or
+   allocation failure cannot masquerade as recursion. */
 static int gumbo_probe_canary_mode(long levels) {
   size_t open_len = strlen("<span>");
   size_t close_len = strlen("</span>");
