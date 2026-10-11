@@ -48,6 +48,13 @@
 
 /* ---- one extractor per details-map field ---- */
 
+/* The extractors that build fresh terms answer success as a status code
+   with the term in *out instead of returning a term: a badarg sentinel
+   returned from inside the details-map assembly would be embedded into the
+   map as the integer 42 rather than surfaced, so allocation failure must
+   propagate as 0 up to the NIF. The infallible ones (type, codepoint)
+   return terms directly. */
+
 static ERL_NIF_TERM gumbo_error_type_term(ErlNifEnv* env,
                                           const gumbo_atoms_t* atoms,
                                           const GumboError* error) {
@@ -56,14 +63,11 @@ static ERL_NIF_TERM gumbo_error_type_term(ErlNifEnv* env,
   return atoms->error_types[error->type];
 }
 
-static ERL_NIF_TERM gumbo_error_position_term(ErlNifEnv* env,
-                                              const gumbo_atoms_t* atoms,
-                                              const GumboError* error) {
-  ERL_NIF_TERM out;
-  if (!gumbo_node_position_map(env, atoms, error->position, &out)) {
-    return enif_make_badarg(env);
-  }
-  return out;
+static int gumbo_error_position_term(ErlNifEnv* env,
+                                     const gumbo_atoms_t* atoms,
+                                     const GumboError* error,
+                                     ERL_NIF_TERM* out) {
+  return gumbo_node_position_map(env, atoms, error->position, out);
 }
 
 /* The source bytes from the error location to the end of the input: the
@@ -71,21 +75,20 @@ static ERL_NIF_TERM gumbo_error_position_term(ErlNifEnv* env,
    is what bounds it. The guard is unreachable — every producer sets
    original_text inside the buffer — and degrades to the empty binary rather
    than dereferencing. */
-static ERL_NIF_TERM gumbo_error_original_text_term(ErlNifEnv* env,
-                                                   const gumbo_atoms_t* atoms,
-                                                   const gumbo_handle_t* h,
-                                                   const GumboError* error) {
+static int gumbo_error_original_text_term(ErlNifEnv* env,
+                                          const gumbo_atoms_t* atoms,
+                                          const gumbo_handle_t* h,
+                                          const GumboError* error,
+                                          ERL_NIF_TERM* out) {
   (void)atoms;
   const char* start = (const char*)h->input.data;
   const char* end = start + h->input.size;
   if (error->original_text == NULL || error->original_text < start ||
       error->original_text > end) {
-    GumboStringPiece empty = {NULL, 0};
-    return gumbo_node_string_piece(env, empty);
+    return gumbo_make_binary(env, NULL, 0, out);
   }
-  GumboStringPiece piece = {error->original_text,
-                            (size_t)(end - error->original_text)};
-  return gumbo_node_string_piece(env, piece);
+  return gumbo_make_binary(env, error->original_text,
+                           (size_t)(end - error->original_text), out);
 }
 
 /* Renders the error with one of gumbo's two string builders and copies the
@@ -93,10 +96,9 @@ static ERL_NIF_TERM gumbo_error_original_text_term(ErlNifEnv* env,
    deallocator. caret selects gumbo_caret_diagnostic_to_string, which reads
    source bytes around error->original_text, so the buffer handed in is the
    one the parse used. */
-static ERL_NIF_TERM gumbo_error_render_term(ErlNifEnv* env,
-                                            const gumbo_handle_t* h,
-                                            const GumboError* error,
-                                            int caret) {
+static int gumbo_error_render_term(ErlNifEnv* env, const gumbo_handle_t* h,
+                                   const GumboError* error, int caret,
+                                   ERL_NIF_TERM* out) {
   GumboParser parser;
   memset(&parser, 0, sizeof(parser));
   parser._options = &h->options;
@@ -108,13 +110,9 @@ static ERL_NIF_TERM gumbo_error_render_term(ErlNifEnv* env,
   } else {
     gumbo_error_to_string(&parser, error, &buffer);
   }
-  ERL_NIF_TERM out;
-  int ok = gumbo_make_binary(env, buffer.data, buffer.length, &out);
+  int ok = gumbo_make_binary(env, buffer.data, buffer.length, out);
   gumbo_parser_deallocate(&parser, buffer.data);
-  if (!ok) {
-    return enif_make_badarg(env);
-  }
-  return out;
+  return ok;
 }
 
 static ERL_NIF_TERM gumbo_error_codepoint_term(ErlNifEnv* env,
@@ -134,9 +132,10 @@ static ERL_NIF_TERM gumbo_error_codepoint_term(ErlNifEnv* env,
 /* The tokenizer-state errors, the exact set tokenizer_add_parse_error
    produces at 0.14.1 (tokenizer.c). codepoint is the raw int under the
    cursor, which can be -1 at EOF. */
-static ERL_NIF_TERM gumbo_error_tokenizer_term(ErlNifEnv* env,
-                                               const gumbo_atoms_t* atoms,
-                                               const GumboError* error) {
+static int gumbo_error_tokenizer_term(ErlNifEnv* env,
+                                      const gumbo_atoms_t* atoms,
+                                      const GumboError* error,
+                                      ERL_NIF_TERM* out) {
   switch (error->type) {
     case GUMBO_ERR_UTF8_NULL:
     case GUMBO_ERR_TAG_EOF:
@@ -171,64 +170,69 @@ static ERL_NIF_TERM gumbo_error_tokenizer_term(ErlNifEnv* env,
     case GUMBO_ERR_DOCTYPE_END:
       break;
     default:
-      return atoms->nil;
+      *out = atoms->nil;
+      return 1;
   }
   ERL_NIF_TERM keys[] = {atoms->error_.state, atoms->error_.codepoint};
   ERL_NIF_TERM values[] = {
       atoms->tokenizer_states[error->v.tokenizer.state],
       enif_make_int(env, error->v.tokenizer.codepoint),
   };
-  ERL_NIF_TERM map;
-  if (!enif_make_map_from_arrays(env, keys, values, 2, &map)) {
-    return enif_make_badarg(env);
-  }
-  return map;
+  return enif_make_map_from_arrays(env, keys, values, 2, out);
 }
 
 /* The named char-ref errors: text is a piece into the retained input (the
    bad reference as written). */
-static ERL_NIF_TERM gumbo_error_text_term(ErlNifEnv* env,
-                                          const gumbo_atoms_t* atoms,
-                                          const GumboError* error) {
+static int gumbo_error_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                 const GumboError* error,
+                                 ERL_NIF_TERM* out) {
   switch (error->type) {
     case GUMBO_ERR_NAMED_CHAR_REF_WITHOUT_SEMICOLON:
     case GUMBO_ERR_NAMED_CHAR_REF_INVALID:
       break;
     default:
-      return atoms->nil;
+      *out = atoms->nil;
+      return 1;
   }
-  return gumbo_node_string_piece(env, error->v.text);
+  return gumbo_make_binary(env, error->v.text.data, error->v.text.length, out);
 }
 
-static ERL_NIF_TERM gumbo_error_duplicate_attr_term(
-    ErlNifEnv* env, const gumbo_atoms_t* atoms, const GumboError* error) {
+static int gumbo_error_duplicate_attr_term(ErlNifEnv* env,
+                                           const gumbo_atoms_t* atoms,
+                                           const GumboError* error,
+                                           ERL_NIF_TERM* out) {
   if (error->type != GUMBO_ERR_DUPLICATE_ATTR) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
   const GumboDuplicateAttrError* dup = &error->v.duplicate_attr;
+  ERL_NIF_TERM name;
+  if (dup->name == NULL) {
+    name = atoms->nil;
+  } else if (!gumbo_make_binary(env, dup->name, strlen(dup->name), &name)) {
+    return 0;
+  }
   ERL_NIF_TERM keys[] = {atoms->error_.name, atoms->error_.original_index,
                          atoms->error_.new_index};
   ERL_NIF_TERM values[] = {
-      gumbo_node_stringz(env, atoms, dup->name),
+      name,
       enif_make_uint(env, dup->original_index),
       enif_make_uint(env, dup->new_index),
   };
-  ERL_NIF_TERM map;
-  if (!enif_make_map_from_arrays(env, keys, values, 3, &map)) {
-    return enif_make_badarg(env);
-  }
-  return map;
+  return enif_make_map_from_arrays(env, keys, values, 3, out);
 }
 
-static ERL_NIF_TERM gumbo_error_parser_error_term(ErlNifEnv* env,
-                                                  const gumbo_atoms_t* atoms,
-                                                  const GumboError* error) {
+static int gumbo_error_parser_error_term(ErlNifEnv* env,
+                                         const gumbo_atoms_t* atoms,
+                                         const GumboError* error,
+                                         ERL_NIF_TERM* out) {
   switch (error->type) {
     case GUMBO_ERR_PARSER:
     case GUMBO_ERR_UNACKNOWLEDGED_SELF_CLOSING_TAG:
       break;
     default:
-      return atoms->nil;
+      *out = atoms->nil;
+      return 1;
   }
   const GumboParserError* parser = &error->v.parser;
 
@@ -251,11 +255,7 @@ static ERL_NIF_TERM gumbo_error_parser_error_term(ErlNifEnv* env,
       atoms->insertion_modes[parser->parser_state],
       stack,
   };
-  ERL_NIF_TERM map;
-  if (!enif_make_map_from_arrays(env, keys, values, 4, &map)) {
-    return enif_make_badarg(env);
-  }
-  return map;
+  return enif_make_map_from_arrays(env, keys, values, 4, out);
 }
 
 /* ---- the NIF entry points ---- */
@@ -279,18 +279,23 @@ int gumbo_error_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       atoms->error_.duplicate_attr,
       atoms->error_.parser_error,
   };
-  ERL_NIF_TERM values[GUMBO_ERROR_DETAILS_COUNT] = {
-      gumbo_error_type_term(env, atoms, error),
-      gumbo_error_position_term(env, atoms, error),
-      gumbo_error_original_text_term(env, atoms, h, error),
-      gumbo_error_render_term(env, h, error, 0),
-      gumbo_error_render_term(env, h, error, 1),
-      gumbo_error_codepoint_term(env, atoms, error),
-      gumbo_error_tokenizer_term(env, atoms, error),
-      gumbo_error_text_term(env, atoms, error),
-      gumbo_error_duplicate_attr_term(env, atoms, error),
-      gumbo_error_parser_error_term(env, atoms, error),
-  };
+  ERL_NIF_TERM values[GUMBO_ERROR_DETAILS_COUNT];
+  values[0] = gumbo_error_type_term(env, atoms, error);
+  values[5] = gumbo_error_codepoint_term(env, atoms, error);
+  /* Each fallible extractor is checked before its term joins the map: a
+     badarg sentinel embedded as a value would surface as the integer 42.
+     Failure here is allocation failure, and it propagates to the NIF as
+     badarg. */
+  if (!gumbo_error_position_term(env, atoms, error, &values[1]) ||
+      !gumbo_error_original_text_term(env, atoms, h, error, &values[2]) ||
+      !gumbo_error_render_term(env, h, error, 0, &values[3]) ||
+      !gumbo_error_render_term(env, h, error, 1, &values[4]) ||
+      !gumbo_error_tokenizer_term(env, atoms, error, &values[6]) ||
+      !gumbo_error_text_term(env, atoms, error, &values[7]) ||
+      !gumbo_error_duplicate_attr_term(env, atoms, error, &values[8]) ||
+      !gumbo_error_parser_error_term(env, atoms, error, &values[9])) {
+    return 0;
+  }
   return enif_make_map_from_arrays(env, keys, values,
                                    GUMBO_ERROR_DETAILS_COUNT, out);
 }
