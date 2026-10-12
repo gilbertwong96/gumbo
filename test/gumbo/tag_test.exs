@@ -1,6 +1,8 @@
 defmodule Gumbo.TagTest do
   use ExUnit.Case, async: true
 
+  @tag_count 155
+
   test "name/1 returns gumbo's normalized name" do
     assert Gumbo.Tag.name(:div) == "div"
     assert Gumbo.Tag.name(:h1) == "h1"
@@ -27,10 +29,10 @@ defmodule Gumbo.TagTest do
   test "all/0 has no duplicate names, so no tag silently collapsed to :unknown" do
     names = Enum.map(Gumbo.Tag.all(), &Gumbo.Tag.name/1)
     # 154 real names in gumbo's tag_strings.h, plus GUMBO_TAG_UNKNOWN. The
-    # literal is deliberate: a gumbo bump that adds a tag should make someone
+    # count is deliberate: a gumbo bump that adds a tag should make someone
     # look here rather than pass silently.
-    assert length(names) == 155
-    assert length(Enum.uniq(names)) == length(names)
+    assert length(names) == @tag_count
+    assert Enum.uniq(names) == names
     assert :unknown in Gumbo.Tag.all()
   end
 
@@ -76,10 +78,10 @@ defmodule Gumbo.TagTest do
     # single call; the loop plus periodic GC is what exposes it.
     tags = Gumbo.Tag.all()
     names = Enum.map(tags, &Gumbo.Tag.name/1)
-    assert length(names) == 155
+    assert length(names) == @tag_count
 
     for i <- 1..100_000 do
-      idx = rem(i, 155)
+      idx = rem(i, @tag_count)
       assert Gumbo.Tag.name(Enum.at(tags, idx)) == Enum.at(names, idx)
 
       if rem(i, 10_000) == 0 do

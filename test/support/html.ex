@@ -1,4 +1,8 @@
 defmodule Gumbo.Test.HTML do
+  @moduledoc """
+  Generators for the HTML shapes the suite parses.
+  """
+
   @doc "`<tag><tag>…</tag></tag>`, nested `n` deep."
   @spec nested(binary(), non_neg_integer()) :: binary()
   def nested(tag, n), do: String.duplicate("<#{tag}>", n) <> String.duplicate("</#{tag}>", n)

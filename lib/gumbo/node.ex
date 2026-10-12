@@ -31,7 +31,7 @@ defmodule Gumbo.Node do
   @enforce_keys [:output, :index]
   defstruct [:output, :index]
 
-  @opaque t :: %__MODULE__{output: Gumbo.Output.t(), index: non_neg_integer()}
+  @type t :: %__MODULE__{output: Gumbo.Output.t(), index: non_neg_integer()}
 
   @doc """
   The node's `t:Gumbo.Types.node_type/0`.

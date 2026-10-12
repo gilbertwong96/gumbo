@@ -112,7 +112,8 @@ defmodule Gumbo.StackTest do
   end
 
   defp assert_parses_batch do
-    outputs = for _ <- 1..200, do: elem(Gumbo.parse(HTML.nested("template", 5_000)), 1)
-    assert length(outputs) == 200
+    batch = 200
+    outputs = for _ <- 1..batch, do: elem(Gumbo.parse(HTML.nested("template", 5_000)), 1)
+    assert length(outputs) == batch
   end
 end
