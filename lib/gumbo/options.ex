@@ -21,11 +21,26 @@ defmodule Gumbo.Options do
   # the two constants still agree. The cap is where this library's own
   # regression corpus (an 11 MB document) and the HTML5 spec (~7 MB) both fit.
   @max_input_bytes 16_777_216
+
+  # GumboOptions.max_errors, where -1 means uncapped. The default is bounded
+  # rather than -1 for the same reason the input cap exists: unbounded error
+  # recording is a memory hazard, not merely a long list. gumbo records one
+  # error per unclosed element at EOF and each of those carries a copy of the
+  # open-element tag stack, so an N-deep unclosed document costs N^2 pointers —
+  # measured, 20 000 unclosed <div>s (100 KB of input) produced 400 040 000 stack
+  # entries and 3.2 GB of allocation, and doubling the input quadruples that.
+  #
+  # With a cap C the cost is C * depth, and the depth a parse can reach is itself
+  # bounded by that parse's quadratic time (0.93 ns * depth^2, measured at four
+  # depths), so anything finishing inside a minute has depth <= ~254 000 and 100
+  # errors cost at most ~203 MiB of tag stacks. `max_errors: -1` stays available
+  # for callers who want every error and will own that cost.
+  @max_errors_default 100
   @c_int_max 2_147_483_647
 
   defstruct tab_stop: 8,
             stop_on_first_error: false,
-            max_errors: -1,
+            max_errors: @max_errors_default,
             fragment_context: nil,
             fragment_namespace: :html,
             dirty: :auto
@@ -36,7 +51,8 @@ defmodule Gumbo.Options do
   scheduler policy. `fragment_context` is `nil` (no fragment, gumbo's
   `GUMBO_TAG_LAST`) or a tag atom. `tab_stop` and `max_errors` are bounded by
   C `int` range, so a value that passes `new/1` can never fail the NIF
-  decode.
+  decode. `max_errors` defaults to #{@max_errors_default} rather than to gumbo's
+  -1; see the comment on the default for why, and pass -1 to get every error.
   """
   @type t :: %__MODULE__{
           tab_stop: 1..2_147_483_647,

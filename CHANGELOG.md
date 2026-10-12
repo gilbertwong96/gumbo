@@ -33,6 +33,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A 13-shape small-stack regression matrix (`mix test.small_stack`) and a
   teardown-contract probe (`make check-teardown`).
 
+### Changed
+
+- `:max_errors` now defaults to `100` instead of gumbo's `-1`, which disables
+  the cap. Two separate costs scale with the number of recorded errors, and both
+  were reachable from small inputs:
+
+  - **the parse's memory.** gumbo records one error per unclosed element at EOF
+    and each of those carries a copy of the open-element tag stack, so an N-deep
+    unclosed document cost N² pointers: a 100 KB document allocated 3.2 GB, and
+    200 KB would have taken ~12.8 GB.
+  - **`materialize/2`'s memory and time, which was the larger one.** Each error
+    map carries a `caret` string, and gumbo renders that caret as the whole line
+    with padding — so one error on a single-line document costs O(line length).
+    Measured: a 420 KB one-line document with 40 002 errors produced 420 KB per
+    error, 426 MB of fresh binaries per 1 000 errors, and a 12.7 s
+    `materialize/2`. The cap bounds that at 100 × line length instead.
+
+  The default keeps the parse under ~203 MiB of tag stacks and materialize under
+  100 carets, and `max_errors: -1` still returns every error for callers who want
+  it and will own both costs. This also made `mix test.small_stack` 6.7x faster
+  (38.1 s -> 5.7 s): its three "does not nest" rows produce 40 002 errors each on
+  a one-line document, and the suite materializes every error.
+
 ### Notes
 
 gumbo-parser 0.14.1's own `gumbo_destroy_output` frees the tree with
