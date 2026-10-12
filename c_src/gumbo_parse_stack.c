@@ -44,12 +44,24 @@
    the platform will not report the stack, the thread path is taken: it is the
    one that does not need to know. */
 
+/* _GNU_SOURCE is a reserved identifier and glibc requires it to declare
+   pthread_getattr_np, so the diagnostic is suppressed where it is wrong rather
+   than turned off. NOLINTNEXTLINE goes on the line above: a trailing comment
+   ends a preprocessor directive, and clang-format folds the continuation that
+   follows into the macro itself. */
+// NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #define _GNU_SOURCE 1
 
 #include "gumbo_parse_stack.h"
 
 #include <pthread.h>
 #include <unistd.h> /* sysconf(_SC_PAGESIZE) */
+
+/* These constants are arithmetic on sizes, and they are also used in the #if
+   below, which is a preprocessor expression: a cast to size_t is not allowed
+   there, so the widening is expressed with the ul suffix instead — which is
+   what keeps the multiplication out of unsigned int without breaking the check.
+   (long is 64 bits on the LP64 targets this project builds for.) */
 
 /* The largest input this budget will size a stack for, and the largest stack
    it will ask for. 16 MiB needs 16 MiB * 64 * 2 / 3 = 683 MiB at the worst case
@@ -63,12 +75,12 @@
    reservation is address space, committed lazily, and measured thread creation
    is flat in it (21 us at 256 KiB, 29 us at 683 MiB), so a generous cap costs
    nothing but a refusal for anything larger. */
-#define MAX_INPUT_BYTES (16u * 1024u * 1024u)
-#define MAX_PARSE_STACK (768u * 1024u * 1024u)
+#define MAX_INPUT_BYTES (16ul * 1024ul * 1024ul)
+#define MAX_PARSE_STACK (768ul * 1024ul * 1024ul)
 
 #define MIN_BYTES_PER_LEVEL 3u
 #define FRAME_BYTES 64u
-#define STACK_RESERVE_BYTES (64u * 1024u)
+#define STACK_RESERVE_BYTES (64ul * 1024ul)
 #define STACK_MARGIN 2u
 
 #if (MAX_INPUT_BYTES / MIN_BYTES_PER_LEVEL + 1) * FRAME_BYTES * STACK_MARGIN + \
@@ -79,7 +91,7 @@
 
 /* The thread's stack still has to run the parser, not only the destroy, even
    when the input is short enough that the depth budget is a rounding error. */
-#define THREAD_STACK_FLOOR (256u * 1024u)
+#define THREAD_STACK_FLOOR (256ul * 1024ul)
 
 /* A stack larger than this is not a scheduler thread's. Treat such a report as
    unusable instead of trusting it: the thread path is correct whatever the
@@ -88,7 +100,7 @@
    can be configured with (+sss, +sssdcpu and +sssdio are all settable in MiB,
    and macOS rounds a request up), or the clamp itself would be the thing
    rejecting a legitimate stack — and every parse would pay for a thread. */
-#define MAX_PLAUSIBLE_STACK (64u * 1024u * 1024u)
+#define MAX_PLAUSIBLE_STACK (64ul * 1024ul * 1024ul)
 
 static size_t required_stack(size_t length) {
   /* One level even for an empty input: the document node is a level. */

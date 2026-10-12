@@ -59,9 +59,9 @@ static uint32_t rng_state = 1;
 
 static uint32_t next_rand(void) {
   uint32_t x = rng_state;
-  x ^= x << 13;
-  x ^= x >> 17;
-  x ^= x << 5;
+  x ^= x << 13u;
+  x ^= x >> 17u;
+  x ^= x << 5u;
   rng_state = x;
   return x;
 }
@@ -487,7 +487,7 @@ static int shapes_mode(const char* shape, long n, size_t stack_budget) {
     unsigned x = 12345;
     for (long i = 0; i < n; ++i) {
       x = x * 1103515245u + 12345u;
-      EMIT("%s", pool[(x >> 16) % (sizeof(pool) / sizeof(*pool))]);
+      EMIT("%s", pool[(x >> 16u) % (sizeof(pool) / sizeof(*pool))]);
     }
   } else {
     fprintf(stderr, "unknown shape %s\n", shape);

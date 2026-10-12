@@ -1,0 +1,22 @@
+# The toolchain this project is built and gated with. The versions are pinned to the ones the
+# gates in Makefile and the mix ci alias were last verified against, so a fresh clone builds with
+# the same compiler and the same VM rather than with whatever happens to be installed.
+#
+#   mise trust && mise install
+#
+# `mise trust` is required once: mise refuses to act on a config file it has not been told to
+# trust, and it revokes the trust whenever this file changes.
+[tools]
+erlang = "29.1.1"
+elixir = "1.20.4-otp-29"
+
+# clang-format and clang-tidy are LLVM tools. mise can install LLVM through the mise-llvm plugin
+# under this name, which is the portable answer for a machine that has none.
+clang = "23"
+
+[env]
+# Homebrew's llvm is keg-only: installed, deliberately not linked into PATH, so its tools are
+# reachable only by path. This is where this project says where its tools are, rather than in
+# anyone's shell profile — and both standard prefixes are listed, with the irrelevant one skipped
+# for being absent. A machine that installed LLVM the mise way above already has them on PATH.
+_.path = ["/opt/homebrew/opt/llvm/bin", "/usr/local/opt/llvm/bin"]

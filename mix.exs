@@ -57,6 +57,7 @@ defmodule Gumbo.MixProject do
         "check.analyzer",
         "check.c_format",
         "check.c_lint",
+        "check.c_tidy",
         "check.sanitizers",
         "check.clean_build"
       ],
@@ -181,6 +182,18 @@ defmodule Gumbo.MixProject do
 
         if status != 0 do
           Mix.raise("check.c_lint failed with status #{inspect(status)}")
+        end
+      end,
+      # clang-tidy with the checks in .clang-tidy, over our C, with the vendored sources and
+      # the ERTS headers as system headers so that findings are attributed to our code. The
+      # first run reported 125 signed-bitwise findings and every one of them was inside
+      # gumbo.h, which is what that distinction is for.
+      "check.c_tidy": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-c-tidy"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.c_tidy failed with status #{inspect(status)}")
         end
       end,
       "check.sanitizers": fn _ ->
