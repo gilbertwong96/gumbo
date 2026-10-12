@@ -177,8 +177,8 @@ static void* parse_on_this_thread(void* arg) {
   return NULL;
 }
 
-GumboOutput* gumbo_parse_on_sized_stack(const GumboOptions* options,
-                                        const char* input, size_t length,
+GumboOutput* gumbo_parse_on_sized_stack(GumboOptions* options, const char* input,
+                                        size_t length,
                                         gumbo_parse_stack_status_t* status) {
   *status = GUMBO_PARSE_STACK_OK;
 
@@ -188,11 +188,13 @@ GumboOutput* gumbo_parse_on_sized_stack(const GumboOptions* options,
   }
 
   size_t required = required_stack(length);
+  size_t remaining = caller_stack_remaining();
 
-  if (caller_stack_remaining() >= required) {
+  if (remaining >= required) {
     /* The calling thread's stack already covers the worst case, so there is
        nothing to hand off. This is the path small documents take, and it costs
        no thread. */
+    options->stack_budget = remaining - STACK_RESERVE_BYTES;
     return gumbo_parse_with_options(options, input, length);
   }
 
@@ -210,6 +212,12 @@ GumboOutput* gumbo_parse_on_sized_stack(const GumboOptions* options,
     *status = GUMBO_PARSE_STACK_NO_THREAD;
     return NULL;
   }
+
+  /* The same reserve comes off the budget as comes off the estimate above, and
+     the guard patch turns what is left into a hard stop: the parse refuses
+     rather than running out, which is the only thing that can be done about a
+     recursion whose frame size nobody measured. */
+  options->stack_budget = stack_size - STACK_RESERVE_BYTES;
 
   gumbo_parse_job_t job = {options, input, length, NULL};
   pthread_t thread;

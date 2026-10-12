@@ -16,7 +16,9 @@
  *   parity_dump corpus [count]   write `count` length-prefixed documents
  *   parity_dump dump             read length-prefixed documents, write
  *                                length-prefixed canonical dumps
- *   parity_dump shapes <name> <n>  build one adversarial shape and parse it
+ *   parity_dump shapes <name> <n> [stack_budget]  build one adversarial shape and
+ *                                parse it, optionally under a stack budget so that the
+ *                                guard patch is exercised on purpose
  *
  * The shapes mode exists for the sanitizer gate: it is the same set of documents the
  * stack sweep used — the ones that used to kill the VM, plus attribute piles,
@@ -368,7 +370,7 @@ static char* emit(char* cursor, size_t room, const char* format, ...) {
   return cursor + written;
 }
 
-static int shapes_mode(const char* shape, long n) {
+static int shapes_mode(const char* shape, long n, size_t stack_budget) {
   size_t cap = (size_t)n * 64 + 4096;
   char* s = (char*)malloc(cap);
   char* p = s;
@@ -425,15 +427,27 @@ static int shapes_mode(const char* shape, long n) {
 
   GumboOptions options = kGumboDefaultOptions;
   options.max_errors = -1; /* worst case for the error vector */
+#ifdef GUMBO_HAS_STACK_GUARD
+  options.stack_budget = stack_budget;
+#else
+  (void) stack_budget; /* the pinned header has no stack guard to arm */
+#endif
   GumboOutput* output = gumbo_parse_with_options(&options, s, (size_t)(p - s));
   if (output == NULL) {
     fprintf(stderr, "FAIL: shape %s returned NULL\n", shape);
     return 1;
   }
-  printf("  shape=%-20s n=%-8ld %8zu bytes  root=%s  errors=%u\n", shape, n,
-      (size_t)(p - s),
+#ifdef GUMBO_HAS_STACK_GUARD
+  const char* too_deep = output->too_deep ? "yes" : "no";
+#else
+  /* The pinned header has no such field: the guard is one of the patches, and this
+     harness is built against both headers so that the two can be compared. */
+  const char* too_deep = "n/a";
+#endif
+  printf("  shape=%-20s n=%-8ld %8zu bytes  root=%s  errors=%u  too_deep=%s\n", shape,
+      n, (size_t)(p - s),
       output->root == NULL ? "nil" : gumbo_normalized_tagname(output->root->v.element.tag),
-      output->errors.length);
+      output->errors.length, too_deep);
   gumbo_destroy_output(&options, output);
   free(s);
   return 0;
@@ -452,16 +466,18 @@ int main(int argc, char** argv) {
   }
   if (strcmp(argv[1], "shapes") == 0) {
     if (argc < 4) {
-      fprintf(stderr, "usage: %s shapes <name> <n>\n", argv[0]);
+      fprintf(stderr, "usage: %s shapes <name> <n> [stack_budget]\n", argv[0]);
       return 2;
     }
     long n = strtol(argv[3], NULL, 10);
+    size_t budget = (argc >= 5) ? (size_t)strtoul(argv[4], NULL, 10) : 0;
     if (n <= 0) {
-      fprintf(stderr, "usage: %s shapes <name> <n>\n", argv[0]);
+      fprintf(stderr, "usage: %s shapes <name> <n> [stack_budget]\n", argv[0]);
       return 2;
     }
-    return shapes_mode(argv[2], n);
+    return shapes_mode(argv[2], n, budget);
   }
-  fprintf(stderr, "usage: %s corpus [count] | dump | shapes <name> <n>\n", argv[0]);
+  fprintf(stderr, "usage: %s corpus [count] | dump | shapes <name> <n> [stack_budget]\n",
+      argv[0]);
   return 2;
 }

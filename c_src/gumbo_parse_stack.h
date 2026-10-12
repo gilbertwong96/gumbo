@@ -22,8 +22,8 @@ typedef enum {
   GUMBO_PARSE_STACK_NO_THREAD,
 } gumbo_parse_stack_status_t;
 
-GumboOutput* gumbo_parse_on_sized_stack(const GumboOptions* options,
-                                        const char* input, size_t length,
+GumboOutput* gumbo_parse_on_sized_stack(GumboOptions* options, const char* input,
+                                        size_t length,
                                         gumbo_parse_stack_status_t* status);
 
 #endif

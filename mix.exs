@@ -53,6 +53,7 @@ defmodule Gumbo.MixProject do
         "test.teardown_contract",
         "check.patch",
         "check.parity",
+        "check.stack_guard",
         "check.sanitizers",
         "check.clean_build"
       ],
@@ -125,6 +126,20 @@ defmodule Gumbo.MixProject do
       # happened to come from zeroed pages, and ASan's byte pattern turned a latent
       # garbage pointer into an assertion failure. Slow — the instrumented build of the
       # twelve vendored files is most of it — and worth it.
+      # The stack guard is the backstop for the recursion nobody has found, and the
+      # property that makes it worth having is that it cannot be reached from here: the
+      # sized-stack decision hands the parse a stack the budget says is enough, so only an
+      # arithmetic mistake or an unmeasured recursion can trip it. It is exercised at the
+      # C level with a budget smaller than one frame's worth of parsing, which is what
+      # make check-stack-guard does.
+      "check.stack_guard": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-stack-guard"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.stack_guard failed with status #{inspect(status)}")
+        end
+      end,
       "check.sanitizers": fn _ ->
         {_output, status} =
           System.cmd("make", ["check-sanitizers"], into: IO.stream(), stderr_to_stdout: true)

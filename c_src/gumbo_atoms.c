@@ -367,6 +367,7 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->invalid_option = enif_make_atom(env, "invalid_option");
   atoms->input_too_large = enif_make_atom(env, "input_too_large");
   atoms->too_many_attributes = enif_make_atom(env, "too_many_attributes");
+  atoms->too_deep = enif_make_atom(env, "too_deep");
 
   /* Node accessors: details-map keys named after the accessors they feed,
      the %Gumbo.Position{} struct keys, and the error atoms. */

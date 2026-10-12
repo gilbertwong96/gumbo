@@ -81,6 +81,7 @@ typedef struct {
   ERL_NIF_TERM invalid_option;
   ERL_NIF_TERM input_too_large;
   ERL_NIF_TERM too_many_attributes;
+  ERL_NIF_TERM too_deep;
 
   /* Node accessor atoms, grouped so the details-map key :parse_flags and the
      enum table parse_flags[] cannot be confused. Includes the

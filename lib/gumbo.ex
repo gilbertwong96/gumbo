@@ -19,7 +19,10 @@ defmodule Gumbo do
   reasonable. An element with more than `:max_attributes` attributes (1024 by
   default) is rejected with `{:error, :too_many_attributes}` rather than having
   the extra attributes dropped, because a tree missing attributes would be one
-  this library's fidelity claim does not cover.
+  this library's fidelity claim does not cover. A document that runs the parse out
+  of the C stack it was given is rejected with `{:error, :too_deep}`: the stack is
+  sized from the input's length, so this is a backstop under the arithmetic rather
+  than a limit a caller has to think about.
 
   Parses of 20 KiB or more (`Gumbo.Options.dirty_threshold/0` bytes) run
   on a dirty CPU scheduler so a large document does not block a normal
