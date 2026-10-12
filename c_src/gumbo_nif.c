@@ -175,10 +175,22 @@ static ERL_NIF_TERM nif_output_errors(ErlNifEnv* env, int argc,
   return gumbo_nif_output_errors(env, &priv->atoms, argc, argv);
 }
 
-static ERL_NIF_TERM nif_error_details(ErlNifEnv* env, int argc,
+static ERL_NIF_TERM nif_error_fields(ErlNifEnv* env, int argc,
+                                     const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_error_fields(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_error_message(ErlNifEnv* env, int argc,
                                       const ERL_NIF_TERM argv[]) {
   gumbo_nif_priv_t* priv = enif_priv_data(env);
-  return gumbo_nif_error_details(env, &priv->atoms, argc, argv);
+  return gumbo_nif_error_message(env, &priv->atoms, argc, argv);
+}
+
+static ERL_NIF_TERM nif_error_caret(ErlNifEnv* env, int argc,
+                                    const ERL_NIF_TERM argv[]) {
+  gumbo_nif_priv_t* priv = enif_priv_data(env);
+  return gumbo_nif_error_caret(env, &priv->atoms, argc, argv);
 }
 
 static ERL_NIF_TERM nif_materialize_output_normal(ErlNifEnv* env, int argc,
@@ -256,7 +268,9 @@ static ErlNifFunc nif_funcs[] = {
     {"node_attribute", 3, nif_node_attribute, 0},
     {"attr_details", 3, nif_attr_details, 0},
     {"output_errors", 1, nif_output_errors, 0},
-    {"error_details", 2, nif_error_details, 0},
+    {"error_fields", 2, nif_error_fields, 0},
+    {"error_message", 2, nif_error_message, 0},
+    {"error_caret", 2, nif_error_caret, 0},
     {"materialize_output", 2, nif_materialize_output_normal, 0},
     {"materialize_output_dirty", 2, nif_materialize_output_dirty,
      ERL_NIF_DIRTY_JOB_CPU_BOUND},
