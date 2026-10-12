@@ -1,9 +1,9 @@
-#include <string.h>
+#include "gumbo_handle.h"
 
 #include <erl_nif.h>
+#include <string.h>
 
 #include "gumbo.h"
-#include "gumbo_handle.h"
 #include "gumbo_options.h"
 #include "gumbo_parse_stack.h"
 
@@ -29,12 +29,12 @@ static void gumbo_handle_dtor(ErlNifEnv* env, void* obj) {
 
   gumbo_handle_t* h = obj;
   if (h->output != NULL) {
-    /* The walk inside is the one thing we patch, so it is the one thing that can
-       lose its safety net quietly: destroy_node is iterative as of
+    /* The walk inside is the one thing we patch, so it is the one thing that
+       can lose its safety net quietly: destroy_node is iterative as of
        c_src/patches/0001, which is what makes this call safe on this thread at
-       any depth, whatever its stack. c_src/test/teardown_probe.c holds it to that
-       in both directions — the allocator balances to zero, and a 20 000-level
-       tree survives a 320 KB stack. */
+       any depth, whatever its stack. c_src/test/teardown_probe.c holds it to
+       that in both directions — the allocator balances to zero, and a 20
+       000-level tree survives a 320 KB stack. */
     gumbo_destroy_output(&h->options, h->output);
   }
   enif_free(h->nodes);
@@ -54,10 +54,8 @@ int gumbo_handle_init(ErlNifEnv* env) {
   return gumbo_handle_resource_type == NULL ? 1 : 0;
 }
 
-int gumbo_handle_get(ErlNifEnv* env, ERL_NIF_TERM term,
-                     gumbo_handle_t** out) {
-  return enif_get_resource(env, term, gumbo_handle_resource_type,
-                           (void**)out);
+int gumbo_handle_get(ErlNifEnv* env, ERL_NIF_TERM term, gumbo_handle_t** out) {
+  return enif_get_resource(env, term, gumbo_handle_resource_type, (void**)out);
 }
 
 int gumbo_node_get(ErlNifEnv* env, ERL_NIF_TERM handle_term,
@@ -79,8 +77,8 @@ int gumbo_node_get(ErlNifEnv* env, ERL_NIF_TERM handle_term,
 
 /* Explicit heap stack: pushes children in reverse so they pop in source
    order, giving a true preorder with no C recursion regardless of depth. */
-static int gumbo_stack_push(GumboNode*** stack, size_t* count,
-                            size_t* capacity, GumboNode* node) {
+static int gumbo_stack_push(GumboNode*** stack, size_t* count, size_t* capacity,
+                            GumboNode* node) {
   if (*count == *capacity) {
     size_t next = (*capacity == 0) ? 64 : *capacity * 2;
     GumboNode** grown = enif_realloc(*stack, next * sizeof(GumboNode*));
@@ -174,7 +172,7 @@ static int gumbo_node_table_build(gumbo_handle_t* h) {
    of open subtrees, i.e. the ancestor chain of the node at index i, so when
    node i is not a child of the stack top, that top's subtree ended at i.
    Iterative and O(node_count): same no-recursion rule as the build. */
-int gumbo_node_table_size(gumbo_handle_t* h) {
+static int gumbo_node_table_size(gumbo_handle_t* h) {
   size_t n = h->node_count;
   size_t* stack = enif_alloc((n + 1) * sizeof(size_t));
   h->parent_indices = enif_alloc(n * sizeof(size_t));
@@ -279,13 +277,13 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   }
 
   if (h->output->too_deep) {
-    /* The stack guard stopped the parse before it ran out: a recursion nobody has
-       measured used more of the stack than the budget covered. The tree is whatever
-       had been built, so it is freed and the parse refused — the alternative is a
-       partial tree presented as a parse, or a crash. This is unreachable through this
-       library by construction, since gumbo_parse_stack.c hands the parse a stack the
-       budget says is enough; it is what catches the case where that arithmetic is
-       wrong. */
+    /* The stack guard stopped the parse before it ran out: a recursion nobody
+       has measured used more of the stack than the budget covered. The tree is
+       whatever had been built, so it is freed and the parse refused — the
+       alternative is a partial tree presented as a parse, or a crash. This is
+       unreachable through this library by construction, since
+       gumbo_parse_stack.c hands the parse a stack the budget says is enough; it
+       is what catches the case where that arithmetic is wrong. */
     gumbo_destroy_output(&h->options, h->output);
     h->output = NULL;
     enif_release_resource(h);
@@ -293,11 +291,12 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   }
 
   if (h->output->too_many_attributes) {
-    /* The parse succeeded and the tree is ours to free, but the caller asked for a
-       cap on attributes per element and the document went past it. Handing the tree
-       back would mean handing back one that differs from what the pinned parser
-       builds — the one thing this library promises not to do — so this mirrors
-       :input_too_large and refuses instead. The count is the caller's to raise. */
+    /* The parse succeeded and the tree is ours to free, but the caller asked
+       for a cap on attributes per element and the document went past it.
+       Handing the tree back would mean handing back one that differs from what
+       the pinned parser builds — the one thing this library promises not to do
+       — so this mirrors :input_too_large and refuses instead. The count is the
+       caller's to raise. */
     gumbo_destroy_output(&h->options, h->output);
     h->output = NULL;
     enif_release_resource(h);
@@ -307,10 +306,10 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   if (gumbo_node_table_build(h) != 0) {
     /* The table is the handle's index — the node accessors read it — so a
        partial one makes the handle unusable, but not the tree: destroy_node is
-       iterative as of c_src/patches/0001, so gumbo_destroy_output frees all of it
-       at any depth, exactly as the destructor does. Unreachable in practice (OOM,
-       or a non-NULL output->root missing from the table) and the parse raises
-       either way. */
+       iterative as of c_src/patches/0001, so gumbo_destroy_output frees all of
+       it at any depth, exactly as the destructor does. Unreachable in practice
+       (OOM, or a non-NULL output->root missing from the table) and the parse
+       raises either way. */
     gumbo_destroy_output(&h->options, h->output);
     h->output = NULL;
     enif_release_resource(h);

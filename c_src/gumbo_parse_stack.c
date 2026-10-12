@@ -1,13 +1,14 @@
 /* gumbo's recursion depth follows the input's nesting depth, and 0.14.1 caps
    neither. Two call sites reach a depth-proportional recursion at input depth —
-   the destructor, and handle_in_body's <frameset> branch, which runs *during the
-   parse* — and c_src/patches/0001 fixes both by making destroy_node iterative.
-   This unit is the layer underneath that one, and it exists because the patch
-   fixes the recursions that are known rather than the class: clone_node_recursively
-   is still a recursion per level of an option's subtree, and while it was measured
-   not to be reachable at depth, it was not proven bounded, and the mutual
-   handle_in_* cycle is per-token by construction rather than by proof. An unfound
-   recursion in vendored code is what this budget is for.
+   the destructor, and handle_in_body's <frameset> branch, which runs *during
+   the parse* — and c_src/patches/0001 fixes both by making destroy_node
+   iterative. This unit is the layer underneath that one, and it exists because
+   the patch fixes the recursions that are known rather than the class:
+   clone_node_recursively is still a recursion per level of an option's subtree,
+   and while it was measured not to be reachable at depth, it was not proven
+   bounded, and the mutual handle_in_* cycle is per-token by construction rather
+   than by proof. An unfound recursion in vendored code is what this budget is
+   for.
 
    So the parse is given a stack that covers the worst case its input can
    that covers the worst case its input can produce. That is a budget rather
@@ -71,7 +72,7 @@
 #define STACK_MARGIN 2u
 
 #if (MAX_INPUT_BYTES / MIN_BYTES_PER_LEVEL + 1) * FRAME_BYTES * STACK_MARGIN + \
-        STACK_RESERVE_BYTES >                                                     \
+        STACK_RESERVE_BYTES >                                                  \
     MAX_PARSE_STACK
 #error "MAX_INPUT_BYTES needs more stack than MAX_PARSE_STACK allows"
 #endif
@@ -177,8 +178,8 @@ static void* parse_on_this_thread(void* arg) {
   return NULL;
 }
 
-GumboOutput* gumbo_parse_on_sized_stack(GumboOptions* options, const char* input,
-                                        size_t length,
+GumboOutput* gumbo_parse_on_sized_stack(GumboOptions* options,
+                                        const char* input, size_t length,
                                         gumbo_parse_stack_status_t* status) {
   *status = GUMBO_PARSE_STACK_OK;
 
@@ -198,8 +199,8 @@ GumboOutput* gumbo_parse_on_sized_stack(GumboOptions* options, const char* input
     return gumbo_parse_with_options(options, input, length);
   }
 
-  size_t stack_size = (required < THREAD_STACK_FLOOR) ? THREAD_STACK_FLOOR
-                                                      : required;
+  size_t stack_size =
+      (required < THREAD_STACK_FLOOR) ? THREAD_STACK_FLOOR : required;
   stack_size = round_up_to_page(stack_size);
 
   pthread_attr_t attr;

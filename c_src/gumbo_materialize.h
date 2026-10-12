@@ -16,8 +16,8 @@
    and storing terms in a scratch ERL_NIF_TERM[] of node_count entries, so
    depth costs memory, never C stack. */
 ERL_NIF_TERM gumbo_nif_materialize_output(ErlNifEnv* env,
-                                          const gumbo_atoms_t* atoms,
-                                          int argc, const ERL_NIF_TERM argv[]);
+                                          const gumbo_atoms_t* atoms, int argc,
+                                          const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM gumbo_nif_materialize_node(ErlNifEnv* env,
                                         const gumbo_atoms_t* atoms, int argc,
                                         const ERL_NIF_TERM argv[]);

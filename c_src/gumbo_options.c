@@ -69,9 +69,9 @@ int gumbo_options_decode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     return 0;
   }
 
-  /* Our -1 means no cap, gumbo's field is unsigned where UINT_MAX means the same
-     thing. Anything above C int range cannot be encoded back for options/1, so it
-     is rejected before it gets here. */
+  /* Our -1 means no cap, gumbo's field is unsigned where UINT_MAX means the
+     same thing. Anything above C int range cannot be encoded back for
+     options/1, so it is rejected before it gets here. */
   if (!enif_get_map_value(env, options_map, atoms->max_attributes, &value)) {
     return 0;
   }
@@ -80,7 +80,7 @@ int gumbo_options_decode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     return 0;
   }
   h->options.max_attributes =
-      (max_attributes < 0) ? UINT_MAX : (unsigned int) max_attributes;
+      (max_attributes < 0) ? UINT_MAX : (unsigned int)max_attributes;
 
   if (!enif_get_map_value(env, options_map, atoms->fragment_context, &value)) {
     return 0;
@@ -97,8 +97,7 @@ int gumbo_options_decode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   }
   if (enif_is_identical(value, atoms->namespaces[GUMBO_NAMESPACE_HTML])) {
     h->options.fragment_namespace = GUMBO_NAMESPACE_HTML;
-  } else if (enif_is_identical(value,
-                               atoms->namespaces[GUMBO_NAMESPACE_SVG])) {
+  } else if (enif_is_identical(value, atoms->namespaces[GUMBO_NAMESPACE_SVG])) {
     h->options.fragment_namespace = GUMBO_NAMESPACE_SVG;
   } else if (enif_is_identical(value,
                                atoms->namespaces[GUMBO_NAMESPACE_MATHML])) {
@@ -137,8 +136,7 @@ int gumbo_options_encode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   keys[0] = atoms->tab_stop;
   values[0] = enif_make_int(env, h->options.tab_stop);
   keys[1] = atoms->stop_on_first_error;
-  values[1] =
-      h->options.stop_on_first_error ? atoms->true_ : atoms->false_;
+  values[1] = h->options.stop_on_first_error ? atoms->true_ : atoms->false_;
   keys[2] = atoms->max_errors;
   values[2] = enif_make_int(env, h->options.max_errors);
   keys[3] = atoms->fragment_context;
@@ -150,10 +148,9 @@ int gumbo_options_encode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   keys[5] = atoms->dirty;
   values[5] = gumbo_dirty_atom(atoms, h->dirty);
   keys[6] = atoms->max_attributes;
-  values[6] = enif_make_int(env,
-      (h->options.max_attributes == UINT_MAX)
-          ? -1
-          : (int) h->options.max_attributes);
+  values[6] = enif_make_int(env, (h->options.max_attributes == UINT_MAX)
+                                     ? -1
+                                     : (int)h->options.max_attributes);
 
   return enif_make_map_from_arrays(env, keys, values, 7, out);
 }

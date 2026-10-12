@@ -4,8 +4,8 @@
    Both modes are hard gates. The vendored destroy_node is iterative as of
    c_src/patches/0001-make-destroy_node-iterative.patch, so neither a clean
    survival on a small stack nor a zero allocator balance is a coincidence any
-   more: either one failing means the patch is gone (a submodule bump that stopped
-   applying it, or the file deleted) and the crash is back.
+   more: either one failing means the patch is gone (a submodule bump that
+   stopped applying it, or the file deleted) and the crash is back.
 
    "balance": parse with a counting allocator installed via GumboOptions, then
    call gumbo_destroy_output — the same call the NIF destructor makes — and
@@ -18,20 +18,20 @@
    vector rather than a NULL one). The balance is an exact integer: no RSS
    thresholds, no timing.
 
-   Liveness is not reclamation. That distinction is the first defect this project
-   shipped — a teardown that survived every test and leaked 70% of the tree — so
-   both properties are asserted here rather than one standing in for the other.
-   Until 2026-10-13 this mode ran the disarm pass in c_src/gumbo_teardown.c instead;
-   that unit is gone, and the walk it disarmed is our patch now, which makes this
-   the only test of the code we added.
+   Liveness is not reclamation. That distinction is the first defect this
+   project shipped — a teardown that survived every test and leaked 70% of the
+   tree — so both properties are asserted here rather than one standing in for
+   the other. Until 2026-10-13 this mode ran the disarm pass in
+   c_src/gumbo_teardown.c instead; that unit is gone, and the walk it disarmed
+   is our patch now, which makes this the only test of the code we added.
 
    "canary [levels]": the same walk on a document `levels` deep, run by the
-   Makefile under `ulimit -s 320` — a stack a recursive walk of this depth cannot
-   survive (measured: the unpatched walk dies at 8 000 levels on a 320 KB stack,
-   and this default is 20 000). The probe cannot assert its own survival, so the
-   Makefile turns a signal death into a failure; that is also why a non-zero
-   *error* exit from this mode has to be told apart from a death, which is all the
-   Makefile's status handling is doing. */
+   Makefile under `ulimit -s 320` — a stack a recursive walk of this depth
+   cannot survive (measured: the unpatched walk dies at 8 000 levels on a 320 KB
+   stack, and this default is 20 000). The probe cannot assert its own survival,
+   so the Makefile turns a signal death into a failure; that is also why a
+   non-zero *error* exit from this mode has to be told apart from a death, which
+   is all the Makefile's status handling is doing. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,12 +60,12 @@ static int gumbo_probe_balance_mode(void) {
   options.allocator = gumbo_probe_alloc;
   options.deallocator = gumbo_probe_dealloc;
 
-  const char* html = "<!DOCTYPE html PUBLIC \"pub\" \"sys\">"
-                     "<div id=\"a\" class=\"b\" class=\"c\">text<!--c-->"
-                     "<template><p>x</p></template>";
+  const char* html =
+      "<!DOCTYPE html PUBLIC \"pub\" \"sys\">"
+      "<div id=\"a\" class=\"b\" class=\"c\">text<!--c-->"
+      "<template><p>x</p></template>";
 
-  GumboOutput* output =
-      gumbo_parse_with_options(&options, html, strlen(html));
+  GumboOutput* output = gumbo_parse_with_options(&options, html, strlen(html));
   if (output == NULL) {
     fprintf(stderr, "FAIL: parse returned NULL\n");
     return 1;

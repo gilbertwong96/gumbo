@@ -93,6 +93,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the new attribute index was read as uninitialised memory on the first tag of every
   parse, which was invisible to builds that happened to get zeroed pages.
 
+- The C now gets the treatment the Elixir has had all along: `mix ci` runs
+  `clang-format` against a checked-in `.clang-format` (Google's style, because that is
+  what gumbo is written in, so a patch and the file it patches read the same way) and
+  compiles this library's own C with warnings as errors and fifteen warning classes,
+  including the implicit sign conversions the ERTS API invites. Our files only: the
+  vendored copy is pinned and reformatting it would break every patch. Between them the
+  two gates found five things, all fixed — a function that should have been static, an
+  `int` where an enum bit was meant, a shell glob inside a block comment, a format string
+  forwarded without an attribute saying so, and hand-aligned comments the checker would
+  not accept.
+
 - `mix ci` also runs `clang --analyze` over this library's own C, which is the newest
   and least exercised code here and the only place AddressSanitizer cannot look:
   instrumenting the NIF would mean instrumenting the VM. Its canary file is a deliberate

@@ -1,8 +1,9 @@
+#include "gumbo_tags.h"
+
 #include <limits.h>
 #include <string.h>
 
 #include "gumbo.h"
-#include "gumbo_tags.h"
 
 /* All five asserts reachable from gumbo's public tag API are guarded in this
    file: gumbo_normalized_tagname asserts on its range, and
@@ -34,7 +35,7 @@ static ERL_NIF_TERM gumbo_tag_name_binary(ErlNifEnv* env, GumboTag tag) {
 }
 
 ERL_NIF_TERM gumbo_nif_tag_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                            int argc, const ERL_NIF_TERM argv[]) {
+                                int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
 
   if (enif_is_atom(env, argv[0])) {
@@ -63,7 +64,7 @@ ERL_NIF_TERM gumbo_nif_tag_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
    binary needs no NUL terminator and any bytes (including embedded NULs) are
    safe. */
 ERL_NIF_TERM gumbo_nif_tag_from_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                 int argc, const ERL_NIF_TERM argv[]) {
+                                     int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
 
   ErlNifBinary bin;
@@ -75,15 +76,14 @@ ERL_NIF_TERM gumbo_nif_tag_from_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   if (bin.size > UINT_MAX) {
     return atoms->tags[GUMBO_TAG_UNKNOWN];
   }
-  GumboTag tag =
-      gumbo_tagn_enum((const char*)bin.data, (unsigned int)bin.size);
+  GumboTag tag = gumbo_tagn_enum((const char*)bin.data, (unsigned int)bin.size);
   return atoms->tags[tag];
 }
 
 /* void?/1: no assert here — gumbo_tag_is_void's switch has a default branch,
    so any integer is safe and simply reports false. */
 ERL_NIF_TERM gumbo_nif_tag_void(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                            int argc, const ERL_NIF_TERM argv[]) {
+                                int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
 
   if (enif_is_atom(env, argv[0])) {
@@ -107,7 +107,7 @@ ERL_NIF_TERM gumbo_nif_tag_void(ErlNifEnv* env, const gumbo_atoms_t* atoms,
    explicit length (gumbo_string_equals_ignore_case), so the binary needs no
    NUL terminator. NULL means no replacement. */
 ERL_NIF_TERM gumbo_nif_tag_svg_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                int argc, const ERL_NIF_TERM argv[]) {
+                                    int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
 
   ErlNifBinary bin;
@@ -141,8 +141,9 @@ ERL_NIF_TERM gumbo_nif_tag_svg_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
    that is not a complete tag yields {:error, :not_a_tag}. gumbo mutates the
    piece struct, never the buffer, so the binary's bytes are only read. */
 ERL_NIF_TERM gumbo_nif_tag_from_original_text(ErlNifEnv* env,
-                                          const gumbo_atoms_t* atoms, int argc,
-                                          const ERL_NIF_TERM argv[]) {
+                                              const gumbo_atoms_t* atoms,
+                                              int argc,
+                                              const ERL_NIF_TERM argv[]) {
   (void)argc;
 
   ErlNifBinary bin;
@@ -173,8 +174,8 @@ ERL_NIF_TERM gumbo_nif_tag_from_original_text(ErlNifEnv* env,
 
 /* all/0: the interned tag atoms in enum order, consed from the end so the
    list stays ascending without an intermediate allocation. */
-ERL_NIF_TERM gumbo_nif_tag_all(ErlNifEnv* env, const gumbo_atoms_t* atoms, int argc,
-                           const ERL_NIF_TERM argv[]) {
+ERL_NIF_TERM gumbo_nif_tag_all(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                               int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
   (void)argv;
 

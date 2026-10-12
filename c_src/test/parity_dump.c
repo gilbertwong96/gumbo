@@ -2,10 +2,11 @@
  *
  * The patches change how the parser decides what to build, in the one place
  * where a mistake is invisible: a scope query or an "is this node still open"
- * answer that is off by one does not crash, does not leak, and does not trip any
- * assertion in the suite's shape matrix — it silently produces a different tree.
- * So the net is a differential one: the same corpus is parsed by the pinned
- * parser and by the patched one, and the two trees are compared node by node.
+ * answer that is off by one does not crash, does not leak, and does not trip
+ * any assertion in the suite's shape matrix — it silently produces a different
+ * tree. So the net is a differential one: the same corpus is parsed by the
+ * pinned parser and by the patched one, and the two trees are compared node by
+ * node.
  *
  * Both parsers are linked into separate binaries because they export the same
  * symbols; nothing clever is needed beyond running each once per document and
@@ -16,24 +17,26 @@
  *   parity_dump corpus [count]   write `count` length-prefixed documents
  *   parity_dump dump             read length-prefixed documents, write
  *                                length-prefixed canonical dumps
- *   parity_dump shapes <name> <n> [stack_budget]  build one adversarial shape and
- *                                parse it, optionally under a stack budget so that the
- *                                guard patch is exercised on purpose
+ *   parity_dump shapes <name> <n> [stack_budget]  build one adversarial shape
+ * and parse it, optionally under a stack budget so that the guard patch is
+ * exercised on purpose
  *
- * The shapes mode exists for the sanitizer gate: it is the same set of documents the
- * stack sweep used — the ones that used to kill the VM, plus attribute piles,
- * formatting runs, tables, foreign content and tag soup — run against a build with
- * AddressSanitizer and UndefinedBehaviorSanitizer, which is the only net there is for
- * a memory-safety bug inside gumbo itself. It runs on the calling thread at a depth
- * chosen to suit that harness, because the sanitizers enlarge stack frames and this
- * mode is about memory safety rather than about the stack cliff.
+ * The shapes mode exists for the sanitizer gate: it is the same set of
+ * documents the stack sweep used — the ones that used to kill the VM, plus
+ * attribute piles, formatting runs, tables, foreign content and tag soup — run
+ * against a build with AddressSanitizer and UndefinedBehaviorSanitizer, which
+ * is the only net there is for a memory-safety bug inside gumbo itself. It runs
+ * on the calling thread at a depth chosen to suit that harness, because the
+ * sanitizers enlarge stack frames and this mode is about memory safety rather
+ * than about the stack cliff.
  *
  * The dump is deliberately canonical rather than pretty: preorder, with node
- * type, tag name, namespaces, attributes in document order, text bytes, and then
- * a summary of the error vector (type, position, line, column). Error *messages*
- * and tag stacks are excluded on purpose — one of the patches caps how much of
- * the open-element stack an error keeps, which is a documented change and would
- * otherwise swamp a comparison that is about tree construction.
+ * type, tag name, namespaces, attributes in document order, text bytes, and
+ * then a summary of the error vector (type, position, line, column). Error
+ * *messages* and tag stacks are excluded on purpose — one of the patches caps
+ * how much of the open-element stack an error keeps, which is a documented
+ * change and would otherwise swamp a comparison that is about tree
+ * construction.
  *
  * Depth is kept to a few thousand tokens: the pinned parser still recurses
  * once per level on teardown, and this program runs on the main thread's 8 MB
@@ -46,8 +49,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gumbo.h"
 #include "error.h" /* GumboError, for the error summary: internal, like the NIF */
+#include "gumbo.h"
 
 /* ---- corpus ------------------------------------------------------------ */
 
@@ -65,41 +68,93 @@ static uint32_t next_rand(void) {
 
 static unsigned pick(unsigned n) { return (unsigned)(next_rand() % n); }
 
-static const char* kOpeners[] = {
-    "<div>", "<span>", "<b>", "<i>", "<a>", "<p>", "<li>", "<dd>", "<dt>",
-    "<section>", "<h1>", "<button>", "<form>", "<table>", "<tbody>", "<tr>",
-    "<td>", "<th>", "<caption>", "<colgroup>", "<col>", "<template>",
-    "<select>", "<option>", "<optgroup>", "<selectedcontent>", "<svg>",
-    "<math>", "<ruby>", "<rt>", "<rp>", "<marquee>", "<object>", "<applet>",
-    "<pre>", "<listing>", "<hr>", "<frameset>", "<frame>", "<nobr>"};
+static const char* kOpeners[] = {"<div>",      "<span>",
+                                 "<b>",        "<i>",
+                                 "<a>",        "<p>",
+                                 "<li>",       "<dd>",
+                                 "<dt>",       "<section>",
+                                 "<h1>",       "<button>",
+                                 "<form>",     "<table>",
+                                 "<tbody>",    "<tr>",
+                                 "<td>",       "<th>",
+                                 "<caption>",  "<colgroup>",
+                                 "<col>",      "<template>",
+                                 "<select>",   "<option>",
+                                 "<optgroup>", "<selectedcontent>",
+                                 "<svg>",      "<math>",
+                                 "<ruby>",     "<rt>",
+                                 "<rp>",       "<marquee>",
+                                 "<object>",   "<applet>",
+                                 "<pre>",      "<listing>",
+                                 "<hr>",       "<frameset>",
+                                 "<frame>",    "<nobr>"};
 
-static const char* kClosers[] = {
-    "</div>", "</span>", "</b>", "</i>", "</a>", "</p>", "</li>", "</dd>",
-    "</dt>", "</section>", "</h1>", "</button>", "</form>", "</table>",
-    "</tbody>", "</tr>", "</td>", "</th>", "</caption>", "</colgroup>",
-    "</template>", "</select>", "</option>", "</optgroup>",
-    "</selectedcontent>", "</svg>", "</math>", "</ruby>", "</rt>", "</rp>",
-    "</nobr>", "</marquee>", "</object>", "</applet>"};
+static const char* kClosers[] = {"</div>",
+                                 "</span>",
+                                 "</b>",
+                                 "</i>",
+                                 "</a>",
+                                 "</p>",
+                                 "</li>",
+                                 "</dd>",
+                                 "</dt>",
+                                 "</section>",
+                                 "</h1>",
+                                 "</button>",
+                                 "</form>",
+                                 "</table>",
+                                 "</tbody>",
+                                 "</tr>",
+                                 "</td>",
+                                 "</th>",
+                                 "</caption>",
+                                 "</colgroup>",
+                                 "</template>",
+                                 "</select>",
+                                 "</option>",
+                                 "</optgroup>",
+                                 "</selectedcontent>",
+                                 "</svg>",
+                                 "</math>",
+                                 "</ruby>",
+                                 "</rt>",
+                                 "</rp>",
+                                 "</nobr>",
+                                 "</marquee>",
+                                 "</object>",
+                                 "</applet>"};
 
-static const char* kRaw[] = {
-    "<script>var a = '<div>';</script>", "<style>p{}</style>",
-    "<textarea><b></textarea>", "<title><i></title>", "<xmp><u></xmp>",
-    "<noscript><p></noscript>", "<noembed><p></noembed>",
-    "<noframes><p></noframes>", "<plaintext>",
-    "<!-- comment with <div> and </p> -->", "<?pi target?>",
-    "<!DOCTYPE html>", "<!DOCTYPE html PUBLIC \"pub\" \"sys\">",
-    "<![CDATA[not cdata]]>", "text &amp; more", "  \t\n  ",
-    "<div class=\"a\" class=\"b\">", "<div class a=1>", "<div title=>",
-    "<b class=\"x\"><i class=\"x\"><b class=\"x\">"};
+static const char* kRaw[] = {"<script>var a = '<div>';</script>",
+                             "<style>p{}</style>",
+                             "<textarea><b></textarea>",
+                             "<title><i></title>",
+                             "<xmp><u></xmp>",
+                             "<noscript><p></noscript>",
+                             "<noembed><p></noembed>",
+                             "<noframes><p></noframes>",
+                             "<plaintext>",
+                             "<!-- comment with <div> and </p> -->",
+                             "<?pi target?>",
+                             "<!DOCTYPE html>",
+                             "<!DOCTYPE html PUBLIC \"pub\" \"sys\">",
+                             "<![CDATA[not cdata]]>",
+                             "text &amp; more",
+                             "  \t\n  ",
+                             "<div class=\"a\" class=\"b\">",
+                             "<div class a=1>",
+                             "<div title=>",
+                             "<b class=\"x\"><i class=\"x\"><b class=\"x\">"};
 
 static void append(char** buf, size_t* len, size_t* cap, const char* s);
 
-/* Elements carrying a pile of attributes, which is where the duplicate check lives:
- * many distinct names, many duplicates of one name, names that differ only in a
- * trailing character, and names long enough that a length check would matter. The
- * corpus stays inside max_attributes on purpose — beyond it the parse is defined to
- * drop attributes, and this comparison is about what the pinned parser builds. */
-static void append_attr_cluster(char** buf, size_t* len, size_t* cap, unsigned seed) {
+/* Elements carrying a pile of attributes, which is where the duplicate check
+ * lives: many distinct names, many duplicates of one name, names that differ
+ * only in a trailing character, and names long enough that a length check would
+ * matter. The corpus stays inside max_attributes on purpose — beyond it the
+ * parse is defined to drop attributes, and this comparison is about what the
+ * pinned parser builds. */
+static void append_attr_cluster(char** buf, size_t* len, size_t* cap,
+                                unsigned seed) {
   char name[40];
   unsigned count = 8u + (seed % 40u);
   append(buf, len, cap, "<div");
@@ -155,10 +210,12 @@ static char* make_document(unsigned tokens, unsigned bias) {
   for (unsigned i = 0; i < tokens; ++i) {
     unsigned roll = pick(100);
     if (roll < 45) {
-      append(&buf, &len, &cap, kOpeners[pick(sizeof(kOpeners) / sizeof(*kOpeners))]);
+      append(&buf, &len, &cap,
+             kOpeners[pick(sizeof(kOpeners) / sizeof(*kOpeners))]);
       ++depth;
     } else if (roll < 60 && depth > 0) {
-      append(&buf, &len, &cap, kClosers[pick(sizeof(kClosers) / sizeof(*kClosers))]);
+      append(&buf, &len, &cap,
+             kClosers[pick(sizeof(kClosers) / sizeof(*kClosers))]);
       if (depth > 0) --depth;
     } else if (roll < 80) {
       append(&buf, &len, &cap, kRaw[pick(sizeof(kRaw) / sizeof(*kRaw))]);
@@ -211,7 +268,8 @@ static void dump_slice(FILE* out, const char* text, size_t limit) {
 
 static void dump_document(FILE* out, GumboOutput* output) {
   /* Explicit stack: this program parses documents the pinned parser can free
-   * only because they are shallow, but it must not add a recursion of its own. */
+   * only because they are shallow, but it must not add a recursion of its own.
+   */
   unsigned capacity = 1024, count = 0;
   GumboNode** stack = (GumboNode**)malloc(capacity * sizeof(*stack));
   if (stack == NULL) {
@@ -226,7 +284,8 @@ static void dump_document(FILE* out, GumboOutput* output) {
     switch (node->type) {
       case GUMBO_NODE_DOCUMENT: {
         GumboDocument* d = &node->v.document;
-        fprintf(out, "children=%u,name=%d,pub=%d,sys=%d,has_doctype=%d,quirks=%d,",
+        fprintf(out,
+                "children=%u,name=%d,pub=%d,sys=%d,has_doctype=%d,quirks=%d,",
                 d->children.length, d->has_doctype, d->name != NULL,
                 d->public_identifier != NULL, d->system_identifier != NULL,
                 (int)d->doc_type_quirks_mode);
@@ -235,7 +294,8 @@ static void dump_document(FILE* out, GumboOutput* output) {
         for (unsigned i = kids->length; i-- > 0;) {
           if (count == capacity) {
             capacity *= 2;
-            GumboNode** grown = (GumboNode**)realloc(stack, capacity * sizeof(*stack));
+            GumboNode** grown =
+                (GumboNode**)realloc(stack, capacity * sizeof(*stack));
             if (grown == NULL) {
               fprintf(stderr, "FAIL: out of memory\n");
               exit(1);
@@ -248,8 +308,8 @@ static void dump_document(FILE* out, GumboOutput* output) {
       case GUMBO_NODE_ELEMENT:
       case GUMBO_NODE_TEMPLATE: {
         GumboElement* e = &node->v.element;
-        fprintf(out, "tag=%d,ns=%d,attrs=%u,children=%u,",
-                (int)e->tag, (int)e->tag_namespace, e->attributes.length,
+        fprintf(out, "tag=%d,ns=%d,attrs=%u,children=%u,", (int)e->tag,
+                (int)e->tag_namespace, e->attributes.length,
                 e->children.length);
         dump_text(out, gumbo_normalized_tagname(e->tag));
         for (unsigned i = 0; i < e->attributes.length; ++i) {
@@ -262,7 +322,8 @@ static void dump_document(FILE* out, GumboOutput* output) {
         for (unsigned i = kids->length; i-- > 0;) {
           if (count == capacity) {
             capacity *= 2;
-            GumboNode** grown = (GumboNode**)realloc(stack, capacity * sizeof(*stack));
+            GumboNode** grown =
+                (GumboNode**)realloc(stack, capacity * sizeof(*stack));
             if (grown == NULL) {
               fprintf(stderr, "FAIL: out of memory\n");
               exit(1);
@@ -305,7 +366,8 @@ static int corpus_mode(unsigned count) {
     rng_state = 0x9e3779b9u + i * 2654435761u;
     unsigned tokens = 5 + pick(600);
     /* Every fourth document is deep on purpose: the patched hot spots are
-     * functions of the open-element stack, so shallow corpora cannot see them. */
+     * functions of the open-element stack, so shallow corpora cannot see them.
+     */
     if (i % 4 == 3) tokens = 1200 + pick(800);
     char* doc = make_document(tokens, i);
     write_length_prefixed(stdout, doc, strlen(doc));
@@ -353,12 +415,19 @@ static int dump_mode(void) {
 
 /* ---- adversarial shapes, for the sanitizer gate ------------------------ */
 
-// Appends to the shape buffer, refusing to write past the end of it. The buffer is
-// sized from `n` but the shapes differ in bytes per level, so the arithmetic cannot be
-// trusted to be right; this turns an off-by-one in it into a message instead of a
-// corrupted heap. AddressSanitizer found exactly that in the throwaway version of this
-// harness, which is why this one is bounded.
-static char* emit(char* cursor, size_t room, const char* format, ...) {
+// Appends to the shape buffer, refusing to write past the end of it. The buffer
+// is sized from `n` but the shapes differ in bytes per level, so the arithmetic
+// cannot be trusted to be right; this turns an off-by-one in it into a message
+// instead of a corrupted heap. AddressSanitizer found exactly that in the
+// throwaway version of this harness, which is why this one is bounded.
+// The format attribute is what keeps -Wformat=2 useful through this forwarding
+// wrapper: it tells the compiler that argument 3 is a printf format, so the
+// call sites are checked as literals and the vsnprintf below is recognised as a
+// forward rather than a non-literal call.
+__attribute__((format(printf, 3, 4))) static char* emit(char* cursor,
+                                                        size_t room,
+                                                        const char* format,
+                                                        ...) {
   va_list args;
   va_start(args, format);
   int written = vsnprintf(cursor, room, format, args);
@@ -410,10 +479,11 @@ static int shapes_mode(const char* shape, long n, size_t stack_budget) {
     for (long i = 0; i < n; ++i) EMIT("<option><span><span></option>");
     EMIT("</selectedcontent></select>");
   } else if (strcmp(shape, "soup") == 0) {
-    const char* pool[] = {"<div>", "<span>", "<b>", "<p>", "<li>", "<table>",
-                          "<td>", "<template>", "<svg>", "</div>", "</p>",
-                          "</b>", "<!--c-->", "x", "<option>", "<select>",
-                          "<button>", "<form>", "<h1>", "</table>"};
+    const char* pool[] = {"<div>",    "<span>",  "<b>",      "<p>",
+                          "<li>",     "<table>", "<td>",     "<template>",
+                          "<svg>",    "</div>",  "</p>",     "</b>",
+                          "<!--c-->", "x",       "<option>", "<select>",
+                          "<button>", "<form>",  "<h1>",     "</table>"};
     unsigned x = 12345;
     for (long i = 0; i < n; ++i) {
       x = x * 1103515245u + 12345u;
@@ -430,7 +500,7 @@ static int shapes_mode(const char* shape, long n, size_t stack_budget) {
 #ifdef GUMBO_HAS_STACK_GUARD
   options.stack_budget = stack_budget;
 #else
-  (void) stack_budget; /* the pinned header has no stack guard to arm */
+  (void)stack_budget; /* the pinned header has no stack guard to arm */
 #endif
   GumboOutput* output = gumbo_parse_with_options(&options, s, (size_t)(p - s));
   if (output == NULL) {
@@ -440,14 +510,17 @@ static int shapes_mode(const char* shape, long n, size_t stack_budget) {
 #ifdef GUMBO_HAS_STACK_GUARD
   const char* too_deep = output->too_deep ? "yes" : "no";
 #else
-  /* The pinned header has no such field: the guard is one of the patches, and this
-     harness is built against both headers so that the two can be compared. */
+  /* The pinned header has no such field: the guard is one of the patches, and
+     this harness is built against both headers so that the two can be compared.
+   */
   const char* too_deep = "n/a";
 #endif
-  printf("  shape=%-20s n=%-8ld %8zu bytes  root=%s  errors=%u  too_deep=%s\n", shape,
-      n, (size_t)(p - s),
-      output->root == NULL ? "nil" : gumbo_normalized_tagname(output->root->v.element.tag),
-      output->errors.length, too_deep);
+  printf("  shape=%-20s n=%-8ld %8zu bytes  root=%s  errors=%u  too_deep=%s\n",
+         shape, n, (size_t)(p - s),
+         output->root == NULL
+             ? "nil"
+             : gumbo_normalized_tagname(output->root->v.element.tag),
+         output->errors.length, too_deep);
   gumbo_destroy_output(&options, output);
   free(s);
   return 0;
@@ -477,7 +550,9 @@ int main(int argc, char** argv) {
     }
     return shapes_mode(argv[2], n, budget);
   }
-  fprintf(stderr, "usage: %s corpus [count] | dump | shapes <name> <n> [stack_budget]\n",
+  fprintf(
+      stderr,
+      "usage: %s corpus [count] | dump | shapes <name> <n> [stack_budget]\n",
       argv[0]);
   return 2;
 }

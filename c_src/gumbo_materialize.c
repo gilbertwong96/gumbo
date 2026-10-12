@@ -1,9 +1,10 @@
+#include "gumbo_materialize.h"
+
 #include "gumbo.h"
-#include "gumbo_attr.h"
 #include "gumbo_atoms.h"
+#include "gumbo_attr.h"
 #include "gumbo_error.h"
 #include "gumbo_handle.h"
-#include "gumbo_materialize.h"
 #include "gumbo_node.h"
 
 /* This file owns the two materialize NIFs. Both walk the handle's preorder
@@ -69,8 +70,7 @@ static ERL_NIF_TERM gumbo_materialize_children(ErlNifEnv* env,
    names as errors and keeps only the first, so the two surfaces agree. */
 static ERL_NIF_TERM gumbo_materialize_attributes(ErlNifEnv* env,
                                                  const gumbo_atoms_t* atoms,
-                                                 GumboNode* node,
-                                                 int detail) {
+                                                 GumboNode* node, int detail) {
   GumboVector* attributes = &node->v.element.attributes;
   if (detail == GUMBO_DETAIL_CONTENT) {
     ERL_NIF_TERM map = enif_make_new_map(env);
@@ -252,8 +252,8 @@ static int gumbo_materialize_scratch(size_t count, ERL_NIF_TERM** terms_out,
 }
 
 ERL_NIF_TERM gumbo_nif_materialize_output(ErlNifEnv* env,
-                                          const gumbo_atoms_t* atoms,
-                                          int argc, const ERL_NIF_TERM argv[]) {
+                                          const gumbo_atoms_t* atoms, int argc,
+                                          const ERL_NIF_TERM argv[]) {
   (void)argc;
 
   gumbo_handle_t* h;
@@ -346,8 +346,8 @@ ERL_NIF_TERM gumbo_nif_materialize_node(ErlNifEnv* env,
   }
 
   size_t start = (size_t)index;
-  gumbo_materialize_range(env, atoms, h, start, h->subtree_sizes[start],
-                          detail, terms, scratch);
+  gumbo_materialize_range(env, atoms, h, start, h->subtree_sizes[start], detail,
+                          terms, scratch);
   ERL_NIF_TERM out = terms[start];
   enif_free(terms);
   enif_free(scratch);

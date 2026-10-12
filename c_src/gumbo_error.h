@@ -15,9 +15,8 @@
    three answer {:error, :invalid_node} for a non-handle or an index outside
    output->errors, which the Elixir-side accessors turn into ArgumentError.
    Nothing dereferences an unchecked index. */
-ERL_NIF_TERM gumbo_nif_output_errors(ErlNifEnv* env,
-                                     const gumbo_atoms_t* atoms, int argc,
-                                     const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM gumbo_nif_output_errors(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                     int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM gumbo_nif_error_fields(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                     int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM gumbo_nif_error_message(ErlNifEnv* env, const gumbo_atoms_t* atoms,
