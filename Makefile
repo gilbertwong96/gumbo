@@ -61,11 +61,11 @@ CFLAGS ?= -O2
 ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -pthread -Wall -Wextra -MMD -MP \
 	-Ic_src -I$(GUMBO_SRC_DIR)/src -I$(ERTS_INCLUDE_DIR)
 
-# The vendored gumbo-parser sources trip -Wunused-parameter and
-# -Wsign-compare in several places. They are vendored unpatched by policy,
-# so those warnings are unfixable; silence only those two for the vendored
-# objects so a warning in our own c_src/*.c still stands out. Our sources
-# keep the full $(ALL_CFLAGS) set — do not re-broaden this.
+# The vendored sources trip -Wunused-parameter and -Wsign-compare in several
+# places, and they are patched in a copy rather than fixed in place, so those
+# warnings are not ours to remove; silence only those two for the vendored objects
+# so a warning in our own c_src/*.c still stands out. Our sources keep the full
+# $(ALL_CFLAGS) set — do not re-broaden this.
 GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare
 
 UNAME_S := $(shell uname -s)
@@ -107,9 +107,17 @@ $(GUMBO_SRC_STAMP): $(GUMBO_VENDORED) $(GUMBO_PATCHES) | $(GUMBO_HEADER)
 	done
 	@touch $@
 
-$(OBJ_DIR)/gumbo-parser/%.o: $(GUMBO_SRC_DIR)/src/%.c $(GUMBO_SRC_STAMP)
+# The source file is named through $* rather than listed as a prerequisite. Naming
+# it as one cannot work: at the moment make plans, the copy does not exist yet and
+# nothing generates it file by file — the stamp rule makes the whole tree at once —
+# so make cannot see a path from object to source, silently discards this rule, and
+# links before compiling any of the twelve. That is exactly what a clean build did
+# until it was found by running `make` after `make clean`. The stamp is a normal
+# prerequisite, so a new pin or an edited patch rebuilds all twelve, which is what
+# the stamp rule does anyway.
+$(OBJ_DIR)/gumbo-parser/%.o: $(GUMBO_SRC_STAMP)
 	@mkdir -p $(dir $@)
-	$(CC) $(GUMBO_CFLAGS) -c -o $@ $<
+	$(CC) $(GUMBO_CFLAGS) -c -o $@ $(GUMBO_SRC_DIR)/src/$*.c
 
 $(OBJ_DIR)/%.o: c_src/%.c
 	@mkdir -p $(dir $@)
@@ -122,23 +130,27 @@ $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
 	@mkdir -p $(PRIV_DIR)
 	$(CC) $(LDSHARED_FLAGS) -pthread -o $@ $(OBJS)
 
-# Deterministic teardown probe: parses with a counting allocator, runs the
-# destructor's shared teardown pass, and fails unless the allocator balance
-# is exactly zero. A second mode is the crash canary: it calls
-# gumbo_destroy_output directly — no pass — on a deep document under a
-# deliberately small stack and reports whether gumbo's own teardown still
-# recurses; a clean survival or a signal death is informational, but a
-# canary error exit (parse or allocation failure) fails the build because
-# it proves nothing either way.
-# The binary lives in priv/obj (gitignored). gumbo_teardown.c is compiled
-# explicitly here; it is shared with the NIF, which the wildcard above
-# picks up legitimately because the unit has no ERTS dependency.
+# Teardown-contract probe, in two modes, and both are hard gates now that the walk
+# it exercises is our patch rather than upstream's code.
+#
+#   balance   parse with a counting allocator and require the destructor's own
+#             call — gumbo_destroy_output — to free every allocation. Liveness is
+#             not reclamation: the first defect this project shipped was a teardown
+#             that survived every test and leaked 70% of the tree.
+#   canary    the same call on a 20 000-level document under `ulimit -s 320`, a
+#             stack the unpatched recursive walk dies on at 8 000 (measured). The
+#             probe cannot assert its own survival, so the status handling below
+#             does: after c_src/patches/0001 a signal death can only mean the patch
+#             is gone. A non-zero error exit (parse or allocation failure) has to be
+#             told apart from a death, because it proves nothing either way.
+#
+# The binary lives in priv/obj (gitignored).
 TEARDOWN_PROBE_SRC := c_src/test/teardown_probe.c
 TEARDOWN_PROBE := $(OBJ_DIR)/teardown_probe
 
-$(TEARDOWN_PROBE): $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS) c_src/gumbo_teardown.c
+$(TEARDOWN_PROBE): $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS)
 	@mkdir -p $(dir $@)
-	$(CC) $(ALL_CFLAGS) -o $@ $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS) c_src/gumbo_teardown.c
+	$(CC) $(ALL_CFLAGS) -o $@ $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS)
 
 # A patch that no longer applies must fail the build rather than quietly leave
 # the vendored objects unpatched. This runs the same git-apply invocation the
@@ -162,15 +174,40 @@ check-patch: | $(GUMBO_HEADER)
 	fi
 	@echo "PASS: $(words $(GUMBO_PATCHES)) patch(es) apply to the pinned $(GUMBO_DIR), which is unmodified"
 
+# A build from an empty object directory is what every fresh clone, every cold CI
+# cache and every hex consumer does, and it is the one path a warm tree cannot
+# test: the object rule and the -include handling above were both wrong in ways that
+# only ever appeared after `make clean`, and neither the suite nor `make` on a warm
+# tree could see it. Cleaning the real tree would work but rebuild it and slow every
+# gate run, so this builds a throwaway copy of the build inputs in a temp directory
+# instead — which also exercises the tarball case, where git apply has no repository
+# to work in and the submodule is a plain directory.
+check-clean-build: | $(GUMBO_HEADER)
+	@tmp=$$(mktemp -d) || exit 1; \
+	trap 'rm -rf "$$tmp"' EXIT INT TERM; \
+	cp -R Makefile c_src "$$tmp/"; \
+	if ! ( cd "$$tmp" && $(MAKE) --no-print-directory all > build.log 2>&1 ); then \
+		echo "FAIL: a build from an empty object dir does not work"; \
+		tail -20 "$$tmp/build.log"; \
+		exit 1; \
+	fi; \
+	test -f "$$tmp/priv/gumbo_nif.so" || { echo "FAIL: no shared object was produced"; exit 1; }; \
+	test "$$(ls "$$tmp"/priv/obj/gumbo-parser/*.o | wc -l | tr -d ' ')" = "12" || { \
+		echo "FAIL: a clean build did not compile all twelve vendored objects"; \
+		exit 1; \
+	}; \
+	echo "PASS: a build from an empty object dir compiles all twelve and links"
+
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
-	@echo "--- crash canary: does gumbo's teardown still recurse? ---"
+	@echo "--- crash canary: is the patched teardown still non-recursive? ---"
 	@( ulimit -s 320; $(TEARDOWN_PROBE) canary 20000 ); \
 	  status=$$?; \
 	  if [ $$status -eq 0 ]; then \
-	    echo "NOTE: teardown survived; gumbo may no longer recurse (the pass stays correct)"; \
+	    echo "PASS: teardown survived 20000 levels on a 320 KB stack"; \
 	  elif [ $$status -ge 128 ]; then \
-	    echo "OK: teardown still recurses, so the teardown pass remains required"; \
+	    echo "FAIL: teardown recursed (signal $$status); is c_src/patches applied?"; \
+	    exit 1; \
 	  else \
 	    echo "FAIL: canary exited $$status (neither survived nor recursed)"; \
 	    exit $$status; \
@@ -179,7 +216,19 @@ check-teardown: $(TEARDOWN_PROBE)
 # Pull in the compiler-emitted dependency files: -MMD writes one .d next to
 # every object (and the probe's next to its binary), naming the headers each
 # translation unit includes, ours as well as the vendored gumbo-parser's.
+#
+# The empty rule is not decoration. -include on a file that does not exist yet (a
+# clean build) makes make look for a rule to produce it, and it finds GNU make's
+# built-in `%: %.o` — "to build X, link X.o" — which chains into the pattern rule
+# above with a stem of `vector.d` and tries to compile a source file called
+# `vector.d.c`. It only became reachable when the pattern rule stopped naming its
+# source as a prerequisite: a prerequisite make cannot make is one it quietly
+# gives up on, which is why the missing include used to be silent instead of
+# noisy. Saying "a .d is produced as a side effect of compiling, do not build it"
+# keeps both the silence and, unlike the old behaviour, a correct object rule.
 -include $(OBJS:.o=.d) $(TEARDOWN_PROBE).d
+
+$(OBJS:.o=.d) $(TEARDOWN_PROBE).d: ;
 
 gumbo-fetch:
 	rm -rf $(GUMBO_DIR)
@@ -191,4 +240,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build

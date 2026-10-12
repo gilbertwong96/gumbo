@@ -65,7 +65,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the stack, and the `<frameset>` path that used to die inside the parse now
   survives at any depth. `mix ci` runs `make check-patch`, so a patch that stops
   applying to a new pin is a red build rather than a build that quietly drops
-  the fix.
+  the fix; `make check-clean-build` builds a throwaway copy of the build inputs
+  from an empty object directory, so the fresh-clone path cannot rot either.
+
+- The destructor no longer runs a disarming pass of its own: `c_src/gumbo_teardown.c`
+  existed to make gumbo's recursive teardown safe, and the patch above removes the
+  recursion instead. The probe that shared it is retargeted at
+  `gumbo_destroy_output`, and its crash canary is now a hard gate rather than an
+  informational note.
 
 ### Notes
 
@@ -74,19 +81,30 @@ gumbo-parser 0.14.1's own `gumbo_destroy_output` frees the tree with
 maximum nesting depth. Two call sites reach that recursion.
 
 The destructor's: a ~7 000-deep document segfaults the VM when the handle is
-garbage collected. The destructor therefore disarms the tree first with an
-iterative reverse-preorder pass that reimplements `destroy_node`'s per-node
-work, so teardown is O(n) in time with constant C stack at any depth.
+garbage collected — a 320 KB stack holds 320 KiB / 48 = 6 826 levels of the
+48-byte frame.
 
 And `handle_in_body`'s, which runs *inside* the parse: a deeply nested document
 followed by a `<frameset>` start tag makes gumbo destroy the body subtree at
-input depth mid-parse, which no disarm from outside `parser.c` can intercept.
-`<!doctype html>` followed by 8 000 `<div>`s and a `<frameset>` — a 40 KB
-document — killed the VM inside `Gumbo.parse/1`, before the parse returned.
-The parse now runs on a C stack sized from the input's length
-(`c_src/gumbo_parse_stack.c`): depth is bounded by input because a nesting level
-costs at least a three-byte start tag, and the worst frame in that recursion is
-64 bytes. Documents small enough for the calling thread's own stack parse on it
-as before; larger ones run on a thread of the size the input needs. Inputs over
-16 MiB are refused with `{:error, :input_too_large}`, since that is where the
-sized stack stops being a reasonable reservation.
+input depth mid-parse. `<!doctype html>` followed by 8 000 `<div>`s and a
+`<frameset>` — a 40 KB document — killed the VM inside `Gumbo.parse/1`, before
+the parse returned.
+
+Both are now fixed at the source rather than worked around: the build applies
+`c_src/patches/gumbo-parser/0001-make-destroy_node-iterative.patch`, upstream's own
+fix from google/gumbo-parser#387, to a **copy** of the pinned sources, so
+`destroy_node` no longer recurses and the submodule stays byte-identical to its
+0.14.1 pin. The same document that died at 8 000 levels now survives 50 000 on the
+same stack.
+
+The parse still runs on a C stack sized from the input's length
+(`c_src/gumbo_parse_stack.c`), because the patch fixes the recursions that are
+known and not the class: depth is bounded by input — a nesting level costs at least
+a three-byte start tag, and the worst frame in that recursion measures 64 bytes —
+so documents small enough for the calling thread's own stack parse as before and
+larger ones run on a thread of the size the input needs. Inputs over 16 MiB are
+refused with `{:error, :input_too_large}`, since that is where the sized stack stops
+being a reasonable reservation. `make check-teardown` holds the teardown to both
+properties that matter — the allocator balance is exactly zero, and a 20 000-level
+tree survives a 320 KB stack — and `make check-clean-build` builds from an empty
+object directory, which is what a fresh clone or a hex consumer does.

@@ -1,15 +1,15 @@
 /* gumbo's recursion depth follows the input's nesting depth, and 0.14.1 caps
-   neither. Two call sites can reach a depth-proportional recursion:
+   neither. Two call sites reach a depth-proportional recursion at input depth —
+   the destructor, and handle_in_body's <frameset> branch, which runs *during the
+   parse* — and c_src/patches/0001 fixes both by making destroy_node iterative.
+   This unit is the layer underneath that one, and it exists because the patch
+   fixes the recursions that are known rather than the class: clone_node_recursively
+   is still a recursion per level of an option's subtree, and while it was measured
+   not to be reachable at depth, it was not proven bounded, and the mutual
+   handle_in_* cycle is per-token by construction rather than by proof. An unfound
+   recursion in vendored code is what this budget is for.
 
-   1. the destructor, disarmed by gumbo_teardown.c's iterative pass, which
-      leaves destroy_node only the document node and so never recurses on the
-      tree's depth; and
-   2. handle_in_body's <frameset> branch (parser.c), which pops the open
-      elements and calls destroy_node on the body node *during the parse*.
-      Nothing outside parser.c can disarm that one: it is a static function
-      called mid-stream, and the subtree it walks is the input's own nesting.
-
-   So the parse is the remaining hazard, and the defence is to give it a stack
+   So the parse is given a stack that covers the worst case its input can
    that covers the worst case its input can produce. That is a budget rather
    than a guess, because depth is bounded by input length: every nesting level
    costs at least one start tag, and the shortest start tag is three bytes.

@@ -1,41 +1,43 @@
 /* Two-mode teardown-contract probe, built by the Makefile's check-teardown
    target.
 
-   "balance": deterministic check that the NIF destructor's teardown frees
-   everything gumbo allocated. Parse with a counting allocator installed via
-   GumboOptions, build the preorder node table, run the same shared
-   gumbo_teardown_pass the destructor runs (c_src/gumbo_teardown.c), and
-   require the allocator balance to be exactly zero. The balance is an exact
-   integer, so there are no RSS thresholds or timing here, and this mode
-   fails the build on a non-zero balance.
+   Both modes are hard gates. The vendored destroy_node is iterative as of
+   c_src/patches/0001-make-destroy_node-iterative.patch, so neither a clean
+   survival on a small stack nor a zero allocator balance is a coincidence any
+   more: either one failing means the patch is gone (a submodule bump that stopped
+   applying it, or the file deleted) and the crash is back.
 
-   Liveness is not reclamation: the small-stack test proves the VM survives
-   teardown, but only this probe proves teardown actually frees the tree —
-   and because the destructor and this probe call the same
-   gumbo_teardown_pass, deleting a free from the pass fails this probe
-   instead of passing by private copy.
+   "balance": parse with a counting allocator installed via GumboOptions, then
+   call gumbo_destroy_output — the same call the NIF destructor makes — and
+   require the balance to be exactly zero. The input is chosen to exercise every
+   branch of that walk: doctype strings, attributes, text, comment, template
+   contents, the children and attributes vectors, and the error vector (the
+   duplicate attribute produces one error, and the unclosed <div> makes
+   handle_in_body's EOF branch add a parser error whose tag_stack holds the open
+   elements, so gumbo_error_destroy's parser branch frees a populated by-value
+   vector rather than a NULL one). The balance is an exact integer: no RSS
+   thresholds, no timing.
 
-   "canary [levels]": the complementary property. Build a deep document,
-   call gumbo_destroy_output WITHOUT the pass, and report whether the
-   process dies under a deliberately small stack (ulimit -s 320). Surviving
-   proves liveness, balancing proves reclamation — together they are the
-   contract. The three outcomes are told apart by exit status: 0 means
-   survived, a signal death (status >= 128) means teardown still recurses,
-   and a small non-zero status is a canary error — a parse or allocation
-   failure that proves nothing either way — which the Makefile fails the
-   build on rather than reporting as recursion. If upstream ever makes
-   teardown non-recursive that is not a bug, and the pass stays correct
-   either way, so a clean survival or a signal death never fails the build.
+   Liveness is not reclamation. That distinction is the first defect this project
+   shipped — a teardown that survived every test and leaked 70% of the tree — so
+   both properties are asserted here rather than one standing in for the other.
+   Until 2026-10-13 this mode ran the disarm pass in c_src/gumbo_teardown.c instead;
+   that unit is gone, and the walk it disarmed is our patch now, which makes this
+   the only test of the code we added.
 
-   The node-table build below must stay in sync with gumbo_node_table_build
-   in gumbo_handle.c; the teardown itself is not duplicated here. */
+   "canary [levels]": the same walk on a document `levels` deep, run by the
+   Makefile under `ulimit -s 320` — a stack a recursive walk of this depth cannot
+   survive (measured: the unpatched walk dies at 8 000 levels on a 320 KB stack,
+   and this default is 20 000). The probe cannot assert its own survival, so the
+   Makefile turns a signal death into a failure; that is also why a non-zero
+   *error* exit from this mode has to be told apart from a death, which is all the
+   Makefile's status handling is doing. */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "gumbo.h"
-#include "gumbo_teardown.h"
 
 static long gumbo_probe_balance = 0;
 
@@ -53,106 +55,11 @@ static void gumbo_probe_dealloc(void* userdata, void* ptr) {
   free(ptr);
 }
 
-/* Children vector per node type; mirrors gumbo_node_children in
-   gumbo_handle.c. */
-static GumboVector* gumbo_probe_children(GumboNode* node) {
-  switch (node->type) {
-    case GUMBO_NODE_DOCUMENT:
-      return &node->v.document.children;
-    case GUMBO_NODE_ELEMENT:
-    case GUMBO_NODE_TEMPLATE:
-      return &node->v.element.children;
-    default:
-      return NULL;
-  }
-}
-
-static int gumbo_probe_push(GumboNode*** stack, size_t* count,
-                            size_t* capacity, GumboNode* node) {
-  if (*count == *capacity) {
-    size_t next = (*capacity == 0) ? 64 : *capacity * 2;
-    GumboNode** grown =
-        (GumboNode**)realloc(*stack, next * sizeof(GumboNode*));
-    if (grown == NULL) {
-      return 1;
-    }
-    *stack = grown;
-    *capacity = next;
-  }
-  (*stack)[(*count)++] = node;
-  return 0;
-}
-
-/* The probe's own table and stack use plain malloc/free, exactly as the NIF
-   uses enif_alloc for its table and stack, so the counting balance covers
-   only gumbo-parser allocations. */
-static int gumbo_probe_table_build(GumboOutput* output, GumboNode*** out_nodes,
-                                   size_t* out_count) {
-  GumboNode** nodes = NULL;
-  size_t node_count = 0;
-  size_t node_capacity = 0;
-  GumboNode** stack = NULL;
-  size_t stack_count = 0;
-  size_t stack_capacity = 0;
-
-  if (output->document == NULL) {
-    return 1;
-  }
-  if (gumbo_probe_push(&stack, &stack_count, &stack_capacity,
-                       output->document) != 0) {
-    free(stack);
-    return 1;
-  }
-
-  while (stack_count > 0) {
-    GumboNode* node = stack[--stack_count];
-
-    if (node_count == node_capacity) {
-      size_t next = (node_capacity == 0) ? 16 : node_capacity * 2;
-      GumboNode** grown =
-          (GumboNode**)realloc(nodes, next * sizeof(GumboNode*));
-      if (grown == NULL) {
-        free(nodes);
-        free(stack);
-        return 1;
-      }
-      nodes = grown;
-      node_capacity = next;
-    }
-    nodes[node_count++] = node;
-
-    GumboVector* children = gumbo_probe_children(node);
-    if (children != NULL) {
-      unsigned int i;
-      for (i = children->length; i-- > 0;) {
-        if (gumbo_probe_push(&stack, &stack_count, &stack_capacity,
-                             children->data[i]) != 0) {
-          free(nodes);
-          free(stack);
-          return 1;
-        }
-      }
-    }
-  }
-
-  free(stack);
-  *out_nodes = nodes;
-  *out_count = node_count;
-  return 0;
-}
-
 static int gumbo_probe_balance_mode(void) {
   GumboOptions options = kGumboDefaultOptions;
   options.allocator = gumbo_probe_alloc;
   options.deallocator = gumbo_probe_dealloc;
 
-  /* Exercises every teardown branch: doctype strings, attributes, text,
-     comment, template content, element and document children vectors, and
-     the error vector (the duplicate attribute produces one error, and the
-     unclosed <div> makes handle_in_body's EOF branch add a parser error
-     whose tag_stack holds the open elements — a populated by-value vector,
-     so gumbo_error_destroy's parser branch frees real data, not a NULL
-     vector). */
   const char* html = "<!DOCTYPE html PUBLIC \"pub\" \"sys\">"
                      "<div id=\"a\" class=\"b\" class=\"c\">text<!--c-->"
                      "<template><p>x</p></template>";
@@ -170,15 +77,7 @@ static int gumbo_probe_balance_mode(void) {
     return 1;
   }
 
-  GumboNode** nodes = NULL;
-  size_t node_count = 0;
-  if (gumbo_probe_table_build(output, &nodes, &node_count) != 0) {
-    fprintf(stderr, "FAIL: node table build failed\n");
-    return 1;
-  }
-
-  gumbo_teardown_pass(&options, output, nodes, node_count);
-  free(nodes);
+  gumbo_destroy_output(&options, output);
 
   printf("allocations outstanding: %ld after parse, %ld after teardown\n",
          outstanding_after_parse, gumbo_probe_balance);
@@ -192,13 +91,6 @@ static int gumbo_probe_balance_mode(void) {
   return 0;
 }
 
-/* Parses <span> nested `levels` deep and calls gumbo_destroy_output on it
-   directly — deliberately no gumbo_teardown_pass — to find out whether
-   gumbo's own teardown still recurses by tree depth. On a small stack the
-   recursion dies and the process never reaches the second printf; the
-   Makefile prints the "still recurses" branch from the shell, keyed on the
-   signal-death exit status rather than any non-zero status, so a parse or
-   allocation failure cannot masquerade as recursion. */
 static int gumbo_probe_canary_mode(long levels) {
   size_t open_len = strlen("<span>");
   size_t close_len = strlen("</span>");
