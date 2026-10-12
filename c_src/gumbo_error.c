@@ -272,10 +272,39 @@ static int gumbo_error_parser_error_term(ErlNifEnv* env,
 
 /* ---- the NIF entry points ---- */
 
+#define GUMBO_ERROR_FIELDS_COUNT 8
 #define GUMBO_ERROR_DETAILS_COUNT 10
 
-/* The full error map, shared by error_details and materialize's errors list
-   so the two surfaces cannot disagree. */
+/* The eight fields read off the error in place: type, position,
+   original_text, codepoint, tokenizer, text, duplicate_attr, parser_error.
+   None of them renders. That matters because rendering is the whole cost of
+   a :parser error: print_message is variadic and print_tag_stack calls it
+   twice per open tag, so a 200-deep tag stack costs ~30us per render and a
+   caller asking only for the type must not pay it. */
+static int gumbo_error_fields_values(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                     const gumbo_handle_t* h,
+                                     const GumboError* error,
+                                     ERL_NIF_TERM values[]) {
+  values[0] = gumbo_error_type_term(env, atoms, error);
+  values[3] = gumbo_error_codepoint_term(env, atoms, error);
+  /* Each fallible extractor is checked before its term joins the map: a
+     badarg sentinel embedded as a value would surface as the integer 42.
+     Failure here is allocation failure, and it propagates to the NIF as
+     badarg. */
+  if (!gumbo_error_position_term(env, atoms, error, &values[1]) ||
+      !gumbo_error_original_text_term(env, atoms, h, error, &values[2]) ||
+      !gumbo_error_tokenizer_term(env, atoms, error, &values[4]) ||
+      !gumbo_error_text_term(env, atoms, error, &values[5]) ||
+      !gumbo_error_duplicate_attr_term(env, atoms, error, &values[6]) ||
+      !gumbo_error_parser_error_term(env, atoms, error, &values[7])) {
+    return 0;
+  }
+  return 1;
+}
+
+/* The ten-field map materialize's errors list uses, so the eager and lazy
+   error surfaces cannot disagree. message and caret are the two fields that
+   render, kept last so the cheap extraction fills the front of the array. */
 int gumbo_error_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                             const gumbo_handle_t* h, const GumboError* error,
                             ERL_NIF_TERM* out) {
@@ -283,55 +312,114 @@ int gumbo_error_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       atoms->error_.type,
       atoms->error_.position,
       atoms->error_.original_text,
-      atoms->error_.message,
-      atoms->error_.caret,
       atoms->error_.codepoint,
       atoms->error_.tokenizer,
       atoms->error_.text,
       atoms->error_.duplicate_attr,
       atoms->error_.parser_error,
+      atoms->error_.message,
+      atoms->error_.caret,
   };
   ERL_NIF_TERM values[GUMBO_ERROR_DETAILS_COUNT];
-  values[0] = gumbo_error_type_term(env, atoms, error);
-  values[5] = gumbo_error_codepoint_term(env, atoms, error);
-  /* Each fallible extractor is checked before its term joins the map: a
-     badarg sentinel embedded as a value would surface as the integer 42.
-     Failure here is allocation failure, and it propagates to the NIF as
-     badarg. */
-  if (!gumbo_error_position_term(env, atoms, error, &values[1]) ||
-      !gumbo_error_original_text_term(env, atoms, h, error, &values[2]) ||
-      !gumbo_error_render_term(env, h, error, 0, &values[3]) ||
-      !gumbo_error_render_term(env, h, error, 1, &values[4]) ||
-      !gumbo_error_tokenizer_term(env, atoms, error, &values[6]) ||
-      !gumbo_error_text_term(env, atoms, error, &values[7]) ||
-      !gumbo_error_duplicate_attr_term(env, atoms, error, &values[8]) ||
-      !gumbo_error_parser_error_term(env, atoms, error, &values[9])) {
+  if (!gumbo_error_fields_values(env, atoms, h, error, values) ||
+      !gumbo_error_render_term(env, h, error, 0, &values[8]) ||
+      !gumbo_error_render_term(env, h, error, 1, &values[9])) {
     return 0;
   }
   return enif_make_map_from_arrays(env, keys, values,
                                    GUMBO_ERROR_DETAILS_COUNT, out);
 }
 
-ERL_NIF_TERM gumbo_nif_error_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                     int argc, const ERL_NIF_TERM argv[]) {
-  (void)argc;
+/* The same eight fields as a map of their own, so a scalar accessor never
+   reaches gumbo_error_render_term. */
+static int gumbo_error_fields_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                  const gumbo_handle_t* h,
+                                  const GumboError* error, ERL_NIF_TERM* out) {
+  ERL_NIF_TERM keys[GUMBO_ERROR_FIELDS_COUNT] = {
+      atoms->error_.type,           atoms->error_.position,
+      atoms->error_.original_text,  atoms->error_.codepoint,
+      atoms->error_.tokenizer,      atoms->error_.text,
+      atoms->error_.duplicate_attr, atoms->error_.parser_error,
+  };
+  ERL_NIF_TERM values[GUMBO_ERROR_FIELDS_COUNT];
+  if (!gumbo_error_fields_values(env, atoms, h, error, values)) {
+    return 0;
+  }
+  return enif_make_map_from_arrays(env, keys, values, GUMBO_ERROR_FIELDS_COUNT,
+                                   out);
+}
 
-  gumbo_handle_t* h;
-  if (!gumbo_handle_get(env, argv[0], &h)) {
-    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+/* Resolves the (resource, index) pair the error accessors share. A forged or
+   stale handle and an index outside output->errors are both programmer
+   errors, and both answer {:error, :invalid_node}; *out holds that tuple
+   when this reports failure. */
+static int gumbo_error_resolve(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                               const ERL_NIF_TERM argv[], gumbo_handle_t** h,
+                               const GumboError** error, ERL_NIF_TERM* out) {
+  if (!gumbo_handle_get(env, argv[0], h)) {
+    *out = enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+    return 0;
   }
   unsigned long index;
   if (!enif_get_ulong(env, argv[1], &index) ||
-      index >= h->output->errors.length) {
-    return enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+      index >= (*h)->output->errors.length) {
+    *out = enif_make_tuple2(env, atoms->error, atoms->node.invalid_node);
+    return 0;
   }
-  const GumboError* error = h->output->errors.data[index];
+  *error = (*h)->output->errors.data[index];
+  return 1;
+}
+
+ERL_NIF_TERM gumbo_nif_error_fields(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                    int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  gumbo_handle_t* h;
+  const GumboError* error;
+  ERL_NIF_TERM failure;
+  if (!gumbo_error_resolve(env, atoms, argv, &h, &error, &failure)) {
+    return failure;
+  }
 
   ERL_NIF_TERM map;
-  if (!gumbo_error_details_map(env, atoms, h, error, &map)) {
+  if (!gumbo_error_fields_map(env, atoms, h, error, &map)) {
     return enif_make_badarg(env);
   }
   return enif_make_tuple2(env, atoms->ok, map);
+}
+
+/* message (caret 0) and caret (caret 1) are the two fields that render, and
+   they render differently enough to be worth separating: message is gumbo's
+   own text, caret adds the whole source line plus column-1 spaces. Asking
+   for one must not render the other. */
+static ERL_NIF_TERM gumbo_nif_error_render(ErlNifEnv* env,
+                                           const gumbo_atoms_t* atoms,
+                                           const ERL_NIF_TERM argv[],
+                                           int caret) {
+  gumbo_handle_t* h;
+  const GumboError* error;
+  ERL_NIF_TERM failure;
+  if (!gumbo_error_resolve(env, atoms, argv, &h, &error, &failure)) {
+    return failure;
+  }
+
+  ERL_NIF_TERM binary;
+  if (!gumbo_error_render_term(env, h, error, caret, &binary)) {
+    return enif_make_badarg(env);
+  }
+  return enif_make_tuple2(env, atoms->ok, binary);
+}
+
+ERL_NIF_TERM gumbo_nif_error_message(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                     int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  return gumbo_nif_error_render(env, atoms, argv, 0);
+}
+
+ERL_NIF_TERM gumbo_nif_error_caret(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                   int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  return gumbo_nif_error_render(env, atoms, argv, 1);
 }
 
 ERL_NIF_TERM gumbo_nif_output_errors(ErlNifEnv* env,

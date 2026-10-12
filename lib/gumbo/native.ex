@@ -74,9 +74,17 @@ defmodule Gumbo.Native do
   @spec output_errors(reference()) :: [non_neg_integer()] | {:error, :invalid_handle}
   def output_errors(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec error_details(reference(), non_neg_integer()) ::
+  @spec error_fields(reference(), non_neg_integer()) ::
           {:ok, map()} | {:error, :invalid_node}
-  def error_details(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
+  def error_fields(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec error_message(reference(), non_neg_integer()) ::
+          {:ok, binary()} | {:error, :invalid_node}
+  def error_message(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec error_caret(reference(), non_neg_integer()) ::
+          {:ok, binary()} | {:error, :invalid_node}
+  def error_caret(_resource, _index), do: :erlang.nif_error(:nif_not_loaded)
 
   @spec materialize_output(reference(), non_neg_integer()) ::
           map() | {:error, :invalid_handle}

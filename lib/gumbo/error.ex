@@ -187,7 +187,11 @@ defmodule Gumbo.Error do
   def parser_error(%__MODULE__{} = error), do: fetch!(error, :parser_error)
 
   @doc """
-  Every field at once, in one NIF crossing.
+  Every field at once.
+
+  The eight fields that read the error in place plus the two that render it,
+  `message` and `caret`, so a caller wanting one field can ask for it without
+  paying for the other nine.
 
   The map keys are the accessor names above, with `nil` for fields the error
   type does not carry, so `details(error)[:type] == type(error)` for every
@@ -203,17 +207,38 @@ defmodule Gumbo.Error do
       :duplicate_attr
   """
   @spec details(t()) :: {:ok, map()} | {:error, :invalid_node}
-  def details(%__MODULE__{output: %Output{resource: resource}, index: index}) do
-    Gumbo.Native.error_details(resource, index)
+  def details(%__MODULE__{} = error) do
+    with {:ok, fields} <- fields(error),
+         {:ok, message} <- fetch_field(error, :message),
+         {:ok, caret} <- fetch_field(error, :caret) do
+      {:ok, Map.merge(fields, %{message: message, caret: caret})}
+    end
   end
 
-  # The scalar accessors project one field out of the details map, so a field
-  # cannot disagree with details/1. The only other exit raises the documented
-  # ArgumentError.
-  defp fetch!(%__MODULE__{output: %Output{resource: resource}, index: index}, key) do
-    case Gumbo.Native.error_details(resource, index) do
-      {:ok, details} -> Map.fetch!(details, key)
-      {:error, :invalid_node} -> raise ArgumentError, "invalid error index: #{index}"
+  # The eight fields that read the error in place. message and caret are
+  # deliberately not among them: they render, and rendering is the whole cost
+  # of a :parser error — print_message is variadic and print_tag_stack calls
+  # it twice per open tag, so a 200-deep tag stack costs ~30us per render and
+  # a caller asking only for the type must not pay it. Both surfaces still
+  # come from the same extractors, so a field cannot disagree with details/1.
+  defp fields(%__MODULE__{output: %Output{resource: resource}, index: index}),
+    do: Gumbo.Native.error_fields(resource, index)
+
+  # The only other exit raises the documented ArgumentError.
+  defp fetch!(%__MODULE__{} = error, key) do
+    case fetch_field(error, key) do
+      {:ok, value} -> value
+      {:error, :invalid_node} -> raise ArgumentError, "invalid error index: #{error.index}"
     end
+  end
+
+  defp fetch_field(%__MODULE__{output: %Output{resource: resource}, index: index}, :message),
+    do: Gumbo.Native.error_message(resource, index)
+
+  defp fetch_field(%__MODULE__{output: %Output{resource: resource}, index: index}, :caret),
+    do: Gumbo.Native.error_caret(resource, index)
+
+  defp fetch_field(%__MODULE__{} = error, key) do
+    with {:ok, fields} <- fields(error), do: {:ok, Map.fetch!(fields, key)}
   end
 end
