@@ -77,6 +77,17 @@ defmodule Gumbo.MixProject do
           )
         end
       end,
+      # The allocation-failure paths, by making an extraction fail on purpose. make owns the fault
+      # build and puts the shipping library back afterwards, so the alias is only the entry point.
+      "test.fault_paths": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-fault-paths"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("test.fault_paths failed with status #{inspect(status)}")
+        end
+      end,
+
       "test.small_stack": fn _ ->
         # The child VM's exit status must propagate: a destructor crash
         # (e.g. SIGBUS, reported by System.cmd as exit status 138) has to

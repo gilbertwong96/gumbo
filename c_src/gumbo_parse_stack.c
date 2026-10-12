@@ -57,6 +57,8 @@
 #include <pthread.h>
 #include <unistd.h> /* sysconf(_SC_PAGESIZE) */
 
+#include "gumbo_faults.h"
+
 /* These constants are arithmetic on sizes, and they are also used in the #if
    below, which is a preprocessor expression: a cast to size_t is not allowed
    there, so the widening is expressed with the ul suffix instead — which is
@@ -199,6 +201,10 @@ GumboOutput* gumbo_parse_on_sized_stack(GumboOptions* options,
     *status = GUMBO_PARSE_STACK_TOO_LARGE;
     return NULL;
   }
+
+#ifdef GUMBO_TEST_FAULTS
+  gumbo_fault_arm();
+#endif
 
   size_t required = required_stack(length);
   size_t remaining = caller_stack_remaining();

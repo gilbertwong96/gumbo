@@ -408,6 +408,16 @@ check-c-tidy: $(GUMBO_SRC_STAMP)
 	done
 	@echo "PASS: $(words $(C_TIDY_SRCS)) of our C files are clean under the checks in .clang-tidy"
 
+# The allocation-failure paths are reached only when an allocation fails, which no test can cause,
+# so this builds the NIF with the hook compiled in, runs the sweep, and rebuilds it clean. The hook
+# is inert without -DGUMBO_TEST_FAULTS, so the rebuilt library is the one that ships.
+check-fault-paths:
+	@$(MAKE) --no-print-directory clean > /dev/null
+	@$(MAKE) --no-print-directory CFLAGS="$(CFLAGS) -DGUMBO_TEST_FAULTS" > /dev/null
+	@status=0; elixir -S mix test --only fault_paths || status=$$?; \
+		$(MAKE) --no-print-directory clean > /dev/null; $(MAKE) --no-print-directory > /dev/null; \
+		exit $$status
+
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
 	@echo "--- crash canary: is the patched teardown still non-recursive? ---"
