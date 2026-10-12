@@ -35,7 +35,7 @@
    gumbo_string_buffer_* helpers. The rendered buffer is allocated with
    gumbo's allocator, so it is freed with gumbo_parser_deallocate, never
    enif_free. caret/1's source_text must be the very buffer the parse used
-   — h->input.data — because the diagnostic walks outwards from
+   — h->input_data — because the diagnostic walks outwards from
    error->original_text, a pointer into it; that copy is NUL-terminated
    (gumbo_handle.c) because the walk stops at the first NUL. */
 
@@ -72,23 +72,35 @@ static int gumbo_error_position_term(ErlNifEnv* env,
 
 /* The source bytes from the error location to the end of the input: the
    pointer identifies a position, not a length, and the retained copy's size
-   is what bounds it. The guard is unreachable — every producer sets
-   original_text inside the buffer — and degrades to the empty binary rather
-   than dereferencing. */
+   is what bounds it. Returned as a sub-binary of the retained copy so the
+   bytes are shared rather than copied — the length is everything from the
+   error to EOF, so copying it once per error costs the error count times
+   the document size, which is quadratic for error-dense input. The guard is
+   unreachable — every producer sets original_text inside the buffer — and
+   degrades to the empty binary rather than dereferencing, as does the
+   zero-length tail, which also avoids a zero-length sub-binary. */
 static int gumbo_error_original_text_term(ErlNifEnv* env,
                                           const gumbo_atoms_t* atoms,
                                           const gumbo_handle_t* h,
                                           const GumboError* error,
                                           ERL_NIF_TERM* out) {
   (void)atoms;
-  const char* start = (const char*)h->input.data;
-  const char* end = start + h->input.size;
+  const char* start = h->input_data;
+  const char* end = start + h->input_size;
   if (error->original_text == NULL || error->original_text < start ||
       error->original_text > end) {
     return gumbo_make_binary(env, NULL, 0, out);
   }
-  return gumbo_make_binary(env, error->original_text,
-                           (size_t)(end - error->original_text), out);
+  size_t pos = (size_t)(error->original_text - start);
+  if (pos >= h->input_size) {
+    return gumbo_make_binary(env, NULL, 0, out);
+  }
+  /* The parent has to be a term in the calling env: a term owned by a
+     process-independent env cannot parent a sub-binary, and passing one
+     crashes inside erts_build_sub_bitstring. */
+  ERL_NIF_TERM parent = enif_make_copy(env, h->input_term);
+  *out = enif_make_sub_binary(env, parent, pos, h->input_size - pos);
+  return 1;
 }
 
 /* Renders the error with one of gumbo's two string builders and copies the
@@ -106,7 +118,7 @@ static int gumbo_error_render_term(ErlNifEnv* env, const gumbo_handle_t* h,
   gumbo_string_buffer_init(&parser, &buffer);
   if (caret) {
     gumbo_caret_diagnostic_to_string(&parser, error,
-                                     (const char*)h->input.data, &buffer);
+                                     h->input_data, &buffer);
   } else {
     gumbo_error_to_string(&parser, error, &buffer);
   }
