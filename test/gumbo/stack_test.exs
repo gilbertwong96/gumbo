@@ -85,6 +85,38 @@ defmodule Gumbo.StackTest do
     :erlang.garbage_collect()
   end
 
+  # Deliberately NOT HTML.wrapped/1. The wrapper's explicit <body> start tag
+  # reaches handle_in_body's body branch, which clears frameset_ok, so the
+  # <frameset> is dropped and the body survives — that is why the row above
+  # measures depth 2 and never touches the destroy below. An *implicit* body
+  # leaves frameset_ok true, so the <frameset> start tag reaches the branch
+  # that pops the open elements and calls destroy_node on the body node,
+  # during the parse, at input depth. The divs are what makes that subtree
+  # deep; the assertion that the tree is 4 nodes deep 2 is the evidence the
+  # body was really destroyed, and surviving to assert it is the evidence the
+  # parse stayed inside its stack.
+  test "shape matrix: nested <div> followed by a <frameset> destroys a deep body during parse" do
+    html = "<!doctype html>" <> String.duplicate("<div>", 20_000) <> "<frameset>"
+
+    assert_shape(fn -> html end, 4, 2)
+
+    # Surviving that is the stack evidence. The shape is the evidence the branch
+    # really ran, rather than the frameset being dropped and the body kept — the
+    # two outcomes agree on 4 nodes and depth 2, so the count alone cannot tell
+    # them apart. html's children are [head, frameset]: the body the deep divs
+    # were built under is gone, destroyed during the parse.
+    tags =
+      html
+      |> Gumbo.parse!()
+      |> Gumbo.Output.root()
+      |> Gumbo.Node.children()
+      |> Enum.map(&Gumbo.Node.tag/1)
+
+    assert tags == [:head, :frameset]
+
+    :erlang.garbage_collect()
+  end
+
   test "shape matrix: <select><selectedcontent> with 50 options of 20 000 spans" do
     select =
       "<select><selectedcontent>" <>

@@ -5,6 +5,7 @@
 #include "gumbo.h"
 #include "gumbo_handle.h"
 #include "gumbo_options.h"
+#include "gumbo_parse_stack.h"
 #include "gumbo_teardown.h"
 
 static ErlNifResourceType* gumbo_handle_resource_type = NULL;
@@ -257,9 +258,19 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     return enif_make_tuple2(env, atoms->error, atoms->invalid_option);
   }
 
-  /* Never gumbo_parse: Elixir binaries are not NUL-terminated. */
-  h->output = gumbo_parse_with_options(&h->options, h->input_data,
-                                       h->input_size);
+  /* Never gumbo_parse: Elixir binaries are not NUL-terminated. Nor
+     gumbo_parse_with_options directly: its recursion follows the input's
+     nesting depth, so the parse needs a stack sized for the worst case the
+     length can produce — see gumbo_parse_stack.c. */
+  gumbo_parse_stack_status_t parse_status = GUMBO_PARSE_STACK_OK;
+  h->output = gumbo_parse_on_sized_stack(&h->options, h->input_data,
+                                         h->input_size, &parse_status);
+  if (parse_status == GUMBO_PARSE_STACK_TOO_LARGE) {
+    /* Checked on the Elixir side first, against the same limit; this is the
+       backstop, so the two can never disagree about what is parseable. */
+    enif_release_resource(h);
+    return enif_make_tuple2(env, atoms->error, atoms->input_too_large);
+  }
   if (h->output == NULL) {
     enif_release_resource(h);
     return enif_make_badarg(env);

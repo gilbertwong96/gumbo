@@ -13,7 +13,10 @@ defmodule Gumbo do
 
   `options` are validated by `Gumbo.Options.new/1`; an unknown key or an
   out-of-range value returns `{:error, {:invalid_option, key, value}}`.
-  Buffers over 4 GB are rejected with `{:error, :input_too_large}`.
+  Inputs over 16 MiB are rejected with `{:error, :input_too_large}`: the
+  parse recurses on the input's nesting depth, so the C stack is sized from
+  the input's length, and that limit is where the reservation stays
+  reasonable.
 
   Parses of 20 KiB or more (`Gumbo.Options.dirty_threshold/0` bytes) run
   on a dirty CPU scheduler so a large document does not block a normal

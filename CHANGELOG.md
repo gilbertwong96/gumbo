@@ -30,15 +30,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scheduler-aware dispatch: parses of 20 480 bytes or more and
   materializations of 20 480 nodes or more run on a dirty CPU scheduler,
   with a `dirty: :auto | true | false` override.
-- A 12-shape small-stack regression matrix (`mix test.small_stack`) and a
+- A 13-shape small-stack regression matrix (`mix test.small_stack`) and a
   teardown-contract probe (`make check-teardown`).
 
 ### Notes
 
 gumbo-parser 0.14.1's own `gumbo_destroy_output` frees the tree with
 `destroy_node`, which recurses once per tree level, and 0.14.1 has no
-maximum nesting depth: a ~20 000-deep document segfaults the VM when the
-handle is garbage collected. The destructor therefore disarms the tree
-first with an iterative reverse-preorder pass that reimplements
-`destroy_node`'s per-node work, so teardown is O(n) in time with constant
-C stack on any depth.
+maximum nesting depth. Two call sites reach that recursion.
+
+The destructor's: a ~7 000-deep document segfaults the VM when the handle is
+garbage collected. The destructor therefore disarms the tree first with an
+iterative reverse-preorder pass that reimplements `destroy_node`'s per-node
+work, so teardown is O(n) in time with constant C stack at any depth.
+
+And `handle_in_body`'s, which runs *inside* the parse: a deeply nested document
+followed by a `<frameset>` start tag makes gumbo destroy the body subtree at
+input depth mid-parse, which no disarm from outside `parser.c` can intercept.
+`<!doctype html>` followed by 8 000 `<div>`s and a `<frameset>` — a 40 KB
+document — killed the VM inside `Gumbo.parse/1`, before the parse returned.
+The parse now runs on a C stack sized from the input's length
+(`c_src/gumbo_parse_stack.c`): depth is bounded by input because a nesting level
+costs at least a three-byte start tag, and the worst frame in that recursion is
+64 bytes. Documents small enough for the calling thread's own stack parse on it
+as before; larger ones run on a thread of the size the input needs. Inputs over
+16 MiB are refused with `{:error, :input_too_large}`, since that is where the
+sized stack stops being a reasonable reservation.

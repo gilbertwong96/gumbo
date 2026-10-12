@@ -78,6 +78,7 @@ typedef struct {
   ERL_NIF_TERM auto_;
   ERL_NIF_TERM invalid_handle;
   ERL_NIF_TERM invalid_option;
+  ERL_NIF_TERM input_too_large;
 
   /* Node accessor atoms, grouped so the details-map key :parse_flags and the
      enum table parse_flags[] cannot be confused. Includes the

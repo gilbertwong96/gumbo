@@ -43,7 +43,7 @@ CFLAGS ?= -O2
 # tracked the vendored gumbo.h, so editing c_src/gumbo_handle.h silently
 # skipped rebuilds and the link could stitch objects compiled against
 # different struct layouts.
-ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -Wall -Wextra -MMD -MP \
+ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -pthread -Wall -Wextra -MMD -MP \
 	-Ic_src -I$(GUMBO_DIR)/src -I$(ERTS_INCLUDE_DIR)
 
 # The vendored gumbo-parser sources trip -Wunused-parameter and
@@ -86,7 +86,7 @@ $(OBJ_DIR)/%.o: c_src/%.c
 # emptiness, and a gumbo-only bundle would fail at load time instead.
 $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
 	@mkdir -p $(PRIV_DIR)
-	$(CC) $(LDSHARED_FLAGS) -o $@ $(OBJS)
+	$(CC) $(LDSHARED_FLAGS) -pthread -o $@ $(OBJS)
 
 # Deterministic teardown probe: parses with a counting allocator, runs the
 # destructor's shared teardown pass, and fails unless the allocator balance

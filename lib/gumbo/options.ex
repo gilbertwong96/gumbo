@@ -9,7 +9,18 @@ defmodule Gumbo.Options do
   """
 
   @dirty_threshold 20_480
-  @max_buffer_size 4_294_967_295
+
+  # The largest input the NIF will parse, which the stack budget sets rather
+  # than gumbo does. gumbo's own limit is far higher — an `int` buffer length,
+  # 4 GiB - 1 — but the parse recurses on the input's nesting depth (gumbo
+  # 0.14.1 caps it nowhere), so the C stack has to cover the worst case the
+  # length can produce. A nested start tag costs at least 3 bytes, and the
+  # deepest frame in that recursion is 64 bytes, so this cap needs
+  # 16 MiB * 64 * 2 / 3 = 683 MiB of stack; see c_src/gumbo_parse_stack.c for
+  # the measurements behind those numbers, and for the compile-time check that
+  # the two constants still agree. The cap is where this library's own
+  # regression corpus (an 11 MB document) and the HTML5 spec (~7 MB) both fit.
+  @max_input_bytes 16_777_216
   @c_int_max 2_147_483_647
 
   defstruct tab_stop: 8,
@@ -130,10 +141,11 @@ defmodule Gumbo.Options do
   def dirty_threshold, do: @dirty_threshold
 
   # Public for testability even though `parse/2` is the only caller and calls
-  # it before anything else: gumbo does not support buffers over 4 GB.
+  # it before anything else. The NIF checks the same limit again, so a caller
+  # reaching the NIF directly cannot get past it into an unsized stack.
   @doc false
   @spec check_size(non_neg_integer()) :: :ok | {:error, :input_too_large}
-  def check_size(size) when is_integer(size) and size >= 0 and size <= @max_buffer_size, do: :ok
+  def check_size(size) when is_integer(size) and size >= 0 and size <= @max_input_bytes, do: :ok
   def check_size(_size), do: {:error, :input_too_large}
 
   defp validate_option(:tab_stop, value)
