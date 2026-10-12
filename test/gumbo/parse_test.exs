@@ -125,4 +125,28 @@ defmodule Gumbo.ParseTest do
     # And the shape is still the document it was: the divs are what is deep.
     assert Gumbo.Node.tag(Gumbo.Output.root(capped)) == :html
   end
+
+  test "an element over max_attributes is refused, not silently truncated" do
+    over = "<!doctype html><div " <> Enum.map_join(1..1_100, " ", &"a#{&1}=1") <> ">"
+
+    assert {:error, :too_many_attributes} = Gumbo.parse(over)
+
+    # Inside the cap the same shape is fine, and -1 lifts the cap entirely.
+    inside = "<div " <> Enum.map_join(1..1_000, " ", &"a#{&1}=1") <> ">"
+    assert {:ok, _} = Gumbo.parse(inside, max_attributes: 1_000)
+    assert {:ok, _} = Gumbo.parse(over, max_attributes: -1)
+  end
+
+  # The third quadratic: the duplicate-attribute check used to scan every attribute
+  # already collected, so one element's attributes cost the square of their count.
+  # 80 000 distinct names from 0.7 MB of input took 13.6 s before the 0004 patch and
+  # 21 ms after, and the threshold below splits those by a factor of 100 and 40. The
+  # cap is lifted on purpose: this is about the index, not about the ceiling.
+  test "attribute counts parse in time linear in the count" do
+    html = "<!doctype html><div " <> Enum.map_join(1..200_000, " ", &"a#{&1}=1") <> ">"
+
+    {us, result} = :timer.tc(fn -> Gumbo.parse(html, max_attributes: -1) end)
+    assert {:ok, _} = result
+    assert us < 2_000_000, "200 000 attributes took #{us} us"
+  end
 end

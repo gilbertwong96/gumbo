@@ -278,6 +278,18 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     return enif_make_badarg(env);
   }
 
+  if (h->output->too_many_attributes) {
+    /* The parse succeeded and the tree is ours to free, but the caller asked for a
+       cap on attributes per element and the document went past it. Handing the tree
+       back would mean handing back one that differs from what the pinned parser
+       builds — the one thing this library promises not to do — so this mirrors
+       :input_too_large and refuses instead. The count is the caller's to raise. */
+    gumbo_destroy_output(&h->options, h->output);
+    h->output = NULL;
+    enif_release_resource(h);
+    return enif_make_tuple2(env, atoms->error, atoms->too_many_attributes);
+  }
+
   if (gumbo_node_table_build(h) != 0) {
     /* The table is the handle's index — the node accessors read it — so a
        partial one makes the handle unusable, but not the tree: destroy_node is
