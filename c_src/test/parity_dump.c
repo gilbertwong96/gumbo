@@ -80,6 +80,37 @@ static const char* kRaw[] = {
     "<div class=\"a\" class=\"b\">", "<div class a=1>", "<div title=>",
     "<b class=\"x\"><i class=\"x\"><b class=\"x\">"};
 
+static void append(char** buf, size_t* len, size_t* cap, const char* s);
+
+/* Elements carrying a pile of attributes, which is where the duplicate check lives:
+ * many distinct names, many duplicates of one name, names that differ only in a
+ * trailing character, and names long enough that a length check would matter. The
+ * corpus stays inside max_attributes on purpose — beyond it the parse is defined to
+ * drop attributes, and this comparison is about what the pinned parser builds. */
+static void append_attr_cluster(char** buf, size_t* len, size_t* cap, unsigned seed) {
+  char name[40];
+  unsigned count = 8u + (seed % 40u);
+  append(buf, len, cap, "<div");
+  for (unsigned i = 0; i < count; ++i) {
+    switch (seed % 4) {
+      case 0:
+        snprintf(name, sizeof(name), " a%u=1", i);
+        break;
+      case 1:
+        snprintf(name, sizeof(name), " a=1");
+        break;
+      case 2:
+        snprintf(name, sizeof(name), " aaa%u=%u", i % 3, i);
+        break;
+      default:
+        snprintf(name, sizeof(name), " data-attribute-number-%u=1", i);
+        break;
+    }
+    append(buf, len, cap, name);
+  }
+  append(buf, len, cap, ">");
+}
+
 static void append(char** buf, size_t* len, size_t* cap, const char* s) {
   size_t n = strlen(s);
   if (*len + n + 1 > *cap) {
@@ -117,8 +148,11 @@ static char* make_document(unsigned tokens, unsigned bias) {
     } else if (roll < 60 && depth > 0) {
       append(&buf, &len, &cap, kClosers[pick(sizeof(kClosers) / sizeof(*kClosers))]);
       if (depth > 0) --depth;
-    } else if (roll < 85) {
+    } else if (roll < 80) {
       append(&buf, &len, &cap, kRaw[pick(sizeof(kRaw) / sizeof(*kRaw))]);
+    } else if (roll < 88) {
+      append_attr_cluster(&buf, &len, &cap, next_rand());
+      ++depth;
     } else {
       append(&buf, &len, &cap, "x");
     }

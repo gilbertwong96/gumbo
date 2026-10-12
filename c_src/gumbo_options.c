@@ -1,5 +1,7 @@
 #include "gumbo_options.h"
 
+#include <limits.h> /* UINT_MAX, the "no cap" value our -1 maps to */
+
 /* The tag-atom scan covers the interned table (154 real tags plus
    :unknown); GUMBO_TAG_LAST itself is not in the table because it is the
    "no fragment" marker, represented by nil. */
@@ -67,6 +69,19 @@ int gumbo_options_decode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     return 0;
   }
 
+  /* Our -1 means no cap, gumbo's field is unsigned where UINT_MAX means the same
+     thing. Anything above C int range cannot be encoded back for options/1, so it
+     is rejected before it gets here. */
+  if (!enif_get_map_value(env, options_map, atoms->max_attributes, &value)) {
+    return 0;
+  }
+  int max_attributes;
+  if (!enif_get_int(env, value, &max_attributes) || max_attributes < -1) {
+    return 0;
+  }
+  h->options.max_attributes =
+      (max_attributes < 0) ? UINT_MAX : (unsigned int) max_attributes;
+
   if (!enif_get_map_value(env, options_map, atoms->fragment_context, &value)) {
     return 0;
   }
@@ -116,8 +131,8 @@ static ERL_NIF_TERM gumbo_dirty_atom(const gumbo_atoms_t* atoms,
 
 int gumbo_options_encode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                          const gumbo_handle_t* h, ERL_NIF_TERM* out) {
-  ERL_NIF_TERM keys[6];
-  ERL_NIF_TERM values[6];
+  ERL_NIF_TERM keys[7];
+  ERL_NIF_TERM values[7];
 
   keys[0] = atoms->tab_stop;
   values[0] = enif_make_int(env, h->options.tab_stop);
@@ -134,6 +149,11 @@ int gumbo_options_encode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   values[4] = atoms->namespaces[h->options.fragment_namespace];
   keys[5] = atoms->dirty;
   values[5] = gumbo_dirty_atom(atoms, h->dirty);
+  keys[6] = atoms->max_attributes;
+  values[6] = enif_make_int(env,
+      (h->options.max_attributes == UINT_MAX)
+          ? -1
+          : (int) h->options.max_attributes);
 
-  return enif_make_map_from_arrays(env, keys, values, 6, out);
+  return enif_make_map_from_arrays(env, keys, values, 7, out);
 }

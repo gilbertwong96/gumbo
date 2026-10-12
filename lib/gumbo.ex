@@ -16,7 +16,10 @@ defmodule Gumbo do
   Inputs over 16 MiB are rejected with `{:error, :input_too_large}`: the
   parse recurses on the input's nesting depth, so the C stack is sized from
   the input's length, and that limit is where the reservation stays
-  reasonable.
+  reasonable. An element with more than `:max_attributes` attributes (1024 by
+  default) is rejected with `{:error, :too_many_attributes}` rather than having
+  the extra attributes dropped, because a tree missing attributes would be one
+  this library's fidelity claim does not cover.
 
   Parses of 20 KiB or more (`Gumbo.Options.dirty_threshold/0` bytes) run
   on a dirty CPU scheduler so a large document does not block a normal

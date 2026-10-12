@@ -38,28 +38,42 @@ defmodule Gumbo.Options do
   # the cost: with the cap lifted, the error vector is linear in the input rather
   # than quadratic.
   @max_errors_default 100
+
+  # GumboOptions.max_attributes, and the same convention: -1 for no cap. One element
+  # used to be able to carry as many attributes as its bytes allowed, and deciding
+  # whether a name was a duplicate was a scan of every attribute before it, so the
+  # cost was the square of the count: 80 000 distinct names from 0.7 MB of input
+  # measured 13.6 seconds (c_src/patches/0004 now indexes names, which makes that
+  # linear, and this cap is what keeps the answer finite whether or not the index is
+  # there). It is also the same lever Nokogiri's gumbo exposes as max_attributes,
+  # with the same 1024. Exceeding it is refused rather than truncated, so a caller
+  # never gets a tree that differs from what the pinned parser builds.
+  @max_attributes_default 1024
   @c_int_max 2_147_483_647
 
   defstruct tab_stop: 8,
             stop_on_first_error: false,
             max_errors: @max_errors_default,
+            max_attributes: @max_attributes_default,
             fragment_context: nil,
             fragment_namespace: :html,
             dirty: :auto
 
   @typedoc """
-  `tab_stop`, `stop_on_first_error`, `max_errors`, `fragment_context` and
-  `fragment_namespace` are `GumboOptions` fields; `:dirty` is this library's
-  scheduler policy. `fragment_context` is `nil` (no fragment, gumbo's
-  `GUMBO_TAG_LAST`) or a tag atom. `tab_stop` and `max_errors` are bounded by
-  C `int` range, so a value that passes `new/1` can never fail the NIF
-  decode. `max_errors` defaults to #{@max_errors_default} rather than to gumbo's
-  -1; see the comment on the default for why, and pass -1 to get every error.
+  `tab_stop`, `stop_on_first_error`, `max_errors`, `max_attributes`,
+  `fragment_context` and `fragment_namespace` are `GumboOptions` fields; `:dirty`
+  is this library's scheduler policy. `fragment_context` is `nil` (no fragment,
+  gumbo's `GUMBO_TAG_LAST`) or a tag atom. `tab_stop`, `max_errors` and
+  `max_attributes` are bounded by C `int` range, so a value that passes `new/1`
+  can never fail the NIF decode. `max_errors` defaults to #{@max_errors_default} and
+  `max_attributes` to #{@max_attributes_default} rather than to gumbo's "no cap";
+  see the comments on the defaults for why, and pass -1 to either for no cap.
   """
   @type t :: %__MODULE__{
           tab_stop: 1..2_147_483_647,
           stop_on_first_error: boolean(),
           max_errors: -1..2_147_483_647,
+          max_attributes: -1..2_147_483_647,
           fragment_context: nil | Gumbo.Tag.t(),
           fragment_namespace: Gumbo.Types.namespace(),
           dirty: :auto | boolean()
@@ -110,7 +124,7 @@ defmodule Gumbo.Options do
   ## Examples
 
       iex> Gumbo.Options.to_nif(Gumbo.Options.new()) |> Map.keys() |> Enum.sort()
-      [:dirty, :fragment_context, :fragment_namespace, :max_errors, :stop_on_first_error, :tab_stop]
+      [:dirty, :fragment_context, :fragment_namespace, :max_attributes, :max_errors, :stop_on_first_error, :tab_stop]
   """
   @spec to_nif(t()) :: map()
   def to_nif(%__MODULE__{} = options) do
@@ -118,6 +132,7 @@ defmodule Gumbo.Options do
       tab_stop: options.tab_stop,
       stop_on_first_error: options.stop_on_first_error,
       max_errors: options.max_errors,
+      max_attributes: options.max_attributes,
       fragment_context: options.fragment_context,
       fragment_namespace: options.fragment_namespace,
       dirty: options.dirty
@@ -173,6 +188,10 @@ defmodule Gumbo.Options do
   defp validate_option(:stop_on_first_error, value) when is_boolean(value), do: :ok
 
   defp validate_option(:max_errors, value)
+       when is_integer(value) and value >= -1 and value <= @c_int_max,
+       do: :ok
+
+  defp validate_option(:max_attributes, value)
        when is_integer(value) and value >= -1 and value <= @c_int_max,
        do: :ok
 
