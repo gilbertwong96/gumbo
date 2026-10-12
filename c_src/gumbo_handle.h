@@ -21,7 +21,18 @@ typedef struct {
   GumboOptions options; /* by value: destroy_output re-reads the allocator */
   gumbo_dirty_t dirty;  /* the :dirty option, for options/1 round-tripping */
   GumboOutput* output;
-  ErlNifBinary input; /* private copy: the tree points into it */
+  /* Retained copy of the input, owned by `env` as input_term: the tree's
+     original_text/original_tag/... fields point into it, and the caller's
+     binary is not safe to hold. Allocated in the env rather than with
+     enif_alloc_binary because a process-allocated binary transferred into a
+     process-independent env cannot parent a sub-binary — building one
+     crashes in erts_build_sub_bitstring. input_data is that binary's data
+     and input_size the caller's byte count; one byte past input_size is the
+     NUL the caret diagnostic walks to. */
+  ErlNifEnv* env;
+  ERL_NIF_TERM input_term;
+  const char* input_data;
+  size_t input_size;
   GumboNode** nodes;  /* preorder; node identity is an index into this */
   size_t node_count;
   size_t capacity;

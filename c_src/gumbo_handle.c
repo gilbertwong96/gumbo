@@ -37,8 +37,11 @@ static void gumbo_handle_dtor(ErlNifEnv* env, void* obj) {
   enif_free(h->nodes);
   enif_free(h->parent_indices);
   enif_free(h->subtree_sizes);
-  if (h->input.data != NULL) {
-    enif_release_binary(&h->input);
+  /* The input binary's owner is the term in this env, so freeing the env is
+     what releases it; it must not also be released by hand. Safe last:
+     nothing in the teardown pass reads h->input. */
+  if (h->env != NULL) {
+    enif_free_env(h->env);
   }
 }
 
@@ -222,21 +225,32 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
      releases only what this zeroing leaves set. */
   memset(h, 0, sizeof(*h));
 
-  /* Private copy of the input: the tree's original_text/original_tag/...
-     fields point into it, and the caller's binary is not safe to hold. One
-     extra byte is allocated and set to NUL: the error caret diagnostic
-     walks to the first NUL (error.c's find_last_newline/find_next_newline),
-     so the copy must be terminated exactly as gumbo's own printer expects.
-     size stays the caller's byte count; the terminator is never parsed. */
-  if (!enif_alloc_binary(caller.size + 1, &h->input)) {
+  /* The env comes first, so that every failure path below — and the
+     destructor — releases the retained copy by freeing this env. */
+  h->env = enif_alloc_env();
+  if (h->env == NULL) {
     enif_release_resource(h);
     return enif_make_badarg(env);
   }
-  h->input.size = caller.size;
-  if (caller.size > 0) {
-    memcpy(h->input.data, caller.data, caller.size);
+
+  /* Private copy of the input, allocated in the env so that it can parent
+     sub-binaries (see gumbo_handle.h). One extra byte is set to NUL: the
+     error caret diagnostic walks to the first NUL (error.c's
+     find_last_newline/find_next_newline), so the copy must be terminated
+     exactly as gumbo's own printer expects. input_size stays the caller's
+     byte count; the terminator is never parsed. */
+  unsigned char* input_bytes =
+      enif_make_new_binary(h->env, caller.size + 1, &h->input_term);
+  if (input_bytes == NULL) {
+    enif_release_resource(h);
+    return enif_make_badarg(env);
   }
-  h->input.data[caller.size] = '\0';
+  h->input_data = (const char*)input_bytes;
+  h->input_size = caller.size;
+  if (caller.size > 0) {
+    memcpy(input_bytes, caller.data, caller.size);
+  }
+  input_bytes[caller.size] = '\0';
 
   if (!gumbo_options_decode(env, atoms, argv[1], h)) {
     enif_release_resource(h);
@@ -244,8 +258,8 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   }
 
   /* Never gumbo_parse: Elixir binaries are not NUL-terminated. */
-  h->output = gumbo_parse_with_options(&h->options, (const char*)h->input.data,
-                                       h->input.size);
+  h->output = gumbo_parse_with_options(&h->options, h->input_data,
+                                       h->input_size);
   if (h->output == NULL) {
     enif_release_resource(h);
     return enif_make_badarg(env);
@@ -315,9 +329,11 @@ ERL_NIF_TERM gumbo_nif_output_input(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   if (!gumbo_handle_get(env, argv[0], &h)) {
     return enif_make_tuple2(env, atoms->error, atoms->invalid_handle);
   }
+  /* A copy of exactly the input: input_term is one byte longer, because it
+     carries the NUL the caret diagnostic needs, so the term itself would
+     round-trip with a trailing byte the caller never passed. */
   ERL_NIF_TERM out;
-  if (!gumbo_make_binary(env, (const char*)h->input.data, h->input.size,
-                         &out)) {
+  if (!gumbo_make_binary(env, h->input_data, h->input_size, &out)) {
     return enif_make_badarg(env);
   }
   return out;
