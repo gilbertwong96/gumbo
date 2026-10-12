@@ -97,6 +97,27 @@ defmodule Gumbo.ErrorTest do
     assert length(Gumbo.Output.errors(output)) <= max
   end
 
+  # gumbo records one error per unclosed element at EOF, and each of those
+  # carries a copy of the open-element tag stack, so an N-deep unclosed
+  # document costs N^2 pointers: measured, 20 000 unclosed <div>s produced
+  # 400 040 000 stack entries and 3.2 GB of allocations with the cap off, and
+  # the input is only 100 KB. The default cap is what keeps that finite, so
+  # this test pins both halves: the default is bounded, and a document deep
+  # enough to have hit the quadratic is truncated by it.
+  test "the default max_errors bounds the error list a deep document can produce" do
+    {:ok, default} = Gumbo.Options.new([])
+    assert default.max_errors > 0
+
+    deep = "<!doctype html>" <> String.duplicate("<div>", 20_000)
+    {:ok, output} = Gumbo.parse(deep)
+
+    assert length(Gumbo.Output.errors(output)) == default.max_errors
+
+    # -1 stays available, and is the documented way to ask for every error.
+    assert {:ok, uncapped} = Gumbo.Options.new(max_errors: -1)
+    assert uncapped.max_errors == -1
+  end
+
   test "caret/1 renders the error against the retained source" do
     {:ok, output} = Gumbo.parse("<p>" <> <<0xFF>> <> "</p>")
     err = hd(Gumbo.Output.errors(output))

@@ -80,8 +80,10 @@ defmodule Gumbo.Output do
   `parse/2` still returns `{:ok, _}` with the best-effort tree. gumbo is
   designed to be resilient, so an empty list does not mean "valid HTML" —
   plenty of sloppy but legal markup produces no errors, and not every
-  malformation produces one. The list is capped by the `:max_errors` option
-  and by `:stop_on_first_error`.
+  malformation produces one. The list is capped by the `:max_errors` option,
+  which defaults to 100, and by `:stop_on_first_error`. Pass `max_errors: -1`
+  for every error gumbo records; a deeply nested malformed document is where
+  that gets expensive, because each error carries a copy of the tag stack.
 
   ## Examples
 
