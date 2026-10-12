@@ -1,9 +1,8 @@
 #ifndef GUMBO_HANDLE_H_
 #define GUMBO_HANDLE_H_
 
-#include <stddef.h>
-
 #include <erl_nif.h>
+#include <stddef.h>
 
 #include "gumbo.h"
 #include "gumbo_atoms.h"
@@ -33,7 +32,7 @@ typedef struct {
   ERL_NIF_TERM input_term;
   const char* input_data;
   size_t input_size;
-  GumboNode** nodes;  /* preorder; node identity is an index into this */
+  GumboNode** nodes; /* preorder; node identity is an index into this */
   size_t node_count;
   size_t capacity;
   /* output->root is not necessarily table index 1: a comment or processing

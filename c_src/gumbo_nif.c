@@ -1,6 +1,5 @@
-#include <string.h>
-
 #include <erl_nif.h>
+#include <string.h>
 
 #include "gumbo.h"
 #include "gumbo_atoms.h"

@@ -55,6 +55,8 @@ defmodule Gumbo.MixProject do
         "check.parity",
         "check.stack_guard",
         "check.analyzer",
+        "check.c_format",
+        "check.c_lint",
         "check.sanitizers",
         "check.clean_build"
       ],
@@ -155,6 +157,30 @@ defmodule Gumbo.MixProject do
 
         if status != 0 do
           Mix.raise("check.analyzer failed with status #{inspect(status)}")
+        end
+      end,
+      # The C half of what mix format and the compiler already do for Elixir. clang-format
+      # against .clang-format, which is Google's style because that is what gumbo is written
+      # in, so a patch and the file it patches read the same way; and warnings as errors on
+      # our own C with the classes -Wall -Wextra leaves out.
+      #
+      # Both are clean today, and the lint one is how the two findings that started it were
+      # found: a function that should have been static, and an int where a GumboParseFlags
+      # bit was meant.
+      "check.c_format": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-c-format"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.c_format failed with status #{inspect(status)}")
+        end
+      end,
+      "check.c_lint": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-c-lint"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.c_lint failed with status #{inspect(status)}")
         end
       end,
       "check.sanitizers": fn _ ->

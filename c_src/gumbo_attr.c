@@ -1,5 +1,6 @@
-#include "gumbo.h"
 #include "gumbo_attr.h"
+
+#include "gumbo.h"
 #include "gumbo_handle.h"
 #include "gumbo_node.h"
 
@@ -116,14 +117,10 @@ static ERL_NIF_TERM gumbo_attr_value_end_term(ErlNifEnv* env,
 int gumbo_attr_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                            const GumboAttribute* attr, ERL_NIF_TERM* out) {
   ERL_NIF_TERM keys[GUMBO_ATTR_DETAILS_COUNT] = {
-      atoms->attribute.namespace,
-      atoms->attribute.name,
-      atoms->attribute.value,
-      atoms->attribute.original_name,
-      atoms->attribute.original_value,
-      atoms->attribute.name_start,
-      atoms->attribute.name_end,
-      atoms->attribute.value_start,
+      atoms->attribute.namespace,      atoms->attribute.name,
+      atoms->attribute.value,          atoms->attribute.original_name,
+      atoms->attribute.original_value, atoms->attribute.name_start,
+      atoms->attribute.name_end,       atoms->attribute.value_start,
       atoms->attribute.value_end,
   };
   ERL_NIF_TERM values[GUMBO_ATTR_DETAILS_COUNT] = {

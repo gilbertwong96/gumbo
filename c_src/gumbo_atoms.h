@@ -1,10 +1,9 @@
 #ifndef GUMBO_ATOMS_H_
 #define GUMBO_ATOMS_H_
 
+#include <erl_nif.h>
 #include <stddef.h>
 #include <string.h>
-
-#include <erl_nif.h>
 
 #include "error.h"
 #include "gumbo.h"
@@ -22,10 +21,11 @@
    was removed upstream and leaves a hole in the bit values. */
 #define GUMBO_PARSE_FLAG_COUNT 11
 #define GUMBO_ERROR_TYPE_COUNT \
-  (GUMBO_ERR_UNACKNOWLEDGED_SELF_CLOSING_TAG + 1) /* 42 */
+  (GUMBO_ERR_UNACKNOWLEDGED_SELF_CLOSING_TAG + 1)                   /* 42 */
 #define GUMBO_TOKENIZER_STATE_COUNT (GUMBO_ERR_TOKENIZER_CDATA + 1) /* 14 */
-#define GUMBO_TOKEN_TYPE_COUNT \
-  (GUMBO_TOKEN_PROCESSING_INSTRUCTION + 1) /* 10 */
+#define GUMBO_TOKEN_TYPE_COUNT                   \
+  (GUMBO_TOKEN_PROCESSING_INSTRUCTION + 1) /* 10 \
+                                            */
 #define GUMBO_INSERTION_MODE_COUNT \
   (GUMBO_INSERTION_MODE_AFTER_AFTER_FRAMESET + 1) /* 21 */
 

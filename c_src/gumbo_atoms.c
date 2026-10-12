@@ -1,6 +1,6 @@
-#include <string.h>
-
 #include "gumbo_atoms.h"
+
+#include <string.h>
 
 /* The X-macro member lists below are the only transcribed data in this file:
    each enum's members in declaration order. The atom names are then derived
@@ -11,136 +11,136 @@
    family. */
 
 #define GUMBO_NODE_TYPES(X) \
-  X(GUMBO_NODE_DOCUMENT) \
-  X(GUMBO_NODE_ELEMENT) \
-  X(GUMBO_NODE_TEXT) \
-  X(GUMBO_NODE_CDATA) \
-  X(GUMBO_NODE_COMMENT) \
-  X(GUMBO_NODE_WHITESPACE) \
-  X(GUMBO_NODE_TEMPLATE) \
+  X(GUMBO_NODE_DOCUMENT)    \
+  X(GUMBO_NODE_ELEMENT)     \
+  X(GUMBO_NODE_TEXT)        \
+  X(GUMBO_NODE_CDATA)       \
+  X(GUMBO_NODE_COMMENT)     \
+  X(GUMBO_NODE_WHITESPACE)  \
+  X(GUMBO_NODE_TEMPLATE)    \
   X(GUMBO_NODE_PROCESSING_INSTRUCTION)
 
 #define GUMBO_NAMESPACES(X) \
-  X(GUMBO_NAMESPACE_HTML) \
-  X(GUMBO_NAMESPACE_SVG) \
+  X(GUMBO_NAMESPACE_HTML)   \
+  X(GUMBO_NAMESPACE_SVG)    \
   X(GUMBO_NAMESPACE_MATHML)
 
 #define GUMBO_ATTR_NAMESPACES(X) \
-  X(GUMBO_ATTR_NAMESPACE_NONE) \
-  X(GUMBO_ATTR_NAMESPACE_XLINK) \
-  X(GUMBO_ATTR_NAMESPACE_XML) \
+  X(GUMBO_ATTR_NAMESPACE_NONE)   \
+  X(GUMBO_ATTR_NAMESPACE_XLINK)  \
+  X(GUMBO_ATTR_NAMESPACE_XML)    \
   X(GUMBO_ATTR_NAMESPACE_XMLNS)
 
 #define GUMBO_QUIRKS_MODES(X) \
-  X(GUMBO_DOCTYPE_NO_QUIRKS) \
-  X(GUMBO_DOCTYPE_QUIRKS) \
+  X(GUMBO_DOCTYPE_NO_QUIRKS)  \
+  X(GUMBO_DOCTYPE_QUIRKS)     \
   X(GUMBO_DOCTYPE_LIMITED_QUIRKS)
 
-#define GUMBO_PARSE_FLAGS(X) \
-  X(GUMBO_INSERTION_NORMAL) \
-  X(GUMBO_INSERTION_BY_PARSER) \
-  X(GUMBO_INSERTION_IMPLICIT_END_TAG) \
-  X(GUMBO_INSERTION_IMPLIED) \
-  X(GUMBO_INSERTION_CONVERTED_FROM_END_TAG) \
-  X(GUMBO_INSERTION_FROM_ISINDEX) \
-  X(GUMBO_INSERTION_FROM_IMAGE) \
+#define GUMBO_PARSE_FLAGS(X)                          \
+  X(GUMBO_INSERTION_NORMAL)                           \
+  X(GUMBO_INSERTION_BY_PARSER)                        \
+  X(GUMBO_INSERTION_IMPLICIT_END_TAG)                 \
+  X(GUMBO_INSERTION_IMPLIED)                          \
+  X(GUMBO_INSERTION_CONVERTED_FROM_END_TAG)           \
+  X(GUMBO_INSERTION_FROM_ISINDEX)                     \
+  X(GUMBO_INSERTION_FROM_IMAGE)                       \
   X(GUMBO_INSERTION_RECONSTRUCTED_FORMATTING_ELEMENT) \
-  X(GUMBO_INSERTION_ADOPTION_AGENCY_CLONED) \
-  X(GUMBO_INSERTION_ADOPTION_AGENCY_MOVED) \
+  X(GUMBO_INSERTION_ADOPTION_AGENCY_CLONED)           \
+  X(GUMBO_INSERTION_ADOPTION_AGENCY_MOVED)            \
   X(GUMBO_INSERTION_FOSTER_PARENTED)
 
-#define GUMBO_ERROR_TYPES(X) \
-  X(GUMBO_ERR_UTF8_INVALID) \
-  X(GUMBO_ERR_UTF8_TRUNCATED) \
-  X(GUMBO_ERR_UTF8_NULL) \
-  X(GUMBO_ERR_NUMERIC_CHAR_REF_NO_DIGITS) \
+#define GUMBO_ERROR_TYPES(X)                      \
+  X(GUMBO_ERR_UTF8_INVALID)                       \
+  X(GUMBO_ERR_UTF8_TRUNCATED)                     \
+  X(GUMBO_ERR_UTF8_NULL)                          \
+  X(GUMBO_ERR_NUMERIC_CHAR_REF_NO_DIGITS)         \
   X(GUMBO_ERR_NUMERIC_CHAR_REF_WITHOUT_SEMICOLON) \
-  X(GUMBO_ERR_NUMERIC_CHAR_REF_INVALID) \
-  X(GUMBO_ERR_NAMED_CHAR_REF_WITHOUT_SEMICOLON) \
-  X(GUMBO_ERR_NAMED_CHAR_REF_INVALID) \
-  X(GUMBO_ERR_TAG_STARTS_WITH_QUESTION) \
-  X(GUMBO_ERR_TAG_EOF) \
-  X(GUMBO_ERR_TAG_INVALID) \
-  X(GUMBO_ERR_CLOSE_TAG_EMPTY) \
-  X(GUMBO_ERR_CLOSE_TAG_EOF) \
-  X(GUMBO_ERR_CLOSE_TAG_INVALID) \
-  X(GUMBO_ERR_SCRIPT_EOF) \
-  X(GUMBO_ERR_ATTR_NAME_EOF) \
-  X(GUMBO_ERR_ATTR_NAME_INVALID) \
-  X(GUMBO_ERR_ATTR_DOUBLE_QUOTE_EOF) \
-  X(GUMBO_ERR_ATTR_SINGLE_QUOTE_EOF) \
-  X(GUMBO_ERR_ATTR_UNQUOTED_EOF) \
-  X(GUMBO_ERR_ATTR_UNQUOTED_RIGHT_BRACKET) \
-  X(GUMBO_ERR_ATTR_UNQUOTED_EQUALS) \
-  X(GUMBO_ERR_ATTR_AFTER_EOF) \
-  X(GUMBO_ERR_ATTR_AFTER_INVALID) \
-  X(GUMBO_ERR_DUPLICATE_ATTR) \
-  X(GUMBO_ERR_SOLIDUS_EOF) \
-  X(GUMBO_ERR_SOLIDUS_INVALID) \
-  X(GUMBO_ERR_DASHES_OR_DOCTYPE) \
-  X(GUMBO_ERR_COMMENT_EOF) \
-  X(GUMBO_ERR_COMMENT_INVALID) \
-  X(GUMBO_ERR_COMMENT_BANG_AFTER_DOUBLE_DASH) \
-  X(GUMBO_ERR_COMMENT_DASH_AFTER_DOUBLE_DASH) \
-  X(GUMBO_ERR_COMMENT_SPACE_AFTER_DOUBLE_DASH) \
-  X(GUMBO_ERR_COMMENT_END_BANG_EOF) \
-  X(GUMBO_ERR_DOCTYPE_EOF) \
-  X(GUMBO_ERR_DOCTYPE_INVALID) \
-  X(GUMBO_ERR_DOCTYPE_SPACE) \
-  X(GUMBO_ERR_DOCTYPE_RIGHT_BRACKET) \
-  X(GUMBO_ERR_DOCTYPE_SPACE_OR_RIGHT_BRACKET) \
-  X(GUMBO_ERR_DOCTYPE_END) \
-  X(GUMBO_ERR_PARSER) \
+  X(GUMBO_ERR_NUMERIC_CHAR_REF_INVALID)           \
+  X(GUMBO_ERR_NAMED_CHAR_REF_WITHOUT_SEMICOLON)   \
+  X(GUMBO_ERR_NAMED_CHAR_REF_INVALID)             \
+  X(GUMBO_ERR_TAG_STARTS_WITH_QUESTION)           \
+  X(GUMBO_ERR_TAG_EOF)                            \
+  X(GUMBO_ERR_TAG_INVALID)                        \
+  X(GUMBO_ERR_CLOSE_TAG_EMPTY)                    \
+  X(GUMBO_ERR_CLOSE_TAG_EOF)                      \
+  X(GUMBO_ERR_CLOSE_TAG_INVALID)                  \
+  X(GUMBO_ERR_SCRIPT_EOF)                         \
+  X(GUMBO_ERR_ATTR_NAME_EOF)                      \
+  X(GUMBO_ERR_ATTR_NAME_INVALID)                  \
+  X(GUMBO_ERR_ATTR_DOUBLE_QUOTE_EOF)              \
+  X(GUMBO_ERR_ATTR_SINGLE_QUOTE_EOF)              \
+  X(GUMBO_ERR_ATTR_UNQUOTED_EOF)                  \
+  X(GUMBO_ERR_ATTR_UNQUOTED_RIGHT_BRACKET)        \
+  X(GUMBO_ERR_ATTR_UNQUOTED_EQUALS)               \
+  X(GUMBO_ERR_ATTR_AFTER_EOF)                     \
+  X(GUMBO_ERR_ATTR_AFTER_INVALID)                 \
+  X(GUMBO_ERR_DUPLICATE_ATTR)                     \
+  X(GUMBO_ERR_SOLIDUS_EOF)                        \
+  X(GUMBO_ERR_SOLIDUS_INVALID)                    \
+  X(GUMBO_ERR_DASHES_OR_DOCTYPE)                  \
+  X(GUMBO_ERR_COMMENT_EOF)                        \
+  X(GUMBO_ERR_COMMENT_INVALID)                    \
+  X(GUMBO_ERR_COMMENT_BANG_AFTER_DOUBLE_DASH)     \
+  X(GUMBO_ERR_COMMENT_DASH_AFTER_DOUBLE_DASH)     \
+  X(GUMBO_ERR_COMMENT_SPACE_AFTER_DOUBLE_DASH)    \
+  X(GUMBO_ERR_COMMENT_END_BANG_EOF)               \
+  X(GUMBO_ERR_DOCTYPE_EOF)                        \
+  X(GUMBO_ERR_DOCTYPE_INVALID)                    \
+  X(GUMBO_ERR_DOCTYPE_SPACE)                      \
+  X(GUMBO_ERR_DOCTYPE_RIGHT_BRACKET)              \
+  X(GUMBO_ERR_DOCTYPE_SPACE_OR_RIGHT_BRACKET)     \
+  X(GUMBO_ERR_DOCTYPE_END)                        \
+  X(GUMBO_ERR_PARSER)                             \
   X(GUMBO_ERR_UNACKNOWLEDGED_SELF_CLOSING_TAG)
 
-#define GUMBO_TOKENIZER_STATES(X) \
-  X(GUMBO_ERR_TOKENIZER_DATA) \
-  X(GUMBO_ERR_TOKENIZER_CHAR_REF) \
-  X(GUMBO_ERR_TOKENIZER_RCDATA) \
-  X(GUMBO_ERR_TOKENIZER_RAWTEXT) \
-  X(GUMBO_ERR_TOKENIZER_PLAINTEXT) \
-  X(GUMBO_ERR_TOKENIZER_SCRIPT) \
-  X(GUMBO_ERR_TOKENIZER_TAG) \
-  X(GUMBO_ERR_TOKENIZER_SELF_CLOSING_TAG) \
-  X(GUMBO_ERR_TOKENIZER_ATTR_NAME) \
-  X(GUMBO_ERR_TOKENIZER_ATTR_VALUE) \
+#define GUMBO_TOKENIZER_STATES(X)           \
+  X(GUMBO_ERR_TOKENIZER_DATA)               \
+  X(GUMBO_ERR_TOKENIZER_CHAR_REF)           \
+  X(GUMBO_ERR_TOKENIZER_RCDATA)             \
+  X(GUMBO_ERR_TOKENIZER_RAWTEXT)            \
+  X(GUMBO_ERR_TOKENIZER_PLAINTEXT)          \
+  X(GUMBO_ERR_TOKENIZER_SCRIPT)             \
+  X(GUMBO_ERR_TOKENIZER_TAG)                \
+  X(GUMBO_ERR_TOKENIZER_SELF_CLOSING_TAG)   \
+  X(GUMBO_ERR_TOKENIZER_ATTR_NAME)          \
+  X(GUMBO_ERR_TOKENIZER_ATTR_VALUE)         \
   X(GUMBO_ERR_TOKENIZER_MARKUP_DECLARATION) \
-  X(GUMBO_ERR_TOKENIZER_COMMENT) \
-  X(GUMBO_ERR_TOKENIZER_DOCTYPE) \
+  X(GUMBO_ERR_TOKENIZER_COMMENT)            \
+  X(GUMBO_ERR_TOKENIZER_DOCTYPE)            \
   X(GUMBO_ERR_TOKENIZER_CDATA)
 
 #define GUMBO_TOKEN_TYPES(X) \
-  X(GUMBO_TOKEN_DOCTYPE) \
-  X(GUMBO_TOKEN_START_TAG) \
-  X(GUMBO_TOKEN_END_TAG) \
-  X(GUMBO_TOKEN_COMMENT) \
-  X(GUMBO_TOKEN_WHITESPACE) \
-  X(GUMBO_TOKEN_CHARACTER) \
-  X(GUMBO_TOKEN_CDATA) \
-  X(GUMBO_TOKEN_NULL) \
-  X(GUMBO_TOKEN_EOF) \
+  X(GUMBO_TOKEN_DOCTYPE)     \
+  X(GUMBO_TOKEN_START_TAG)   \
+  X(GUMBO_TOKEN_END_TAG)     \
+  X(GUMBO_TOKEN_COMMENT)     \
+  X(GUMBO_TOKEN_WHITESPACE)  \
+  X(GUMBO_TOKEN_CHARACTER)   \
+  X(GUMBO_TOKEN_CDATA)       \
+  X(GUMBO_TOKEN_NULL)        \
+  X(GUMBO_TOKEN_EOF)         \
   X(GUMBO_TOKEN_PROCESSING_INSTRUCTION)
 
-#define GUMBO_INSERTION_MODES(X) \
-  X(GUMBO_INSERTION_MODE_INITIAL) \
-  X(GUMBO_INSERTION_MODE_BEFORE_HTML) \
-  X(GUMBO_INSERTION_MODE_BEFORE_HEAD) \
-  X(GUMBO_INSERTION_MODE_IN_HEAD) \
+#define GUMBO_INSERTION_MODES(X)           \
+  X(GUMBO_INSERTION_MODE_INITIAL)          \
+  X(GUMBO_INSERTION_MODE_BEFORE_HTML)      \
+  X(GUMBO_INSERTION_MODE_BEFORE_HEAD)      \
+  X(GUMBO_INSERTION_MODE_IN_HEAD)          \
   X(GUMBO_INSERTION_MODE_IN_HEAD_NOSCRIPT) \
-  X(GUMBO_INSERTION_MODE_AFTER_HEAD) \
-  X(GUMBO_INSERTION_MODE_IN_BODY) \
-  X(GUMBO_INSERTION_MODE_TEXT) \
-  X(GUMBO_INSERTION_MODE_IN_TABLE) \
-  X(GUMBO_INSERTION_MODE_IN_TABLE_TEXT) \
-  X(GUMBO_INSERTION_MODE_IN_CAPTION) \
-  X(GUMBO_INSERTION_MODE_IN_COLUMN_GROUP) \
-  X(GUMBO_INSERTION_MODE_IN_TABLE_BODY) \
-  X(GUMBO_INSERTION_MODE_IN_ROW) \
-  X(GUMBO_INSERTION_MODE_IN_CELL) \
-  X(GUMBO_INSERTION_MODE_IN_TEMPLATE) \
-  X(GUMBO_INSERTION_MODE_AFTER_BODY) \
-  X(GUMBO_INSERTION_MODE_IN_FRAMESET) \
-  X(GUMBO_INSERTION_MODE_AFTER_FRAMESET) \
+  X(GUMBO_INSERTION_MODE_AFTER_HEAD)       \
+  X(GUMBO_INSERTION_MODE_IN_BODY)          \
+  X(GUMBO_INSERTION_MODE_TEXT)             \
+  X(GUMBO_INSERTION_MODE_IN_TABLE)         \
+  X(GUMBO_INSERTION_MODE_IN_TABLE_TEXT)    \
+  X(GUMBO_INSERTION_MODE_IN_CAPTION)       \
+  X(GUMBO_INSERTION_MODE_IN_COLUMN_GROUP)  \
+  X(GUMBO_INSERTION_MODE_IN_TABLE_BODY)    \
+  X(GUMBO_INSERTION_MODE_IN_ROW)           \
+  X(GUMBO_INSERTION_MODE_IN_CELL)          \
+  X(GUMBO_INSERTION_MODE_IN_TEMPLATE)      \
+  X(GUMBO_INSERTION_MODE_AFTER_BODY)       \
+  X(GUMBO_INSERTION_MODE_IN_FRAMESET)      \
+  X(GUMBO_INSERTION_MODE_AFTER_FRAMESET)   \
   X(GUMBO_INSERTION_MODE_AFTER_AFTER_BODY) \
   X(GUMBO_INSERTION_MODE_AFTER_AFTER_FRAMESET)
 
@@ -148,25 +148,31 @@
 #define GUMBO_X_VALUE(member) member,
 
 static const int kGumboNodeTypeValues[] = {GUMBO_NODE_TYPES(GUMBO_X_VALUE)};
-static const char* const kGumboNodeTypeNames[] = {GUMBO_NODE_TYPES(GUMBO_X_STR)};
+static const char* const kGumboNodeTypeNames[] = {
+    GUMBO_NODE_TYPES(GUMBO_X_STR)};
 static const int kGumboNamespaceValues[] = {GUMBO_NAMESPACES(GUMBO_X_VALUE)};
-static const char* const kGumboNamespaceNames[] = {GUMBO_NAMESPACES(GUMBO_X_STR)};
+static const char* const kGumboNamespaceNames[] = {
+    GUMBO_NAMESPACES(GUMBO_X_STR)};
 static const int kGumboAttrNamespaceValues[] = {
     GUMBO_ATTR_NAMESPACES(GUMBO_X_VALUE)};
 static const char* const kGumboAttrNamespaceNames[] = {
     GUMBO_ATTR_NAMESPACES(GUMBO_X_STR)};
 static const int kGumboQuirksModeValues[] = {GUMBO_QUIRKS_MODES(GUMBO_X_VALUE)};
-static const char* const kGumboQuirksModeNames[] = {GUMBO_QUIRKS_MODES(GUMBO_X_STR)};
+static const char* const kGumboQuirksModeNames[] = {
+    GUMBO_QUIRKS_MODES(GUMBO_X_STR)};
 static const int kGumboParseFlagValues[] = {GUMBO_PARSE_FLAGS(GUMBO_X_VALUE)};
-static const char* const kGumboParseFlagNames[] = {GUMBO_PARSE_FLAGS(GUMBO_X_STR)};
+static const char* const kGumboParseFlagNames[] = {
+    GUMBO_PARSE_FLAGS(GUMBO_X_STR)};
 static const int kGumboErrorTypeValues[] = {GUMBO_ERROR_TYPES(GUMBO_X_VALUE)};
-static const char* const kGumboErrorTypeNames[] = {GUMBO_ERROR_TYPES(GUMBO_X_STR)};
+static const char* const kGumboErrorTypeNames[] = {
+    GUMBO_ERROR_TYPES(GUMBO_X_STR)};
 static const int kGumboTokenizerStateValues[] = {
     GUMBO_TOKENIZER_STATES(GUMBO_X_VALUE)};
 static const char* const kGumboTokenizerStateNames[] = {
     GUMBO_TOKENIZER_STATES(GUMBO_X_STR)};
 static const int kGumboTokenTypeValues[] = {GUMBO_TOKEN_TYPES(GUMBO_X_VALUE)};
-static const char* const kGumboTokenTypeNames[] = {GUMBO_TOKEN_TYPES(GUMBO_X_STR)};
+static const char* const kGumboTokenTypeNames[] = {
+    GUMBO_TOKEN_TYPES(GUMBO_X_STR)};
 static const int kGumboInsertionModeValues[] = {
     GUMBO_INSERTION_MODES(GUMBO_X_VALUE)};
 static const char* const kGumboInsertionModeNames[] = {
@@ -176,53 +182,73 @@ static const char* const kGumboInsertionModeNames[] = {
    from its enum. A list that is too short would otherwise silently leave
    zeros (invalid terms) in the table, and one that is too long would
    overflow nothing but still indicate drift. */
-typedef char gumbo_node_type_list_check[
-    (sizeof(kGumboNodeTypeValues) / sizeof(kGumboNodeTypeValues[0]) == GUMBO_NODE_TYPE_COUNT &&
-     sizeof(kGumboNodeTypeNames) / sizeof(kGumboNodeTypeNames[0]) == GUMBO_NODE_TYPE_COUNT)
-        ? 1
-        : -1];
-typedef char gumbo_namespace_list_check[
-    (sizeof(kGumboNamespaceValues) / sizeof(kGumboNamespaceValues[0]) == GUMBO_NAMESPACE_COUNT &&
-     sizeof(kGumboNamespaceNames) / sizeof(kGumboNamespaceNames[0]) == GUMBO_NAMESPACE_COUNT)
-        ? 1
-        : -1];
-typedef char gumbo_attr_namespace_list_check[
-    (sizeof(kGumboAttrNamespaceValues) / sizeof(kGumboAttrNamespaceValues[0]) == GUMBO_ATTR_NAMESPACE_COUNT &&
-     sizeof(kGumboAttrNamespaceNames) / sizeof(kGumboAttrNamespaceNames[0]) == GUMBO_ATTR_NAMESPACE_COUNT)
-        ? 1
-        : -1];
-typedef char gumbo_quirks_mode_list_check[
-    (sizeof(kGumboQuirksModeValues) / sizeof(kGumboQuirksModeValues[0]) == GUMBO_QUIRKS_MODE_COUNT &&
-     sizeof(kGumboQuirksModeNames) / sizeof(kGumboQuirksModeNames[0]) == GUMBO_QUIRKS_MODE_COUNT)
-        ? 1
-        : -1];
-typedef char gumbo_parse_flag_list_check[
-    (sizeof(kGumboParseFlagValues) / sizeof(kGumboParseFlagValues[0]) == GUMBO_PARSE_FLAG_COUNT &&
-     sizeof(kGumboParseFlagNames) / sizeof(kGumboParseFlagNames[0]) == GUMBO_PARSE_FLAG_COUNT)
-        ? 1
-        : -1];
-typedef char gumbo_error_type_list_check[
-    (sizeof(kGumboErrorTypeValues) / sizeof(kGumboErrorTypeValues[0]) == GUMBO_ERROR_TYPE_COUNT &&
-     sizeof(kGumboErrorTypeNames) / sizeof(kGumboErrorTypeNames[0]) == GUMBO_ERROR_TYPE_COUNT)
-        ? 1
-        : -1];
-typedef char gumbo_tokenizer_state_list_check[
-    (sizeof(kGumboTokenizerStateValues) / sizeof(kGumboTokenizerStateValues[0]) ==
-         GUMBO_TOKENIZER_STATE_COUNT &&
-     sizeof(kGumboTokenizerStateNames) / sizeof(kGumboTokenizerStateNames[0]) ==
-         GUMBO_TOKENIZER_STATE_COUNT)
-        ? 1
-        : -1];
-typedef char gumbo_token_type_list_check[
-    (sizeof(kGumboTokenTypeValues) / sizeof(kGumboTokenTypeValues[0]) == GUMBO_TOKEN_TYPE_COUNT &&
-     sizeof(kGumboTokenTypeNames) / sizeof(kGumboTokenTypeNames[0]) == GUMBO_TOKEN_TYPE_COUNT)
-        ? 1
-        : -1];
-typedef char gumbo_insertion_mode_list_check[
-    (sizeof(kGumboInsertionModeValues) / sizeof(kGumboInsertionModeValues[0]) == GUMBO_INSERTION_MODE_COUNT &&
-     sizeof(kGumboInsertionModeNames) / sizeof(kGumboInsertionModeNames[0]) == GUMBO_INSERTION_MODE_COUNT)
-        ? 1
-        : -1];
+typedef char gumbo_node_type_list_check
+    [(sizeof(kGumboNodeTypeValues) / sizeof(kGumboNodeTypeValues[0]) ==
+          GUMBO_NODE_TYPE_COUNT &&
+      sizeof(kGumboNodeTypeNames) / sizeof(kGumboNodeTypeNames[0]) ==
+          GUMBO_NODE_TYPE_COUNT)
+         ? 1
+         : -1];
+typedef char gumbo_namespace_list_check
+    [(sizeof(kGumboNamespaceValues) / sizeof(kGumboNamespaceValues[0]) ==
+          GUMBO_NAMESPACE_COUNT &&
+      sizeof(kGumboNamespaceNames) / sizeof(kGumboNamespaceNames[0]) ==
+          GUMBO_NAMESPACE_COUNT)
+         ? 1
+         : -1];
+typedef char gumbo_attr_namespace_list_check
+    [(sizeof(kGumboAttrNamespaceValues) /
+              sizeof(kGumboAttrNamespaceValues[0]) ==
+          GUMBO_ATTR_NAMESPACE_COUNT &&
+      sizeof(kGumboAttrNamespaceNames) / sizeof(kGumboAttrNamespaceNames[0]) ==
+          GUMBO_ATTR_NAMESPACE_COUNT)
+         ? 1
+         : -1];
+typedef char gumbo_quirks_mode_list_check
+    [(sizeof(kGumboQuirksModeValues) / sizeof(kGumboQuirksModeValues[0]) ==
+          GUMBO_QUIRKS_MODE_COUNT &&
+      sizeof(kGumboQuirksModeNames) / sizeof(kGumboQuirksModeNames[0]) ==
+          GUMBO_QUIRKS_MODE_COUNT)
+         ? 1
+         : -1];
+typedef char gumbo_parse_flag_list_check
+    [(sizeof(kGumboParseFlagValues) / sizeof(kGumboParseFlagValues[0]) ==
+          GUMBO_PARSE_FLAG_COUNT &&
+      sizeof(kGumboParseFlagNames) / sizeof(kGumboParseFlagNames[0]) ==
+          GUMBO_PARSE_FLAG_COUNT)
+         ? 1
+         : -1];
+typedef char gumbo_error_type_list_check
+    [(sizeof(kGumboErrorTypeValues) / sizeof(kGumboErrorTypeValues[0]) ==
+          GUMBO_ERROR_TYPE_COUNT &&
+      sizeof(kGumboErrorTypeNames) / sizeof(kGumboErrorTypeNames[0]) ==
+          GUMBO_ERROR_TYPE_COUNT)
+         ? 1
+         : -1];
+typedef char gumbo_tokenizer_state_list_check
+    [(sizeof(kGumboTokenizerStateValues) /
+              sizeof(kGumboTokenizerStateValues[0]) ==
+          GUMBO_TOKENIZER_STATE_COUNT &&
+      sizeof(kGumboTokenizerStateNames) /
+              sizeof(kGumboTokenizerStateNames[0]) ==
+          GUMBO_TOKENIZER_STATE_COUNT)
+         ? 1
+         : -1];
+typedef char gumbo_token_type_list_check
+    [(sizeof(kGumboTokenTypeValues) / sizeof(kGumboTokenTypeValues[0]) ==
+          GUMBO_TOKEN_TYPE_COUNT &&
+      sizeof(kGumboTokenTypeNames) / sizeof(kGumboTokenTypeNames[0]) ==
+          GUMBO_TOKEN_TYPE_COUNT)
+         ? 1
+         : -1];
+typedef char gumbo_insertion_mode_list_check
+    [(sizeof(kGumboInsertionModeValues) /
+              sizeof(kGumboInsertionModeValues[0]) ==
+          GUMBO_INSERTION_MODE_COUNT &&
+      sizeof(kGumboInsertionModeNames) / sizeof(kGumboInsertionModeNames[0]) ==
+          GUMBO_INSERTION_MODE_COUNT)
+         ? 1
+         : -1];
 
 /* Longest member name is GUMBO_INSERTION_RECONSTRUCTED_FORMATTING_ELEMENT
    (46 chars); 64 leaves headroom for a gumbo bump. */
@@ -289,12 +315,10 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
                               GUMBO_NAMESPACE_COUNT, "GUMBO_NAMESPACE_") != 0) {
     return 1;
   }
-  if (gumbo_atoms_init_family(env, atoms->attribute_namespaces,
-                              GUMBO_ATTR_NAMESPACE_COUNT,
-                              kGumboAttrNamespaceValues,
-                              kGumboAttrNamespaceNames,
-                              GUMBO_ATTR_NAMESPACE_COUNT,
-                              "GUMBO_ATTR_NAMESPACE_") != 0) {
+  if (gumbo_atoms_init_family(
+          env, atoms->attribute_namespaces, GUMBO_ATTR_NAMESPACE_COUNT,
+          kGumboAttrNamespaceValues, kGumboAttrNamespaceNames,
+          GUMBO_ATTR_NAMESPACE_COUNT, "GUMBO_ATTR_NAMESPACE_") != 0) {
     return 1;
   }
   if (gumbo_atoms_init_family(env, atoms->quirks_modes, GUMBO_QUIRKS_MODE_COUNT,
@@ -302,10 +326,10 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
                               GUMBO_QUIRKS_MODE_COUNT, "GUMBO_DOCTYPE_") != 0) {
     return 1;
   }
-  if (gumbo_atoms_init_family(env, atoms->parse_flags,
-                              GUMBO_PARSE_FLAG_TABLE_SIZE, kGumboParseFlagValues,
-                              kGumboParseFlagNames, GUMBO_PARSE_FLAG_COUNT,
-                              "GUMBO_INSERTION_") != 0) {
+  if (gumbo_atoms_init_family(
+          env, atoms->parse_flags, GUMBO_PARSE_FLAG_TABLE_SIZE,
+          kGumboParseFlagValues, kGumboParseFlagNames, GUMBO_PARSE_FLAG_COUNT,
+          "GUMBO_INSERTION_") != 0) {
     return 1;
   }
   if (gumbo_atoms_init_family(env, atoms->error_types, GUMBO_ERROR_TYPE_COUNT,
@@ -313,12 +337,10 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
                               GUMBO_ERROR_TYPE_COUNT, "GUMBO_ERR_") != 0) {
     return 1;
   }
-  if (gumbo_atoms_init_family(env, atoms->tokenizer_states,
-                              GUMBO_TOKENIZER_STATE_COUNT,
-                              kGumboTokenizerStateValues,
-                              kGumboTokenizerStateNames,
-                              GUMBO_TOKENIZER_STATE_COUNT,
-                              "GUMBO_ERR_TOKENIZER_") != 0) {
+  if (gumbo_atoms_init_family(
+          env, atoms->tokenizer_states, GUMBO_TOKENIZER_STATE_COUNT,
+          kGumboTokenizerStateValues, kGumboTokenizerStateNames,
+          GUMBO_TOKENIZER_STATE_COUNT, "GUMBO_ERR_TOKENIZER_") != 0) {
     return 1;
   }
   if (gumbo_atoms_init_family(env, atoms->token_types, GUMBO_TOKEN_TYPE_COUNT,
@@ -326,11 +348,10 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
                               GUMBO_TOKEN_TYPE_COUNT, "GUMBO_TOKEN_") != 0) {
     return 1;
   }
-  if (gumbo_atoms_init_family(env, atoms->insertion_modes,
-                              GUMBO_INSERTION_MODE_COUNT,
-                              kGumboInsertionModeValues,
-                              kGumboInsertionModeNames, GUMBO_INSERTION_MODE_COUNT,
-                              "GUMBO_INSERTION_MODE_") != 0) {
+  if (gumbo_atoms_init_family(
+          env, atoms->insertion_modes, GUMBO_INSERTION_MODE_COUNT,
+          kGumboInsertionModeValues, kGumboInsertionModeNames,
+          GUMBO_INSERTION_MODE_COUNT, "GUMBO_INSERTION_MODE_") != 0) {
     return 1;
   }
 
@@ -400,7 +421,8 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->node.line = enif_make_atom(env, "line");
   atoms->node.column = enif_make_atom(env, "column");
   atoms->node.offset = enif_make_atom(env, "offset");
-  atoms->node.argument_error_module = enif_make_atom(env, "Elixir.ArgumentError");
+  atoms->node.argument_error_module =
+      enif_make_atom(env, "Elixir.ArgumentError");
   atoms->node.exception_ = enif_make_atom(env, "__exception__");
   atoms->node.message = enif_make_atom(env, "message");
   atoms->node.invalid_node = enif_make_atom(env, "invalid_node");

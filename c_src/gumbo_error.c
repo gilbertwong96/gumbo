@@ -1,13 +1,14 @@
+#include "gumbo_error.h"
+
 #include <string.h>
 
 #include "error.h" /* gumbo's internal header; see the note below */
-#include "parser.h"
-#include "util.h" /* gumbo_parser_deallocate, for the rendered buffer */
 #include "gumbo.h"
 #include "gumbo_atoms.h"
-#include "gumbo_error.h"
 #include "gumbo_handle.h"
 #include "gumbo_node.h"
+#include "parser.h"
+#include "util.h" /* gumbo_parser_deallocate, for the rendered buffer */
 
 /* This file owns the GumboError surface: output_errors lists the indices
    into output->errors and error_details assembles the full map from one
@@ -63,8 +64,7 @@ static ERL_NIF_TERM gumbo_error_type_term(ErlNifEnv* env,
   return atoms->error_types[error->type];
 }
 
-static int gumbo_error_position_term(ErlNifEnv* env,
-                                     const gumbo_atoms_t* atoms,
+static int gumbo_error_position_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                      const GumboError* error,
                                      ERL_NIF_TERM* out) {
   return gumbo_node_position_map(env, atoms, error->position, out);
@@ -117,8 +117,7 @@ static int gumbo_error_render_term(ErlNifEnv* env, const gumbo_handle_t* h,
   GumboStringBuffer buffer;
   gumbo_string_buffer_init(&parser, &buffer);
   if (caret) {
-    gumbo_caret_diagnostic_to_string(&parser, error,
-                                     h->input_data, &buffer);
+    gumbo_caret_diagnostic_to_string(&parser, error, h->input_data, &buffer);
   } else {
     gumbo_error_to_string(&parser, error, &buffer);
   }
@@ -196,8 +195,7 @@ static int gumbo_error_tokenizer_term(ErlNifEnv* env,
 /* The named char-ref errors: text is a piece into the retained input (the
    bad reference as written). */
 static int gumbo_error_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                 const GumboError* error,
-                                 ERL_NIF_TERM* out) {
+                                 const GumboError* error, ERL_NIF_TERM* out) {
   switch (error->type) {
     case GUMBO_ERR_NAMED_CHAR_REF_WITHOUT_SEMICOLON:
     case GUMBO_ERR_NAMED_CHAR_REF_INVALID:
@@ -314,14 +312,10 @@ int gumbo_error_materialized_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                  const gumbo_handle_t* h,
                                  const GumboError* error, ERL_NIF_TERM* out) {
   ERL_NIF_TERM keys[GUMBO_ERROR_MATERIALIZED_COUNT] = {
-      atoms->error_.type,
-      atoms->error_.position,
-      atoms->error_.original_text,
-      atoms->error_.codepoint,
-      atoms->error_.tokenizer,
-      atoms->error_.text,
-      atoms->error_.duplicate_attr,
-      atoms->error_.parser_error,
+      atoms->error_.type,           atoms->error_.position,
+      atoms->error_.original_text,  atoms->error_.codepoint,
+      atoms->error_.tokenizer,      atoms->error_.text,
+      atoms->error_.duplicate_attr, atoms->error_.parser_error,
       atoms->error_.message,
   };
   ERL_NIF_TERM values[GUMBO_ERROR_MATERIALIZED_COUNT];
@@ -425,9 +419,8 @@ ERL_NIF_TERM gumbo_nif_error_caret(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   return gumbo_nif_error_render(env, atoms, argv, 1);
 }
 
-ERL_NIF_TERM gumbo_nif_output_errors(ErlNifEnv* env,
-                                     const gumbo_atoms_t* atoms, int argc,
-                                     const ERL_NIF_TERM argv[]) {
+ERL_NIF_TERM gumbo_nif_output_errors(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                     int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
 
   gumbo_handle_t* h;

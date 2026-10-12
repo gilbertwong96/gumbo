@@ -343,6 +343,45 @@ check-analyzer: $(GUMBO_SRC_STAMP)
 		|| { echo "FAIL: the analyzer found nothing in its own canary, so it proves nothing"; exit 1; }
 	@echo "PASS: $(words $(ANALYZER_SRCS)) of our C files are clean under the analyzer, and it still reports its canary"
 
+# The C that this repository owns is formatted the way the C it patches is formatted:
+# Google's style, which is what gumbo is written in, so a patch and the file it patches read
+# the same way. Only our own files are listed — the vendored copy is pinned, and reformatting
+# it would break every patch and the differential harness with it.
+#
+# clang-format ships inside Xcode's toolchain on macOS and with the clang packages elsewhere,
+# hence the fallback: no PATH edits are needed to run this, and a machine with neither gets a
+# message instead of a silent pass.
+C_FORMAT_FILES := $(wildcard c_src/*.c c_src/*.h c_src/test/*.c)
+CLANG_FORMAT ?= $(shell command -v clang-format > /dev/null 2>&1 && echo clang-format || echo xcrun clang-format)
+
+check-c-format:
+	@command -v $(word 1,$(CLANG_FORMAT)) > /dev/null 2>&1 || { \
+		echo "FAIL: $(CLANG_FORMAT) is not available, so the C style cannot be checked"; \
+		exit 1; \
+	}
+	@for f in $(C_FORMAT_FILES); do \
+		$(CLANG_FORMAT) --style=file --dry-run -Werror "$$f" 2>/dev/null \
+			|| { echo "FAIL: $$f is not clang-formatted (.clang-format)"; exit 1; }; \
+	done
+	@echo "PASS: $(words $(C_FORMAT_FILES)) of our C files match .clang-format"
+
+# Warnings as errors on our own C, plus the classes -Wall -Wextra leaves out that matter for
+# this code: implicit conversions between signed and unsigned (the ERTS API hands out ints
+# where sizes and enum bits are expected), prototype mismatches, and the conversions the
+# compiler otherwise takes on our behalf. The vendored files keep their own, narrower set —
+# they are not ours to clean, and GUMBO_CFLAGS says so.
+C_LINT_WARNINGS := -Wall -Wextra -Werror -Wshadow -Wconversion -Wcast-qual \
+	-Wpointer-arith -Wstrict-prototypes -Wmissing-prototypes -Wundef \
+	-Wwrite-strings -Wvla -Wdouble-promotion -Wnull-dereference -Wformat=2
+
+check-c-lint: $(GUMBO_SRC_STAMP)
+	@for f in $(wildcard c_src/*.c c_src/test/*.c); do \
+		$(CC) -fsyntax-only -std=c99 -Ic_src -I$(GUMBO_SRC_DIR)/src \
+			-I$(ERTS_INCLUDE_DIR) $(C_LINT_WARNINGS) "$$f" \
+			|| { echo "FAIL: $$f does not pass the lint warning set"; exit 1; }; \
+	done
+	@echo "PASS: $(words $(wildcard c_src/*.c c_src/test/*.c)) of our C files are clean under $(words $(C_LINT_WARNINGS)) warning classes"
+
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
 	@echo "--- crash canary: is the patched teardown still non-recursive? ---"
@@ -385,4 +424,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint
