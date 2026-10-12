@@ -308,6 +308,41 @@ check-stack-guard: $(PARITY_DUMP_BUILD)
 	@rm -f guard.log deep.log
 	@echo "PASS: the stack guard refuses past its budget, and a 200 000-level document needs no depth recursion to parse"
 
+# Static analysis of our own C, which is the one net there is for the enif_* misuse class:
+# a NIF that mishandles a term or an env takes the VM down with it, and AddressSanitizer
+# cannot reach it, because instrumenting our NIF means instrumenting the VM. The analyzer
+# reads the ERTS headers and does not need to link, so it can. It is also the net that
+# covers the C that is newest and least exercised — ours.
+#
+# The canary next to the probe is a deliberate use-after-free and the gate requires the
+# analyzer to report it: on its own, "the analyzer said nothing about our code" cannot be
+# told apart from "the analyzer said nothing", and this project has already shipped one
+# guard that could never fire. ANALYZER is a variable so a machine whose clang is named
+# something else can say so once rather than editing the target.
+ANALYZER ?= clang
+ANALYZER_CANARY := c_src/test/analyzer_canary.c
+ANALYZER_SRCS := $(wildcard c_src/*.c)
+
+check-analyzer: $(GUMBO_SRC_STAMP)
+	@command -v $(ANALYZER) > /dev/null || { \
+		echo "FAIL: $(ANALYZER) is not installed, and the analyzer is the only net for our own C"; \
+		echo "      set ANALYZER=... to a compiler that can --analyze"; \
+		exit 1; \
+	}
+	@for f in $(ANALYZER_SRCS); do \
+		out=$$($(ANALYZER) --analyze -std=c99 -Ic_src -I$(GUMBO_SRC_DIR)/src \
+			-I$(ERTS_INCLUDE_DIR) "$$f" -o /dev/null 2>&1); \
+		if echo "$$out" | grep -q 'warning:'; then \
+			echo "FAIL: the analyzer has something to say about $$f"; \
+			echo "$$out" | grep 'warning:' | head -10; \
+			exit 1; \
+		fi; \
+	done
+	@$(ANALYZER) --analyze -std=c99 $(ANALYZER_CANARY) -o /dev/null 2>&1 \
+		| grep -q 'warning:' \
+		|| { echo "FAIL: the analyzer found nothing in its own canary, so it proves nothing"; exit 1; }
+	@echo "PASS: $(words $(ANALYZER_SRCS)) of our C files are clean under the analyzer, and it still reports its canary"
+
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
 	@echo "--- crash canary: is the patched teardown still non-recursive? ---"
@@ -350,4 +385,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer
