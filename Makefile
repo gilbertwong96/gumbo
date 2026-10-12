@@ -3,12 +3,20 @@
 # 12-file list copied from c_src/gumbo-parser/meson.build rather than a glob,
 # so a file added upstream shows up as an explicit diff here instead of
 # silently changing the build.
+#
+# Those sources are not compiled in place: they are copied to $(GUMBO_SRC_DIR)
+# and the patch series under c_src/patches is applied to the copy, because the
+# submodule itself has to stay byte-identical to the tag it pins. Everything —
+# the vendored objects and our own includes of the vendored internals — builds
+# against the copy. See c_src/patches/README.md.
 
 CC ?= cc
 ERL ?= erl
 
 GUMBO_DIR := c_src/gumbo-parser
 GUMBO_HEADER := $(GUMBO_DIR)/src/gumbo.h
+GUMBO_PATCH_DIR := c_src/patches/gumbo-parser
+GUMBO_PATCHES := $(sort $(wildcard $(GUMBO_PATCH_DIR)/*.patch))
 
 # Where erl_nif.h lives.
 ERTS_INCLUDE_DIR := $(shell $(ERL) -noshell -eval 'io:format("~s/erts-~s/include", [code:root_dir(), erlang:system_info(version)])' -s init stop)
@@ -33,6 +41,13 @@ PRIV_DIR := priv
 OBJ_DIR := $(PRIV_DIR)/obj
 NIF_SO := $(PRIV_DIR)/gumbo_nif.so
 
+# The copy the build actually reads, and the stamp that records that it was made
+# from the current pin and the current patches. Both live under $(OBJ_DIR),
+# which is gitignored, so nothing here can touch what the submodule tracks.
+GUMBO_SRC_DIR := $(OBJ_DIR)/gumbo-src
+GUMBO_SRC_STAMP := $(GUMBO_SRC_DIR)/.patched
+GUMBO_VENDORED := $(wildcard $(GUMBO_DIR)/src/*)
+
 GUMBO_OBJS := $(GUMBO_SRCS:$(GUMBO_DIR)/src/%.c=$(OBJ_DIR)/gumbo-parser/%.o)
 NIF_OBJS := $(C_SRCS:c_src/%.c=$(OBJ_DIR)/%.o)
 OBJS := $(GUMBO_OBJS) $(NIF_OBJS)
@@ -44,7 +59,7 @@ CFLAGS ?= -O2
 # skipped rebuilds and the link could stitch objects compiled against
 # different struct layouts.
 ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -pthread -Wall -Wextra -MMD -MP \
-	-Ic_src -I$(GUMBO_DIR)/src -I$(ERTS_INCLUDE_DIR)
+	-Ic_src -I$(GUMBO_SRC_DIR)/src -I$(ERTS_INCLUDE_DIR)
 
 # The vendored gumbo-parser sources trip -Wunused-parameter and
 # -Wsign-compare in several places. They are vendored unpatched by policy,
@@ -71,9 +86,28 @@ $(GUMBO_HEADER):
 	@echo "  make gumbo-fetch"
 	@exit 1
 
-$(OBJS): $(GUMBO_HEADER)
+$(OBJS): $(GUMBO_SRC_STAMP)
 
-$(OBJ_DIR)/gumbo-parser/%.o: $(GUMBO_DIR)/src/%.c
+# A submodule bump changes $(GUMBO_VENDORED), and a patch edit changes
+# $(GUMBO_PATCHES), so either one rebuilds the copy from scratch rather than
+# leaving a tree that mixes patched and unpatched objects. `git apply` needs a
+# *relative* --directory and works outside a git repository, which is what a
+# build from a tarball, where the submodule is a plain directory, looks like.
+$(GUMBO_SRC_STAMP): $(GUMBO_VENDORED) $(GUMBO_PATCHES) | $(GUMBO_HEADER)
+	@echo "  vendored: copying $(GUMBO_DIR)/src and applying $(words $(GUMBO_PATCHES)) patch(es)"
+	@rm -rf $(GUMBO_SRC_DIR)
+	@mkdir -p $(GUMBO_SRC_DIR)
+	@cp -R $(GUMBO_DIR)/src $(GUMBO_SRC_DIR)/src
+	@for p in $(GUMBO_PATCHES); do \
+		git apply -p1 --directory=$(GUMBO_SRC_DIR) "$$p" || { \
+			echo "error: $$p does not apply to $(GUMBO_DIR)"; \
+			echo "       the pin moved, or the patch needs a rebase: c_src/patches/README.md"; \
+			exit 1; \
+		}; \
+	done
+	@touch $@
+
+$(OBJ_DIR)/gumbo-parser/%.o: $(GUMBO_SRC_DIR)/src/%.c $(GUMBO_SRC_STAMP)
 	@mkdir -p $(dir $@)
 	$(CC) $(GUMBO_CFLAGS) -c -o $@ $<
 
@@ -106,6 +140,28 @@ $(TEARDOWN_PROBE): $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS) c_src/gumbo_teardown.c
 	@mkdir -p $(dir $@)
 	$(CC) $(ALL_CFLAGS) -o $@ $(TEARDOWN_PROBE_SRC) $(GUMBO_OBJS) c_src/gumbo_teardown.c
 
+# A patch that no longer applies must fail the build rather than quietly leave
+# the vendored objects unpatched. This runs the same git-apply invocation the
+# build does, against a pristine copy, and also asserts the property the copy
+# exists to keep: the submodule itself has no tracked modifications.
+check-patch: | $(GUMBO_HEADER)
+	@rm -rf $(OBJ_DIR)/patch-check
+	@mkdir -p $(OBJ_DIR)/patch-check
+	@cp -R $(GUMBO_DIR)/src $(OBJ_DIR)/patch-check/src
+	@for p in $(GUMBO_PATCHES); do \
+		if ! git apply -p1 --directory=$(OBJ_DIR)/patch-check "$$p"; then \
+			echo "FAIL: $$p does not apply to the pinned $(GUMBO_DIR)"; \
+			exit 1; \
+		fi; \
+	done
+	@rm -rf $(OBJ_DIR)/patch-check
+	@if [ -n "$$(git -C $(GUMBO_DIR) status --porcelain --untracked-files=no)" ]; then \
+		echo "FAIL: $(GUMBO_DIR) has tracked modifications; patches belong in $(GUMBO_PATCH_DIR)"; \
+		git -C $(GUMBO_DIR) status --short; \
+		exit 1; \
+	fi
+	@echo "PASS: $(words $(GUMBO_PATCHES)) patch(es) apply to the pinned $(GUMBO_DIR), which is unmodified"
+
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
 	@echo "--- crash canary: does gumbo's teardown still recurse? ---"
@@ -135,4 +191,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown
+.PHONY: all clean gumbo-fetch check-teardown check-patch

@@ -277,20 +277,24 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   }
 
   if (gumbo_node_table_build(h) != 0) {
-    /* The table only partially covers the tree, so the teardown above
-       cannot empty every children vector and destroy_node inside
-       gumbo_destroy_output would still recurse into unvisited subtrees
-       on a GC thread. This is unreachable — OOM, or a non-NULL output->root
-       missing from the table — and the parse already raises; leak the tree
-       rather than risk that recursion. */
+    /* The table only partly covers the tree, so the destructor's teardown pass
+       cannot run — it frees by table index. It no longer has to: the vendored
+       destroy_node is iterative as of c_src/patches/0001, so handing the whole
+       tree to gumbo_destroy_output is safe at any depth, which is exactly what
+       the destructor does when there is no table. This is unreachable in
+       practice — OOM, or a non-NULL output->root missing from the table — and
+       the parse raises either way. */
+    gumbo_destroy_output(&h->options, h->output);
     h->output = NULL;
     enif_release_resource(h);
     return enif_make_badarg(env);
   }
   if (gumbo_node_table_size(h) != 0) {
-    /* Same unreachable OOM path as the table build: a partially filled
+    /* Same unreachable OOM path as the table build: a partly filled
        parent/size pair would silently corrupt the node accessors' index
-       arithmetic. Leak the tree rather than ship that. */
+       arithmetic, so the handle is not usable — but the tree is still entirely
+       ours to free. */
+    gumbo_destroy_output(&h->options, h->output);
     h->output = NULL;
     enif_release_resource(h);
     return enif_make_badarg(env);

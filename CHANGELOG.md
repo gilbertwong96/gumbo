@@ -56,6 +56,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three "does not nest" rows produce 40 002 errors each on a one-line document, and
   the suite materializes every error.
 
+- The build now applies
+  `c_src/patches/gumbo-parser/0001-make-destroy_node-iterative.patch` to a copy of
+  the vendored sources under `priv/obj`, leaving the submodule byte-identical to
+  its 0.14.1 pin. The patch is upstream's own fix for the recursive teardown
+  (google/gumbo-parser#387, which Nokogiri ships): `destroy_node` no longer
+  recurses, so a deeply nested document is freed safely instead of by luck of
+  the stack, and the `<frameset>` path that used to die inside the parse now
+  survives at any depth. `mix ci` runs `make check-patch`, so a patch that stops
+  applying to a new pin is a red build rather than a build that quietly drops
+  the fix.
+
 ### Notes
 
 gumbo-parser 0.14.1's own `gumbo_destroy_output` frees the tree with

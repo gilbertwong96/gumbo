@@ -1,0 +1,86 @@
+# Patches against the vendored gumbo-parser
+
+`c_src/gumbo-parser` is a submodule pinned to the upstream 0.14.1 tag. This
+directory holds patches applied to a **copy** of it at build time.
+
+Patching the submodule in place was the alternative, and it is rejected: an
+edited submodule working tree is a `git status` that says `M c_src/gumbo-parser`
+forever, `git submodule status` stops being a record of what we build, and
+`git submodule update` silently throws the patch away. A copy keeps the pin
+honest and makes the patch a reviewed, versioned file instead of a local edit.
+
+## How the build applies them
+
+From `Makefile`:
+
+1. `$(OBJ_DIR)/gumbo-src/` (`priv/obj`, gitignored) gets a copy of
+   `c_src/gumbo-parser/src`.
+2. Every `*.patch` here is applied to that copy with
+   `git apply -p1 --directory=$(OBJ_DIR)/gumbo-src` — in file-name order, so the
+   numeric prefixes are the application order.
+3. All twelve vendored objects are compiled from the copy, and `-I` points at
+   the copy too, so `c_src/*.c`, which includes the vendored internals
+   (`parser.h`, `util.h`, `attribute.h`), compiles against exactly what is
+   linked.
+
+A stamp file (`$(GUMBO_SRC_STAMP)`) drives the copy, so an unchanged tree does
+no work, and editing either a patch or a vendored source re-copies and rebuilds
+the twelve objects.
+
+`--directory` must be **relative**; `git apply` rejects an absolute one
+(`error: invalid path`). `git apply` itself works outside a git repository, so
+building this package from a tarball, where the submodule is a plain directory,
+works the same way.
+
+## The rules for a patch
+
+- One patch per file, numbered (`0001-`, `0002-`), unified diff with `a/` and
+  `b/` prefixes so `-p1` applies it.
+- Do not hand-write a patch. Generate it, or the hunk counts will not match and
+  `git apply` will say `corrupt patch` — which is what happened the first time
+  here. The recipe for the current one is below.
+- Say *why* in the header file, since the patch cannot carry a commit message
+  that survives `git apply`.
+
+## How it is checked
+
+`make check-patch` (wired into `mix ci` as `check.patch`) re-applies the whole
+series to a pristine copy under `$(OBJ_DIR)/patch-check` and fails if it does not
+apply, and fails if `c_src/gumbo-parser` has any tracked modification. The point
+is a submodule bump: a new pin is a new set of files, and the gate turns "the
+patch stopped applying" into a red build instead of a build that silently
+compiles unpatched gumbo.
+
+## 0001-make-destroy_node-iterative.patch
+
+`destroy_node` recursed once per tree level. Two call sites are reachable at
+input depth — the destructor, on whichever thread runs the GC, and
+`handle_in_body`'s `<frameset>` branch, *during the parse* — and neither the
+recursion nor the nesting depth is capped in 0.14.1. Measured on a 320 KB stack
+(the default for an Erlang dirty CPU scheduler thread, `+sssdcpu`'s 40
+kilowords): a document survives 6 000 levels of nesting and dies at 8 000, and a
+40 KB document reaches that. The frameset path is the one that cannot be worked
+around from outside `parser.c`, because the call is static and mid-stream.
+
+This is upstream's own fix, offered in google/gumbo-parser#387 and never merged
+(the Codeberg continuation still has the recursion, and 0.14.1 is its newest
+tag). Nokogiri's vendored gumbo ships it — its `gumbo-parser/src/README.md`
+changelog lists "Make `destroy_node()` function non-recursive" twice — which is
+also what let Nokogiri put a `max_tree_depth` on top. See the ledger entry of
+2026-10-13 for the measurements and for what was checked about the alternatives.
+
+To regenerate it:
+
+```sh
+rm -rf /tmp/gp && mkdir -p /tmp/gp/{a,b}/src
+cp c_src/gumbo-parser/src/parser.c /tmp/gp/a/src/parser.c
+cp /tmp/gp/a/src/parser.c /tmp/gp/b/src/parser.c
+# edit /tmp/gp/b/src/parser.c: replace destroy_node's two recursive walks with a
+# heap worklist, as the patch does
+cd /tmp/gp
+diff -u a/src/parser.c b/src/parser.c \
+  | sed -E 's|^(--- a/src/parser\.c)\t.*|\1|; s|^(\+\+\+ b/src/parser\.c)\t.*|\1|' \
+  > c_src/patches/gumbo-parser/0001-make-destroy_node-iterative.patch
+```
+
+(the `sed` drops the timestamps so regenerating twice gives the same file)

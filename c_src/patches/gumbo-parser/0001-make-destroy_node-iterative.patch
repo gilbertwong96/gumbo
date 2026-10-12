@@ -1,0 +1,87 @@
+--- a/src/parser.c
++++ b/src/parser.c
+@@ -2669,37 +2669,54 @@
+ }
+ 
+ static void destroy_node(GumboParser* parser, GumboNode* node) {
+-  switch (node->type) {
+-    case GUMBO_NODE_DOCUMENT: {
+-      GumboDocument* doc = &node->v.document;
+-      for (unsigned int i = 0; i < doc->children.length; ++i) {
+-        destroy_node(parser, doc->children.data[i]);
+-      }
+-      gumbo_parser_deallocate(parser, (void*) doc->children.data);
+-      gumbo_parser_deallocate(parser, (void*) doc->name);
+-      gumbo_parser_deallocate(parser, (void*) doc->public_identifier);
+-      gumbo_parser_deallocate(parser, (void*) doc->system_identifier);
+-    } break;
+-    case GUMBO_NODE_TEMPLATE:
+-    case GUMBO_NODE_ELEMENT:
+-      for (unsigned int i = 0; i < node->v.element.attributes.length; ++i) {
+-        gumbo_destroy_attribute(parser, node->v.element.attributes.data[i]);
+-      }
+-      gumbo_parser_deallocate(parser, node->v.element.attributes.data);
+-      for (unsigned int i = 0; i < node->v.element.children.length; ++i) {
+-        destroy_node(parser, node->v.element.children.data[i]);
+-      }
+-      gumbo_parser_deallocate(parser, node->v.element.children.data);
+-      break;
+-    case GUMBO_NODE_TEXT:
+-    case GUMBO_NODE_CDATA:
+-    case GUMBO_NODE_COMMENT:
+-    case GUMBO_NODE_WHITESPACE:
+-    case GUMBO_NODE_PROCESSING_INSTRUCTION:
+-      gumbo_parser_deallocate(parser, (void*) node->v.text.text);
+-      break;
++  // Iterative, with the children still to visit held on the heap instead of on
++  // the C stack. This function is called on trees whose depth is a function of
++  // the input -- from the destructor, on whichever thread runs the GC, and from
++  // handle_in_body's <frameset> path, during the parse itself -- so a recursive
++  // walk puts the host process's stack size between any document and its own
++  // freedom. A node is freed in preorder: its children are moved to the worklist
++  // before its own storage is released, so no free ever reads a freed node, and
++  // the order the nodes are freed in is the same as before.
++  GumboVector pending = kGumboEmptyVector;
++  gumbo_vector_init(parser, 10, &pending);
++  gumbo_vector_add(parser, (void*) node, &pending);
++
++  node = (GumboNode*) gumbo_vector_pop(parser, &pending);
++  while (node != NULL) {
++    switch (node->type) {
++      case GUMBO_NODE_DOCUMENT: {
++        GumboDocument* doc = &node->v.document;
++        for (unsigned int i = 0; i < doc->children.length; ++i) {
++          gumbo_vector_add(parser, doc->children.data[i], &pending);
++        }
++        gumbo_parser_deallocate(parser, (void*) doc->children.data);
++        gumbo_parser_deallocate(parser, (void*) doc->name);
++        gumbo_parser_deallocate(parser, (void*) doc->public_identifier);
++        gumbo_parser_deallocate(parser, (void*) doc->system_identifier);
++      } break;
++      case GUMBO_NODE_TEMPLATE:
++      case GUMBO_NODE_ELEMENT:
++        for (unsigned int i = 0; i < node->v.element.attributes.length; ++i) {
++          gumbo_destroy_attribute(parser, node->v.element.attributes.data[i]);
++        }
++        gumbo_parser_deallocate(parser, node->v.element.attributes.data);
++        for (unsigned int i = 0; i < node->v.element.children.length; ++i) {
++          gumbo_vector_add(parser, node->v.element.children.data[i], &pending);
++        }
++        gumbo_parser_deallocate(parser, node->v.element.children.data);
++        break;
++      case GUMBO_NODE_TEXT:
++      case GUMBO_NODE_CDATA:
++      case GUMBO_NODE_COMMENT:
++      case GUMBO_NODE_WHITESPACE:
++      case GUMBO_NODE_PROCESSING_INSTRUCTION:
++        gumbo_parser_deallocate(parser, (void*) node->v.text.text);
++        break;
++    }
++    gumbo_parser_deallocate(parser, node);
++    node = (GumboNode*) gumbo_vector_pop(parser, &pending);
+   }
+-  gumbo_parser_deallocate(parser, node);
++  gumbo_vector_destroy(parser, &pending);
+ }
+ 
+ // http://www.whatwg.org/specs/web-apps/current-work/complete/tokenization.html#parsing-main-inbody
