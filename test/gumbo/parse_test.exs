@@ -7,9 +7,22 @@ defmodule Gumbo.ParseTest do
     assert Gumbo.Output.node_count(output) > 0
   end
 
-  test "check_size/1 rejects above 4 GB" do
-    assert Gumbo.Options.check_size(4_294_967_295) == :ok
-    assert Gumbo.Options.check_size(4_294_967_296) == {:error, :input_too_large}
+  test "check_size/1 rejects above the stack budget's limit" do
+    assert Gumbo.Options.check_size(16_777_216) == :ok
+    assert Gumbo.Options.check_size(16_777_217) == {:error, :input_too_large}
+  end
+
+  test "an input over the limit is refused end to end, by the NIF too" do
+    over = String.duplicate("x", 16_777_217)
+
+    assert {:error, :input_too_large} = Gumbo.parse(over)
+
+    # Gumbo.Native.parse/2 is private but public in the NIF, so it is the
+    # backstop: the same limit has to hold with the Elixir check bypassed.
+    {:ok, opts} = Gumbo.Options.new([])
+
+    assert {:error, :input_too_large} =
+             Gumbo.Native.parse(over, Gumbo.Options.to_nif(opts))
   end
 
   test "an unknown or out-of-range option is rejected before parsing" do
