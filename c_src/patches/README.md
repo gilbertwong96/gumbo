@@ -75,6 +75,26 @@ silent-corruption bugs in 0002 while that patch was being written (a struct copy
 that carried the new flag onto a clone, and a tenth place where the stack is
 mutated, in adoption agency step 13.7).
 
+`make check-sanitizers` (wired in as `check.sanitizers`) builds the same harness
+against the patched sources with AddressSanitizer and UndefinedBehaviorSanitizer and
+runs the seeded corpus plus ten adversarial shapes through it. It is the only net
+there is for a memory-safety bug inside gumbo itself — no amount of care on our side
+of the boundary can prove the absence of one — and it is most of what `mix ci` now
+costs (about 33 of its 50 seconds, the instrumented compile being the bulk).
+
+It earned that immediately by finding a bug in **our own fourth patch**: the tokenizer
+state is allocated rather than zeroed and the one function that would clear it is
+compiled out without `NDEBUG`, so the new attribute index was read as uninitialised
+memory on the first tag. Builds without ASan happened to get zeroed pages and never
+noticed; ASan fills fresh bytes with a pattern, which turned a latent garbage pointer
+into an assertion failure. It then found one in the throwaway harness itself — a heap
+overflow in the shape builder, from trusting its own bytes-per-level arithmetic —
+which is why the shipped builder appends through a bounds-checked `emit`.
+
+What it does not cover: our own `erl_nif_*` plumbing, which cannot be sanitised without
+instrumenting the VM itself, and the `enif_*` misuse class that killed the VM once
+before.
+
 `make check-teardown` (wired in as `test.teardown_contract`) holds the patched
 teardown to both properties that matter: the allocator balance is exactly zero, and
 a 20 000-level tree survives a 320 KB stack. Both are hard gates now — after the

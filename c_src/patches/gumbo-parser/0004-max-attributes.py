@@ -207,6 +207,25 @@ static void grow_attribute_buckets(GumboParser* parser, GumboTagState* tag_state
 static void mark_tag_state_as_empty(GumboTagState* tag_state) {""",
     )
 
+    # The tokenizer state is allocated, not zeroed, and the one place that would
+    # clear the tag state (mark_tag_state_as_empty) is compiled out without NDEBUG.
+    # _attributes survives that because start_new_tag overwrites it before use; the
+    # index below has to be cleared explicitly, or start_new_tag's assert fires on
+    # whatever the allocator left there — which is what a build under ASan does, since
+    # ASan fills fresh bytes with a pattern instead of handing back zeroed pages.
+    text = sub(
+        text,
+        """  tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;""",
+        """  tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;
+  tokenizer->_tag_state._attribute_buckets.data = NULL;
+  tokenizer->_tag_state._attribute_buckets.length = 0;
+  tokenizer->_tag_state._attribute_buckets.capacity = 0;
+  tokenizer->_tag_state._attribute_next.data = NULL;
+  tokenizer->_tag_state._attribute_next.length = 0;
+  tokenizer->_tag_state._attribute_next.capacity = 0;
+  tokenizer->_tag_state._attribute_hash_seed = 0;""",
+    )
+
     # The three places the tag's attributes are dealt with, and the one that starts
     # a tag: the index has to be released at all four, or it leaks per tag.
     text = sub(

@@ -39,9 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the cap. gumbo records one error per unclosed element at EOF and each of those
   carries a copy of the open-element tag stack, so an N-deep unclosed document
   cost N² pointers: a 100 KB document allocated 3.2 GB and 200 KB would have taken
-  ~12.8 GB, reachable from input 80x smaller than the accepted input limit. The
-  cap makes that memory `cap * depth` instead, which is ~203 MiB for anything that
-  finishes inside a minute. `max_errors: -1` still returns every error.
+  ~12.8 GB, reachable from input 80x smaller than the accepted input limit. A later
+  patch caps what one error keeps at its innermost 32 open-element tags, so a capped
+  run holds at most `cap * 32` entries rather than `cap * depth`.
+  `max_errors: -1` still returns every error.
 
 - **`materialize/2`'s error maps no longer carry `caret`.** gumbo renders a caret
   as the whole source line with column padding, so one caret costs O(line length),
@@ -84,6 +85,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   20 000 allocates 18.7 MB instead of 6.4 GB. Tree construction is unchanged —
   `make check-parity` asserts that over a seeded corpus against the pinned sources —
   but an error deep in a document now reports at most 32 open-element tags.
+
+- `mix ci` grew a sanitizer gate: the same differential harness, built against the
+  patched sources with AddressSanitizer and UndefinedBehaviorSanitizer, over the
+  corpus and ten adversarial shapes. It is the only net there is for a memory-safety
+  bug inside gumbo itself, and it found one in the fourth patch as soon as it ran —
+  the new attribute index was read as uninitialised memory on the first tag of every
+  parse, which was invisible to builds that happened to get zeroed pages.
 
 ### Notes
 
