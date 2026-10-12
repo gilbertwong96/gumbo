@@ -50,7 +50,8 @@ defmodule Gumbo.MixProject do
         "ci.dead_code",
         "test",
         "test.small_stack",
-        "test.teardown_contract"
+        "test.teardown_contract",
+        "check.patch"
       ],
 
       # `reach.check --dead-code` only renders: unlike --smells it never reads
@@ -82,6 +83,18 @@ defmodule Gumbo.MixProject do
 
         if status != 0 do
           Mix.raise("test.small_stack failed with status #{inspect(status)}")
+        end
+      end,
+      # The vendored sources are patched out of tree, so the patch has to keep
+      # applying: a submodule bump that rots it must be a red build, not a build
+      # that compiles unpatched gumbo and quietly loses the fix. make's exit
+      # status carries that, so it has to propagate.
+      "check.patch": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-patch"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.patch failed with status #{inspect(status)}")
         end
       end,
       "test.teardown_contract": fn _ ->
