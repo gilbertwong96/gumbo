@@ -23,18 +23,20 @@ defmodule Gumbo.Options do
   @max_input_bytes 16_777_216
 
   # GumboOptions.max_errors, where -1 means uncapped. The default is bounded
-  # rather than -1 for the same reason the input cap exists: unbounded error
-  # recording is a memory hazard, not merely a long list. gumbo records one
-  # error per unclosed element at EOF and each of those carries a copy of the
-  # open-element tag stack, so an N-deep unclosed document costs N^2 pointers —
-  # measured, 20 000 unclosed <div>s (100 KB of input) produced 400 040 000 stack
-  # entries and 3.2 GB of allocation, and doubling the input quadruples that.
+  # rather than -1 because unbounded error recording is a memory hazard, not merely
+  # a long list: gumbo records one error per unclosed element at EOF, and one per
+  # unmatched end tag, and each of those used to carry a copy of the whole
+  # open-element tag stack. Measured, 20 000 unclosed <div>s (100 KB of input)
+  # produced 400 040 000 stack entries and 3.2 GB of allocation, and the same depth
+  # followed by 20 000 </p> produced 6.4 GB — quadratic in the input, so no limit on
+  # the input's length could bound it.
   #
-  # With a cap C the cost is C * depth, and the depth a parse can reach is itself
-  # bounded by that parse's quadratic time (0.93 ns * depth^2, measured at four
-  # depths), so anything finishing inside a minute has depth <= ~254 000 and 100
-  # errors cost at most ~203 MiB of tag stacks. `max_errors: -1` stays available
-  # for callers who want every error and will own that cost.
+  # c_src/patches/0003 now caps what one error keeps at its innermost 32 tags, so a
+  # capped run holds at most C * 32 entries (100 * 32 = 3 200 today) rather than
+  # C * depth. This default still decides how many errors a caller gets, and
+  # `max_errors: -1` still lifts it for callers who want every error and will own
+  # the cost: with the cap lifted, the error vector is linear in the input rather
+  # than quadratic.
   @max_errors_default 100
   @c_int_max 2_147_483_647
 

@@ -52,6 +52,7 @@ defmodule Gumbo.MixProject do
         "test.small_stack",
         "test.teardown_contract",
         "check.patch",
+        "check.parity",
         "check.clean_build"
       ],
 
@@ -102,6 +103,20 @@ defmodule Gumbo.MixProject do
       # clone, a cold CI cache and a hex consumer all do, and it is the one path the
       # warm tree this gate runs in cannot test. Both a stale object rule and the
       # -include handling of a not-yet-written .d file were wrong exactly there.
+      # The patches change how the parser decides what to build, and an answer that
+      # is off by one does not crash or leak — it silently produces a different
+      # tree, which is the one thing the shape matrix cannot see. make check-parity
+      # parses a seeded corpus with the patched objects and with the pinned sources
+      # and compares the trees node by node. It found two silent-corruption bugs in
+      # the second patch, so it stays.
+      "check.parity": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-parity"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.parity failed with status #{inspect(status)}")
+        end
+      end,
       "check.clean_build": fn _ ->
         {_output, status} =
           System.cmd("make", ["check-clean-build"], into: IO.stream(), stderr_to_stdout: true)

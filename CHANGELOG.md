@@ -74,6 +74,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gumbo_destroy_output`, and its crash canary is now a hard gate rather than an
   informational note.
 
+- The parse is no longer quadratic in nesting depth, and neither is the error
+  vector. Two more patches in `c_src/patches/gumbo-parser` answer the two per-tag
+  queries over the stack of open elements in O(1) instead of by walking it, and cap
+  what one error keeps of that stack at its innermost 32 entries. Measured:
+  `<div>` x 40 000 parses in 6.7 ms instead of 1 223 ms and `<b>` x 40 000 in 6.3 ms
+  instead of 287 ms, so every shape in the matrix is linear; a 100 KB unclosed
+  document allocates 9.3 MB instead of 3.2 GB, and 20 000 unmatched `</p>` at depth
+  20 000 allocates 18.7 MB instead of 6.4 GB. Tree construction is unchanged —
+  `make check-parity` asserts that over a seeded corpus against the pinned sources —
+  but an error deep in a document now reports at most 32 open-element tags.
+
 ### Notes
 
 gumbo-parser 0.14.1's own `gumbo_destroy_output` frees the tree with
