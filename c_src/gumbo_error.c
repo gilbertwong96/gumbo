@@ -273,7 +273,7 @@ static int gumbo_error_parser_error_term(ErlNifEnv* env,
 /* ---- the NIF entry points ---- */
 
 #define GUMBO_ERROR_FIELDS_COUNT 8
-#define GUMBO_ERROR_DETAILS_COUNT 10
+#define GUMBO_ERROR_MATERIALIZED_COUNT 9
 
 /* The eight fields read off the error in place: type, position,
    original_text, codepoint, tokenizer, text, duplicate_attr, parser_error.
@@ -302,13 +302,18 @@ static int gumbo_error_fields_values(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   return 1;
 }
 
-/* The ten-field map materialize's errors list uses, so the eager and lazy
-   error surfaces cannot disagree. message and caret are the two fields that
-   render, kept last so the cheap extraction fills the front of the array. */
-int gumbo_error_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                            const gumbo_handle_t* h, const GumboError* error,
-                            ERL_NIF_TERM* out) {
-  ERL_NIF_TERM keys[GUMBO_ERROR_DETAILS_COUNT] = {
+/* The nine-field map materialize's errors list carries: the eight accessor
+   fields plus the rendered message. Error.details/1 has a tenth, the rendered
+   caret, and materialize deliberately does not — gumbo renders a caret as the
+   whole source line with column-1 spaces, so one caret is O(line length), and
+   materialize builds one of these maps per error. Measured on a 420 KB
+   single-line document: 40 002 errors cost 426 KB of fresh binaries per 1 000
+   errors, a 12.7 s call, and a ~17 GB term. caret/1 on a live error still
+   renders it, one error at a time, and that is bounded by a single line. */
+int gumbo_error_materialized_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                 const gumbo_handle_t* h,
+                                 const GumboError* error, ERL_NIF_TERM* out) {
+  ERL_NIF_TERM keys[GUMBO_ERROR_MATERIALIZED_COUNT] = {
       atoms->error_.type,
       atoms->error_.position,
       atoms->error_.original_text,
@@ -318,16 +323,14 @@ int gumbo_error_details_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       atoms->error_.duplicate_attr,
       atoms->error_.parser_error,
       atoms->error_.message,
-      atoms->error_.caret,
   };
-  ERL_NIF_TERM values[GUMBO_ERROR_DETAILS_COUNT];
+  ERL_NIF_TERM values[GUMBO_ERROR_MATERIALIZED_COUNT];
   if (!gumbo_error_fields_values(env, atoms, h, error, values) ||
-      !gumbo_error_render_term(env, h, error, 0, &values[8]) ||
-      !gumbo_error_render_term(env, h, error, 1, &values[9])) {
+      !gumbo_error_render_term(env, h, error, 0, &values[8])) {
     return 0;
   }
   return enif_make_map_from_arrays(env, keys, values,
-                                   GUMBO_ERROR_DETAILS_COUNT, out);
+                                   GUMBO_ERROR_MATERIALIZED_COUNT, out);
 }
 
 /* The same eight fields as a map of their own, so a scalar accessor never
