@@ -19,8 +19,8 @@
    surface and wrong in the materialized one. Only the key names differ
    where the materialized shape renames them: :position -> :start_position
    and :doctype_name -> :name, per the design's :full shape. Attribute maps
-   reuse gumbo_attr_details_map and error maps gumbo_error_details_map,
-   likewise one builder per surface.
+   reuse gumbo_attr_details_map and error maps gumbo_error_materialized_map:
+   one builder per surface, in the fields the two surfaces share.
 
    Every term is built in the caller's environment per call; atoms are
    immediates and the only terms that outlive a call. Allocation failure
@@ -275,14 +275,15 @@ ERL_NIF_TERM gumbo_nif_materialize_output(ErlNifEnv* env,
   gumbo_materialize_range(env, atoms, h, 0, h->node_count, detail, terms,
                           scratch);
 
-  /* The errors vector in source order, each rendered by the same builder
-     error_details/1 uses; the detail option does not apply to errors. */
+  /* The errors vector in source order, each as gumbo_error_materialized_map
+     builds it: the eight fields plus the rendered message, and deliberately no
+     caret. The detail option does not apply to errors. */
   ERL_NIF_TERM errors = enif_make_list(env, 0);
   GumboVector* vector = &h->output->errors;
   unsigned int i;
   for (i = vector->length; i-- > 0;) {
     ERL_NIF_TERM map;
-    if (!gumbo_error_details_map(env, atoms, h, vector->data[i], &map)) {
+    if (!gumbo_error_materialized_map(env, atoms, h, vector->data[i], &map)) {
       enif_free(terms);
       enif_free(scratch);
       return enif_make_badarg(env);

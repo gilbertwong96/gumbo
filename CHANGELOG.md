@@ -36,25 +36,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `:max_errors` now defaults to `100` instead of gumbo's `-1`, which disables
-  the cap. Two separate costs scale with the number of recorded errors, and both
-  were reachable from small inputs:
+  the cap. gumbo records one error per unclosed element at EOF and each of those
+  carries a copy of the open-element tag stack, so an N-deep unclosed document
+  cost N² pointers: a 100 KB document allocated 3.2 GB and 200 KB would have taken
+  ~12.8 GB, reachable from input 80x smaller than the accepted input limit. The
+  cap makes that memory `cap * depth` instead, which is ~203 MiB for anything that
+  finishes inside a minute. `max_errors: -1` still returns every error.
 
-  - **the parse's memory.** gumbo records one error per unclosed element at EOF
-    and each of those carries a copy of the open-element tag stack, so an N-deep
-    unclosed document cost N² pointers: a 100 KB document allocated 3.2 GB, and
-    200 KB would have taken ~12.8 GB.
-  - **`materialize/2`'s memory and time, which was the larger one.** Each error
-    map carries a `caret` string, and gumbo renders that caret as the whole line
-    with padding — so one error on a single-line document costs O(line length).
-    Measured: a 420 KB one-line document with 40 002 errors produced 420 KB per
-    error, 426 MB of fresh binaries per 1 000 errors, and a 12.7 s
-    `materialize/2`. The cap bounds that at 100 × line length instead.
+- **`materialize/2`'s error maps no longer carry `caret`.** gumbo renders a caret
+  as the whole source line with column padding, so one caret costs O(line length),
+  and materialize builds one map per error: measured, 40 002 errors on a 420 KB
+  single-line document cost 426 KB of fresh binaries per 1 000 errors, a 12.7 s
+  call, and a ~17 GB term. `Gumbo.Error.caret/1` still renders it for any live
+  error, one at a time and bounded by a single line, and `Gumbo.Error.details/1`
+  still returns all ten fields for a single error. A materialized error map is that
+  map minus `:caret`.
 
-  The default keeps the parse under ~203 MiB of tag stacks and materialize under
-  100 carets, and `max_errors: -1` still returns every error for callers who want
-  it and will own both costs. This also made `mix test.small_stack` 6.7x faster
-  (38.1 s -> 5.7 s): its three "does not nest" rows produce 40 002 errors each on
-  a one-line document, and the suite materializes every error.
+  Together these made `mix test.small_stack` 6.7x faster (38.1 s -> 5.7 s): its
+  three "does not nest" rows produce 40 002 errors each on a one-line document, and
+  the suite materializes every error.
 
 ### Notes
 

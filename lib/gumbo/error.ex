@@ -195,7 +195,10 @@ defmodule Gumbo.Error do
 
   The map keys are the accessor names above, with `nil` for fields the error
   type does not carry, so `details(error)[:type] == type(error)` for every
-  key. The deliberate exception to the `ArgumentError` contract, matching
+  key. `Gumbo.materialize/2`'s error maps are this map minus `:caret`: it builds
+  one map per error and a caret renders the whole source line, so see
+  `caret/1` for that field on a single error. The deliberate exception to the
+  `ArgumentError` contract, matching
   `Gumbo.Node.details/1`: a caller asking for a whole error branches on
   `{:error, :invalid_node}` rather than rescues.
 

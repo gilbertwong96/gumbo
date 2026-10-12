@@ -134,14 +134,23 @@ defmodule Gumbo.MaterializeTest do
     assert_raise ArgumentError, fn -> Gumbo.materialize(forged) end
   end
 
-  test "errors materialize as the maps Error.details/1 returns" do
+  # The caret renders the whole source line — 420 KB per error on a single-line
+  # document, and 426 KB of fresh binaries per 1 000 errors — so materialize, which
+  # builds one of these maps per error, must not render it: at 40 002 errors that
+  # was a 12.7 s call and a ~17 GB term from a 420 KB input. The live accessors
+  # still render it, one error at a time, which is bounded by one line.
+  test "errors materialize as Error.details/1 minus the rendered caret" do
     {:ok, output} = Gumbo.parse(~s(<div a=1 a=2></div>))
     [error | _] = Gumbo.materialize(output).errors
     assert error.type == :duplicate_attr
+    refute Map.has_key?(error, :caret)
 
     error_node = output |> Output.errors() |> hd()
     assert {:ok, details} = Error.details(error_node)
-    assert error == details
+    assert error == Map.delete(details, :caret)
+
+    # Available on demand, against the source the handle still retains.
+    assert is_binary(Error.caret(error_node))
   end
 
   @tag :small_stack
