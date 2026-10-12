@@ -93,6 +93,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the new attribute index was read as uninitialised memory on the first tag of every
   parse, which was invisible to builds that happened to get zeroed pages.
 
+- `mix ci` also runs `clang --analyze` over this library's own C, which is the newest
+  and least exercised code here and the only place AddressSanitizer cannot look:
+  instrumenting the NIF would mean instrumenting the VM. Its canary file is a deliberate
+  use-after-free and the gate requires the analyzer to report it, because a gate that
+  cannot fail proves nothing — which took two failed attempts to verify, recorded in the
+  ledger, including the finding that the analyzer cannot model `enif_alloc`/`enif_free` as
+  a pair.
+
 - A stack budget guard, so a recursion nobody has measured is refused rather than
   fatal: the parse is told how much stack it has (this library already measures the
   thread for the sized-thread decision) and stops before it runs out, reporting

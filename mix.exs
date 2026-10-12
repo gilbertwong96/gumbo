@@ -54,6 +54,7 @@ defmodule Gumbo.MixProject do
         "check.patch",
         "check.parity",
         "check.stack_guard",
+        "check.analyzer",
         "check.sanitizers",
         "check.clean_build"
       ],
@@ -138,6 +139,22 @@ defmodule Gumbo.MixProject do
 
         if status != 0 do
           Mix.raise("check.stack_guard failed with status #{inspect(status)}")
+        end
+      end,
+      # The only net for our own C, which is the newest and least exercised code in the
+      # repository, and the only one that can look at anything at all where the sanitizers
+      # cannot reach (instrumenting our NIF would mean instrumenting the VM). It is clean
+      # today, and two attempts to verify it were needed to establish that "clean" was
+      # worth anything: the first injected bug was unreachable dead code, which the analyzer
+      # prunes, and the second used enif_alloc/enif_free, which it cannot model because they
+      # are declarations in a header. A null dereference in an exported function is what
+      # proved the gate can fail.
+      "check.analyzer": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-analyzer"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.analyzer failed with status #{inspect(status)}")
         end
       end,
       "check.sanitizers": fn _ ->
