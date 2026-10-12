@@ -51,7 +51,8 @@ defmodule Gumbo.MixProject do
         "test",
         "test.small_stack",
         "test.teardown_contract",
-        "check.patch"
+        "check.patch",
+        "check.clean_build"
       ],
 
       # `reach.check --dead-code` only renders: unlike --smells it never reads
@@ -97,9 +98,23 @@ defmodule Gumbo.MixProject do
           Mix.raise("check.patch failed with status #{inspect(status)}")
         end
       end,
+      # The build has to work from an empty object directory: that is what a fresh
+      # clone, a cold CI cache and a hex consumer all do, and it is the one path the
+      # warm tree this gate runs in cannot test. Both a stale object rule and the
+      # -include handling of a not-yet-written .d file were wrong exactly there.
+      "check.clean_build": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-clean-build"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.clean_build failed with status #{inspect(status)}")
+        end
+      end,
       "test.teardown_contract": fn _ ->
-        # make's exit status must propagate: check-teardown fails the build
-        # on a non-zero allocator balance, so the alias must fail too.
+        # make's exit status must propagate: check-teardown fails the build on a
+        # non-zero allocator balance, and on a canary signal death — which after
+        # c_src/patches/0001 can only mean the patch was lost. Both are the point
+        # of running it, so the alias must fail too.
         {_output, status} =
           System.cmd("make", ["check-teardown"], into: IO.stream(), stderr_to_stdout: true)
 

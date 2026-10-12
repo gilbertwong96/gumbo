@@ -51,6 +51,21 @@ is a submodule bump: a new pin is a new set of files, and the gate turns "the
 patch stopped applying" into a red build instead of a build that silently
 compiles unpatched gumbo.
 
+`make check-clean-build` (wired in as `check.clean_build`) copies `Makefile` and
+`c_src` into a temporary directory and builds from an empty object directory,
+which is what a fresh clone, a cold CI cache and a hex consumer all do, and what
+a warm tree cannot test. Two real bugs lived only there: the object rule named the
+copy's `.c` as a prerequisite make could not make (so a clean build silently
+compiled none of the twelve vendored objects and linked against their absence),
+and `-include` on a not-yet-written `.d` file made make reach for its built-in
+`%: %.o` rule, which chained into the object rule with a nonsense stem. It also
+exercises the tarball case, since a temporary directory is not a git repository.
+
+`make check-teardown` (wired in as `test.teardown_contract`) holds the patched
+teardown to both properties that matter: the allocator balance is exactly zero, and
+a 20 000-level tree survives a 320 KB stack. Both are hard gates now — after this
+patch, a signal death there can only mean the patch was lost.
+
 ## 0001-make-destroy_node-iterative.patch
 
 `destroy_node` recursed once per tree level. Two call sites are reachable at

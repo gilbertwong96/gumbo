@@ -6,7 +6,6 @@
 #include "gumbo_handle.h"
 #include "gumbo_options.h"
 #include "gumbo_parse_stack.h"
-#include "gumbo_teardown.h"
 
 static ErlNifResourceType* gumbo_handle_resource_type = NULL;
 
@@ -30,10 +29,13 @@ static void gumbo_handle_dtor(ErlNifEnv* env, void* obj) {
 
   gumbo_handle_t* h = obj;
   if (h->output != NULL) {
-    /* The disarming pass lives in gumbo_teardown.c, shared with the
-       teardown probe, so a regression in this destructor fails the probe
-       rather than passing by private copy. */
-    gumbo_teardown_pass(&h->options, h->output, h->nodes, h->node_count);
+    /* The walk inside is the one thing we patch, so it is the one thing that can
+       lose its safety net quietly: destroy_node is iterative as of
+       c_src/patches/0001, which is what makes this call safe on this thread at
+       any depth, whatever its stack. c_src/test/teardown_probe.c holds it to that
+       in both directions — the allocator balances to zero, and a 20 000-level
+       tree survives a 320 KB stack. */
+    gumbo_destroy_output(&h->options, h->output);
   }
   enif_free(h->nodes);
   enif_free(h->parent_indices);
@@ -277,23 +279,21 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   }
 
   if (gumbo_node_table_build(h) != 0) {
-    /* The table only partly covers the tree, so the destructor's teardown pass
-       cannot run — it frees by table index. It no longer has to: the vendored
-       destroy_node is iterative as of c_src/patches/0001, so handing the whole
-       tree to gumbo_destroy_output is safe at any depth, which is exactly what
-       the destructor does when there is no table. This is unreachable in
-       practice — OOM, or a non-NULL output->root missing from the table — and
-       the parse raises either way. */
+    /* The table is the handle's index — the node accessors read it — so a
+       partial one makes the handle unusable, but not the tree: destroy_node is
+       iterative as of c_src/patches/0001, so gumbo_destroy_output frees all of it
+       at any depth, exactly as the destructor does. Unreachable in practice (OOM,
+       or a non-NULL output->root missing from the table) and the parse raises
+       either way. */
     gumbo_destroy_output(&h->options, h->output);
     h->output = NULL;
     enif_release_resource(h);
     return enif_make_badarg(env);
   }
   if (gumbo_node_table_size(h) != 0) {
-    /* Same unreachable OOM path as the table build: a partly filled
-       parent/size pair would silently corrupt the node accessors' index
-       arithmetic, so the handle is not usable — but the tree is still entirely
-       ours to free. */
+    /* Same unreachable OOM path as the table build: a partly filled parent/size
+       pair would silently corrupt the node accessors' index arithmetic, so the
+       handle is not usable — but the tree is still entirely ours to free. */
     gumbo_destroy_output(&h->options, h->output);
     h->output = NULL;
     enif_release_resource(h);
