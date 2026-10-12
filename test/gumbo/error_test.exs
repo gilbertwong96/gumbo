@@ -92,8 +92,9 @@ defmodule Gumbo.ErrorTest do
 
   test "max_errors caps the list" do
     html = String.duplicate(~s(<div class="a" class="b">), 50)
-    {:ok, output} = Gumbo.parse(html, max_errors: 3)
-    assert length(Gumbo.Output.errors(output)) <= 3
+    max = 3
+    {:ok, output} = Gumbo.parse(html, max_errors: max)
+    assert length(Gumbo.Output.errors(output)) <= max
   end
 
   test "caret/1 renders the error against the retained source" do

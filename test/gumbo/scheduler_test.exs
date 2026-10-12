@@ -1,6 +1,8 @@
 defmodule Gumbo.SchedulerTest do
   use ExUnit.Case, async: false
 
+  alias Gumbo.Test.HTML
+
   test "dispatch follows size and the explicit override" do
     options = Gumbo.Options.new()
     assert Gumbo.Options.dispatch(options, 20_479) == :normal
@@ -15,7 +17,7 @@ defmodule Gumbo.SchedulerTest do
   end
 
   test "both paths produce the same tree" do
-    html = Gumbo.Test.HTML.nested("span", 5_000)
+    html = HTML.nested("span", 5_000)
     {:ok, auto} = Gumbo.parse(html)
     {:ok, forced_normal} = Gumbo.parse(html, dirty: false)
     {:ok, forced_dirty} = Gumbo.parse(html, dirty: true)
@@ -46,7 +48,7 @@ defmodule Gumbo.SchedulerTest do
   end
 
   test "large parses do not starve a normal scheduler" do
-    html = Gumbo.Test.HTML.nested("div", 2_000) <> String.duplicate("<p>text</p>", 5_000)
+    html = HTML.nested("div", 2_000) <> String.duplicate("<p>text</p>", 5_000)
 
     # The ticker spawns the parsers itself, so its scheduler's run queue
     # holds parser tasks when it yields and the loop cannot finish before

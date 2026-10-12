@@ -35,7 +35,10 @@ defmodule Gumbo.Output do
   """
   @spec document(t()) :: Gumbo.Node.t()
   def document(%__MODULE__{} = output) do
-    %Gumbo.Node{output: output, index: fetch_handle!(output, &Gumbo.Native.output_document/1)}
+    %Gumbo.Node{
+      output: output,
+      index: fetch_index!(Gumbo.Native.output_document(output.resource))
+    }
   end
 
   @doc """
@@ -168,6 +171,14 @@ defmodule Gumbo.Output do
       root -> Gumbo.Node.children(root)
     end
   end
+
+  # The index this returns lands in an opaque struct field, so the handle
+  # check is specced for that one return type: routing the value through
+  # fetch_handle!/2 hides the NIF's return type behind the fun's, and the
+  # opaque in Gumbo.Node.t() then cannot be proven.
+  @spec fetch_index!({:error, :invalid_handle} | non_neg_integer()) :: non_neg_integer()
+  defp fetch_index!({:error, :invalid_handle}), do: raise(ArgumentError, "invalid output handle")
+  defp fetch_index!(index), do: index
 
   # A forged or stale resource is a programmer error: the NIF answers
   # {:error, :invalid_handle} for both, and that internal tuple must not

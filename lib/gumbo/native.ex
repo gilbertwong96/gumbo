@@ -4,7 +4,7 @@ defmodule Gumbo.Native do
   @on_load :load_nif
 
   @spec smoke() :: binary()
-  def smoke(), do: :erlang.nif_error(:nif_not_loaded)
+  def smoke, do: :erlang.nif_error(:nif_not_loaded)
 
   @spec tag_name(atom() | integer()) :: binary() | nil
   def tag_name(_tag), do: :erlang.nif_error(:nif_not_loaded)
@@ -22,7 +22,7 @@ defmodule Gumbo.Native do
   def tag_from_original_text(_text), do: :erlang.nif_error(:nif_not_loaded)
 
   @spec tag_all() :: [atom()]
-  def tag_all(), do: :erlang.nif_error(:nif_not_loaded)
+  def tag_all, do: :erlang.nif_error(:nif_not_loaded)
 
   @spec parse(binary(), map()) :: {:ok, reference()} | {:error, term()}
   def parse(_html, _options), do: :erlang.nif_error(:nif_not_loaded)
@@ -30,19 +30,19 @@ defmodule Gumbo.Native do
   @spec parse_dirty(binary(), map()) :: {:ok, reference()} | {:error, term()}
   def parse_dirty(_html, _options), do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec output_document(reference()) :: non_neg_integer()
+  @spec output_document(reference()) :: non_neg_integer() | {:error, :invalid_handle}
   def output_document(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec output_root(reference()) :: non_neg_integer() | nil
+  @spec output_root(reference()) :: non_neg_integer() | nil | {:error, :invalid_handle}
   def output_root(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec output_input(reference()) :: binary()
+  @spec output_input(reference()) :: binary() | {:error, :invalid_handle}
   def output_input(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec output_node_count(reference()) :: non_neg_integer()
+  @spec output_node_count(reference()) :: non_neg_integer() | {:error, :invalid_handle}
   def output_node_count(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec output_options(reference()) :: map()
+  @spec output_options(reference()) :: map() | {:error, :invalid_handle}
   def output_options(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
   @spec node_details(reference(), non_neg_integer()) :: {:ok, map()} | {:error, :invalid_node}
@@ -71,7 +71,7 @@ defmodule Gumbo.Native do
   def attr_details(_resource, _node_index, _attribute_index),
     do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec output_errors(reference()) :: [non_neg_integer()]
+  @spec output_errors(reference()) :: [non_neg_integer()] | {:error, :invalid_handle}
   def output_errors(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
   @spec error_details(reference(), non_neg_integer()) ::
@@ -101,7 +101,7 @@ defmodule Gumbo.Native do
   # from the NIF API, so the VM-side query is the guard's body and this
   # keeps the call site in run/4 a plain function call.
   @spec dirty_schedulers?() :: boolean()
-  def dirty_schedulers?(), do: :erlang.system_info(:dirty_cpu_schedulers) > 0
+  def dirty_schedulers?, do: :erlang.system_info(:dirty_cpu_schedulers) > 0
 
   defp load_nif do
     path = :filename.join(:code.priv_dir(:gumbo), ~c"gumbo_nif")

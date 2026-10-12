@@ -112,5 +112,5 @@ defmodule Gumbo.Tag do
       [:unknown]
   """
   @spec all() :: [t()]
-  def all(), do: Gumbo.Native.tag_all()
+  def all, do: Gumbo.Native.tag_all()
 end

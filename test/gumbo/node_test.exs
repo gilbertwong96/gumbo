@@ -2,6 +2,7 @@ defmodule Gumbo.NodeTest do
   use ExUnit.Case, async: true
 
   alias Gumbo.{Node, Output}
+  alias Gumbo.Test.HTML
 
   defp parse!(html) do
     {:ok, output} = Gumbo.parse(html)
@@ -81,8 +82,9 @@ defmodule Gumbo.NodeTest do
   end
 
   test "descendants/1 is iterative and preorder" do
-    {:ok, output} = Gumbo.parse(Gumbo.Test.HTML.nested("span", 20_000))
-    assert length(Gumbo.Node.descendants(Gumbo.Output.document(output))) >= 20_002
+    depth = 20_000
+    {:ok, output} = Gumbo.parse(HTML.nested("span", depth))
+    assert length(Gumbo.Node.descendants(Gumbo.Output.document(output))) >= depth + 2
   end
 
   test "descendants/1 visits nodes in preorder" do

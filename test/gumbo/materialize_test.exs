@@ -2,6 +2,7 @@ defmodule Gumbo.MaterializeTest do
   use ExUnit.Case, async: true
 
   alias Gumbo.{Attribute, Error, Node, Output}
+  alias Gumbo.Test.HTML
 
   test "detail: :full carries every field the lazy accessors return" do
     {:ok, output} = Gumbo.parse(~s(<div class="a" id="b">x<!--c--></div>))
@@ -145,7 +146,7 @@ defmodule Gumbo.MaterializeTest do
 
   @tag :small_stack
   test "a deeply nested document materializes on the small stack" do
-    {:ok, output} = Gumbo.parse(Gumbo.Test.HTML.nested("span", 20_000))
+    {:ok, output} = Gumbo.parse(HTML.nested("span", 20_000))
     assert tree_depth(Gumbo.materialize(output).root) > 10_000
   end
 

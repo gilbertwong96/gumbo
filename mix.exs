@@ -12,9 +12,18 @@ defmodule Gumbo.MixProject do
       make_clean: ["clean"],
       aliases: aliases(),
       deps: deps(),
+      dialyzer: dialyzer(),
       package: package(),
       docs: docs()
     ]
+  end
+
+  # `mix test` refuses to run inside another command's dev-env VM, and
+  # running the chain in :test keeps every step on one environment: compile
+  # then also covers test/support, and dialyzer gets its own PLT under
+  # _build/test/plts instead of sharing dev's.
+  def cli do
+    [preferred_envs: [ci: :test]]
   end
 
   # Run "mix help compile.app" to learn about applications.
@@ -29,6 +38,36 @@ defmodule Gumbo.MixProject do
 
   defp aliases do
     [
+      ci: [
+        "compile --all-warnings --warnings-as-errors",
+        "format --check-formatted",
+        "credo --strict",
+        "deps.unlock --check-unused",
+        "xref graph --label compile-connected --fail-above 0",
+        "dialyzer",
+        "ex_dna",
+        "reach.check --dead-code --smells --strict",
+        "ci.dead_code",
+        "test",
+        "test.small_stack",
+        "test.teardown_contract"
+      ],
+
+      # `reach.check --dead-code` only renders: unlike --smells it never reads
+      # --strict, so on its own it cannot fail the build. These are the two
+      # entry points the task itself uses, with a non-empty finding list
+      # turned into a failure. Coupled to reach's internals, pinned at ~> 2.8.
+      "ci.dead_code": fn _ ->
+        Mix.Task.run("compile")
+        findings = Reach.Check.DeadCode.run(Reach.Check.DeadCode.collect_files(nil), [])
+
+        if findings != [] do
+          Mix.raise(
+            "reach.check --dead-code found #{length(findings)} finding(s); " <>
+              "run `mix reach.check --dead-code` to see them"
+          )
+        end
+      end,
       "test.small_stack": fn _ ->
         # The child VM's exit status must propagate: a destructor crash
         # (e.g. SIGBUS, reported by System.cmd as exit status 138) has to
@@ -59,10 +98,26 @@ defmodule Gumbo.MixProject do
   end
 
   # Run "mix help deps" to learn about dependencies.
+  # PLTs live inside _build so a cold checkout never inherits a global
+  # ~/.mix PLT: those are keyed by Erlang/Elixir version alone, so a PLT
+  # built by a different install of the same version is silently reused
+  # and then fails with paths that no longer exist.
+  defp dialyzer do
+    [
+      plt_local_path: "_build/plts",
+      plt_core_path: "_build/plts"
+    ]
+  end
+
   defp deps do
     [
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:elixir_make, "~> 0.8", runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
+      {:reach, "~> 2.8", only: [:dev, :test], runtime: false}
     ]
   end
 
