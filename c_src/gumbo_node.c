@@ -5,6 +5,7 @@
 
 #include "gumbo.h"
 #include "gumbo_atoms.h"
+#include "gumbo_faults.h"
 #include "gumbo_handle.h"
 
 /* This file owns every scalar GumboNode field as one extractor each, plus
@@ -119,6 +120,15 @@ int gumbo_node_position_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
 
 ERL_NIF_TERM gumbo_node_type_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                   const GumboNode* node) {
+#ifdef GUMBO_TEST_FAULTS
+  if (gumbo_fault_should_fail()) {
+    /* 这是本计划针对的缺陷，故意重演：这个值会落进下面 values[] 的数组，被
+       enif_make_map_from_arrays 消费，而它无法把它和一个 term 区分开 ——
+       调用方读回来是 42。 */
+    return enif_make_badarg(env);
+  }
+#endif
+
   (void)env;
   return atoms->node_types[node->type];
 }
