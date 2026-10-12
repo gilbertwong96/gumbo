@@ -93,6 +93,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the new attribute index was read as uninitialised memory on the first tag of every
   parse, which was invisible to builds that happened to get zeroed pages.
 
+- The toolchain is declared rather than inherited: `.mise.toml` pins erlang, elixir and
+  clang, and points at the Homebrew LLVM prefixes because Homebrew's llvm is keg-only and
+  ships `clang-format` and `clang-tidy` off PATH. The C gates ask PATH first and mise
+  second, so they behave the same in an activated shell and a plain one. `mise trust`
+  once, then `mise install`.
+
+- The C now also runs under `clang-tidy`, with the checks in `.clang-tidy` and the vendored
+  sources and ERTS headers passed as system headers so that findings are attributed to this
+  library's own code — the first run's 125 reports were all inside `gumbo.h`. Twelve
+  findings fixed (signed literals in shifts and bitwise operations, and four size constants
+  multiplied as `unsigned int`), five resolved on their merits, and the rest excluded with
+  their counts and reasons written down.
+
 - The C now gets the treatment the Elixir has had all along: `mix ci` runs
   `clang-format` against a checked-in `.clang-format` (Google's style, because that is
   what gumbo is written in, so a patch and the file it patches read the same way) and

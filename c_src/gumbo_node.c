@@ -142,9 +142,10 @@ ERL_NIF_TERM gumbo_node_parse_flags_term(ErlNifEnv* env,
      list. Cons from the highest bit down so the list stays in declaration
      order. */
   ERL_NIF_TERM list = enif_make_list(env, 0);
-  GumboParseFlags bit;
-  for (bit = GUMBO_INSERTION_FOSTER_PARENTED; bit != 0; bit >>= 1) {
-    if (node->parse_flags & bit) {
+  unsigned int bit;
+  for (bit = (unsigned int)GUMBO_INSERTION_FOSTER_PARENTED; bit != 0;
+       bit >>= 1u) {
+    if (((unsigned int)node->parse_flags & bit) != 0) {
       list = enif_make_list_cell(env, atoms->parse_flags[bit], list);
     }
   }

@@ -319,7 +319,7 @@ check-stack-guard: $(PARITY_DUMP_BUILD)
 # told apart from "the analyzer said nothing", and this project has already shipped one
 # guard that could never fire. ANALYZER is a variable so a machine whose clang is named
 # something else can say so once rather than editing the target.
-ANALYZER ?= clang
+ANALYZER ?= $(call find_tool,clang)
 ANALYZER_CANARY := c_src/test/analyzer_canary.c
 ANALYZER_SRCS := $(wildcard c_src/*.c)
 
@@ -352,7 +352,13 @@ check-analyzer: $(GUMBO_SRC_STAMP)
 # hence the fallback: no PATH edits are needed to run this, and a machine with neither gets a
 # message instead of a silent pass.
 C_FORMAT_FILES := $(wildcard c_src/*.c c_src/*.h c_src/test/*.c)
-CLANG_FORMAT ?= $(shell command -v clang-format > /dev/null 2>&1 && echo clang-format || echo xcrun clang-format)
+# mise is where this project declares its toolchain (.mise.toml), and a tool mise manages is on
+# PATH only in a mise-activated shell. These gates ask PATH first and mise second, so they behave
+# the same whether or not whoever ran them activated it: `make check-c-format` and `mix ci` both
+# work from a plain shell.
+find_tool = $(shell command -v $(1) > /dev/null 2>&1 && echo $(1) || echo mise exec -- $(1))
+CLANG_FORMAT ?= $(call find_tool,clang-format)
+CLANG_TIDY ?= $(call find_tool,clang-tidy)
 
 check-c-format:
 	@command -v $(word 1,$(CLANG_FORMAT)) > /dev/null 2>&1 || { \
@@ -381,6 +387,26 @@ check-c-lint: $(GUMBO_SRC_STAMP)
 			|| { echo "FAIL: $$f does not pass the lint warning set"; exit 1; }; \
 	done
 	@echo "PASS: $(words $(wildcard c_src/*.c c_src/test/*.c)) of our C files are clean under $(words $(C_LINT_WARNINGS)) warning classes"
+
+# clang-tidy, with the vendored sources and the ERTS headers passed as system headers so that
+# findings are attributed to our code and not to theirs — which is where the first run's 125
+# signed-bitwise reports came from, all of them inside gumbo.h. The checks are chosen in
+# .clang-tidy; the canary is excluded here rather than there, because the deliberate
+# use-after-free it contains is exactly what clang-analyzer-unix.Malloc reports, and it is there to
+# be reported by the analyzer gate rather than to pass this one.
+C_TIDY_SRCS := $(filter-out c_src/test/analyzer_canary.c, $(wildcard c_src/*.c c_src/test/*.c))
+
+check-c-tidy: $(GUMBO_SRC_STAMP)
+	@command -v $(word 1,$(CLANG_TIDY)) > /dev/null 2>&1 || { \
+		echo "FAIL: clang-tidy is not available (mise manages it: mise trust && mise install)"; \
+		exit 1; \
+	}
+	@for f in $(C_TIDY_SRCS); do \
+		$(CLANG_TIDY) "$$f" -- -std=c99 -Ic_src -isystem $(GUMBO_SRC_DIR)/src \
+			-isystem $(ERTS_INCLUDE_DIR) \
+			|| { echo "FAIL: clang-tidy has something to say about $$f"; exit 1; }; \
+	done
+	@echo "PASS: $(words $(C_TIDY_SRCS)) of our C files are clean under the checks in .clang-tidy"
 
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
@@ -424,4 +450,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint check-c-tidy

@@ -1,0 +1,36 @@
+# clang-tidy for the C this repository owns. run by `make check-c-tidy` and by mix ci as
+# check.c_tidy, over c_src/*.c and c_src/test/*.c, with the vendored sources and the ERTS headers
+# passed as -isystem so that findings are attributed to our code and not to theirs.
+#
+# The set is deliberately about defects rather than taste. This project follows gumbo's style
+# because patches and the files they patch should read the same way, so the readability-* family
+# would argue with a decision already made and clang-format already enforces. What is enabled is
+# the family that finds real mistakes in the code this project wrote last: implicit conversions,
+# bitwise operations on signed operands, multiplications that widen after the fact.
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  cert-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -cert-err33-c,
+  -readability-*,
+  -clang-analyzer-optin.*,
+
+# bugprone-easily-swappable-parameters: every accessor here takes (resource, index) and the whole
+# point of the naming is which is which.
+#
+# bugprone-multi-level-implicit-pointer-conversion: the vendored vector API takes void*, so every
+# GumboNode** handed to it is that conversion, and there is nothing to fix on our side.
+#
+# clang-analyzer-optin.*: an opt-in heuristic that flags any allocation whose size comes from the
+# input. For a library whose subject is parsing input, that is the whole program, and for the two
+# harnesses it flags they are allocating the documents they were asked to build.
+#
+# cert-err33-c: the value returned by this function should not be disregarded — 47 sites where an
+# enif_* or string function's return is not checked. They are OOM-only paths, the previous state on
+# them was measured to be a badarg that read as the integer 42 (see the ledger's Ruling SS note),
+# and turning all 47 into propagated error codes is a change of its own rather than a lint.
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
