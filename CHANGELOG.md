@@ -87,6 +87,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 
+**Known limitation, measured 2026-10-13: attribute counts are quadratic.** An element
+with many distinct attribute names costs the square of their count, because
+`finish_attribute_name` checks for a duplicate by scanning the attributes already
+collected: 80 000 distinct attributes (0.7 MB of input) take 13.6 s, and the 16 MiB
+input cap allows about 2.4 million of them. Nothing shipped bounds this. The same
+shape *is* bounded in Nokogiri's gumbo, which exposes `max_attributes` with a
+default of 1024 — the ceiling on exactly this scan. A cap is the fix; it is not
+here yet.
+
 gumbo-parser 0.14.1's own `gumbo_destroy_output` frees the tree with
 `destroy_node`, which recurses once per tree level, and 0.14.1 has no
 maximum nesting depth. Two call sites reach that recursion.
