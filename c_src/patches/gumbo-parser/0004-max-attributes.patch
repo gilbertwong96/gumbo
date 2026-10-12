@@ -259,3 +259,17 @@ tree difference rather than as a hang nobody tests.
    reinitialize_tag_buffer(parser);
    return true;
  }
+@@ -854,6 +962,13 @@
+   tokenizer->_is_current_node_foreign = false;
+   tokenizer->_is_in_cdata = false;
+   tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;
++  tokenizer->_tag_state._attribute_buckets.data = NULL;
++  tokenizer->_tag_state._attribute_buckets.length = 0;
++  tokenizer->_tag_state._attribute_buckets.capacity = 0;
++  tokenizer->_tag_state._attribute_next.data = NULL;
++  tokenizer->_tag_state._attribute_next.length = 0;
++  tokenizer->_tag_state._attribute_next.capacity = 0;
++  tokenizer->_tag_state._attribute_hash_seed = 0;
+ 
+   tokenizer->_buffered_emit_char = kGumboNoChar;
+   gumbo_string_buffer_init(parser, &tokenizer->_temporary_buffer);

@@ -53,6 +53,7 @@ defmodule Gumbo.MixProject do
         "test.teardown_contract",
         "check.patch",
         "check.parity",
+        "check.sanitizers",
         "check.clean_build"
       ],
 
@@ -115,6 +116,21 @@ defmodule Gumbo.MixProject do
 
         if status != 0 do
           Mix.raise("check.parity failed with status #{inspect(status)}")
+        end
+      end,
+      # The only net for a memory-safety bug inside gumbo itself, which is residual 2 of
+      # the list of what could still take the VM down. AddressSanitizer and
+      # UndefinedBehaviorSanitizer over the corpus and the adversarial shapes. It found
+      # the fourth patch's missing initialisation: without ASan the tokenizer state
+      # happened to come from zeroed pages, and ASan's byte pattern turned a latent
+      # garbage pointer into an assertion failure. Slow — the instrumented build of the
+      # twelve vendored files is most of it — and worth it.
+      "check.sanitizers": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-sanitizers"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.sanitizers failed with status #{inspect(status)}")
         end
       end,
       "check.clean_build": fn _ ->

@@ -240,6 +240,44 @@ check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BUILD)
 		exit 1; \
 	fi
 
+# The sanitizer gate. It is the only net there is for a memory-safety bug inside
+# gumbo itself — residual 2 of the list this project keeps of what could still take
+# the VM down — and it is also how the fourth patch's missing initialisation was
+# found: the builds without ASan happened to get zeroed pages for the tokenizer
+# state, and ASan fills fresh bytes with a pattern instead, which turned a latent
+# garbage pointer into an assertion failure.
+#
+# It builds the standalone harness against the patched sources with
+# AddressSanitizer and UndefinedBehaviorSanitizer and runs both the seeded corpus and
+# the adversarial shapes through it. `-fno-sanitize-recover=all` makes a finding a
+# non-zero exit rather than a report that scrolls past. It does not cover our own
+# erl_nif_* plumbing, which cannot be sanitised without instrumenting the VM itself.
+#
+# The shapes run at a modest depth on the calling thread on purpose: the sanitizers
+# enlarge stack frames, and this gate is about memory safety, not about the stack
+# cliff that check-teardown and the parse budget cover.
+SAN_HARNESS := $(OBJ_DIR)/parity_san
+SAN_DEPTH ?= 20000
+SAN_SHAPES := div-frameset span-frameset template-frameset table-frameset \
+	div-unclosed div-pclose formatting attrs selectedcontent soup
+
+$(SAN_HARNESS): $(PARITY_DUMP_SRC) $(GUMBO_SRC_STAMP) | $(GUMBO_HEADER)
+	@mkdir -p $(dir $@)
+	$(CC) -O1 -g -std=c99 -fno-omit-frame-pointer -fsanitize=address,undefined \
+		-fno-sanitize-recover=all $(GUMBO_CFLAGS) -I$(GUMBO_SRC_DIR)/src \
+		-o $@ $(PARITY_DUMP_SRC) $(GUMBO_SRC_DIR)/src/*.c
+
+check-sanitizers: $(SAN_HARNESS)
+	@$(SAN_HARNESS) corpus 500 | $(SAN_HARNESS) dump > /dev/null || { \
+		echo "FAIL: the sanitizers found something while parsing the corpus"; exit 1; \
+	}
+	@for shape in $(SAN_SHAPES); do \
+		$(SAN_HARNESS) shapes "$$shape" $(SAN_DEPTH) > /dev/null || { \
+			echo "FAIL: the sanitizers found something in shape $$shape"; exit 1; \
+		}; \
+	done
+	@echo "PASS: AddressSanitizer and UndefinedBehaviorSanitizer clean on 500 corpus documents and $(words $(SAN_SHAPES)) adversarial shapes at $(SAN_DEPTH)"
+
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
 	@echo "--- crash canary: is the patched teardown still non-recursive? ---"
@@ -282,4 +320,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers

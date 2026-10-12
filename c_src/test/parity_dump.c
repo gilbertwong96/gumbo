@@ -16,6 +16,15 @@
  *   parity_dump corpus [count]   write `count` length-prefixed documents
  *   parity_dump dump             read length-prefixed documents, write
  *                                length-prefixed canonical dumps
+ *   parity_dump shapes <name> <n>  build one adversarial shape and parse it
+ *
+ * The shapes mode exists for the sanitizer gate: it is the same set of documents the
+ * stack sweep used — the ones that used to kill the VM, plus attribute piles,
+ * formatting runs, tables, foreign content and tag soup — run against a build with
+ * AddressSanitizer and UndefinedBehaviorSanitizer, which is the only net there is for
+ * a memory-safety bug inside gumbo itself. It runs on the calling thread at a depth
+ * chosen to suit that harness, because the sanitizers enlarge stack frames and this
+ * mode is about memory safety rather than about the stack cliff.
  *
  * The dump is deliberately canonical rather than pretty: preorder, with node
  * type, tag name, namespaces, attributes in document order, text bytes, and then
@@ -29,6 +38,7 @@
  * stack (a few thousand levels is ~100 KB of frames).
  */
 
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -339,6 +349,96 @@ static int dump_mode(void) {
   return 0;
 }
 
+/* ---- adversarial shapes, for the sanitizer gate ------------------------ */
+
+// Appends to the shape buffer, refusing to write past the end of it. The buffer is
+// sized from `n` but the shapes differ in bytes per level, so the arithmetic cannot be
+// trusted to be right; this turns an off-by-one in it into a message instead of a
+// corrupted heap. AddressSanitizer found exactly that in the throwaway version of this
+// harness, which is why this one is bounded.
+static char* emit(char* cursor, size_t room, const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  int written = vsnprintf(cursor, room, format, args);
+  va_end(args);
+  if (written < 0 || (size_t)written >= room) {
+    fprintf(stderr, "FAIL: the shape builder overflowed its buffer\n");
+    exit(1);
+  }
+  return cursor + written;
+}
+
+static int shapes_mode(const char* shape, long n) {
+  size_t cap = (size_t)n * 64 + 4096;
+  char* s = (char*)malloc(cap);
+  char* p = s;
+  if (s == NULL) {
+    fprintf(stderr, "FAIL: out of memory\n");
+    return 1;
+  }
+#define SHAPE_ROOM() (cap - (size_t)(p - s))
+#define EMIT(...) (p = emit(p, SHAPE_ROOM(), __VA_ARGS__))
+  EMIT("<!doctype html>");
+  if (strcmp(shape, "div-frameset") == 0) {
+    for (long i = 0; i < n; ++i) EMIT("<div>");
+    EMIT("<frameset>");
+  } else if (strcmp(shape, "span-frameset") == 0) {
+    for (long i = 0; i < n; ++i) EMIT("<span>");
+    EMIT("<frameset>");
+  } else if (strcmp(shape, "template-frameset") == 0) {
+    for (long i = 0; i < n; ++i) EMIT("<template>");
+    EMIT("<frameset>");
+  } else if (strcmp(shape, "table-frameset") == 0) {
+    for (long i = 0; i < n; ++i) EMIT("<table><tr><td>");
+    EMIT("<frameset>");
+  } else if (strcmp(shape, "div-unclosed") == 0) {
+    for (long i = 0; i < n; ++i) EMIT("<div>");
+  } else if (strcmp(shape, "div-pclose") == 0) {
+    for (long i = 0; i < n; ++i) EMIT("<div>");
+    for (long i = 0; i < n; ++i) EMIT("</p>");
+  } else if (strcmp(shape, "formatting") == 0) {
+    for (long i = 0; i < n; ++i) EMIT("<b><i><a>");
+    for (long i = 0; i < n; ++i) EMIT("</a></i></b>");
+  } else if (strcmp(shape, "attrs") == 0) {
+    EMIT("<div");
+    for (long i = 0; i < n; ++i) EMIT(" a%ld=1", i);
+    EMIT(">");
+  } else if (strcmp(shape, "selectedcontent") == 0) {
+    EMIT("<select><selectedcontent>");
+    for (long i = 0; i < n; ++i) EMIT("<option><span><span></option>");
+    EMIT("</selectedcontent></select>");
+  } else if (strcmp(shape, "soup") == 0) {
+    const char* pool[] = {"<div>", "<span>", "<b>", "<p>", "<li>", "<table>",
+                          "<td>", "<template>", "<svg>", "</div>", "</p>",
+                          "</b>", "<!--c-->", "x", "<option>", "<select>",
+                          "<button>", "<form>", "<h1>", "</table>"};
+    unsigned x = 12345;
+    for (long i = 0; i < n; ++i) {
+      x = x * 1103515245u + 12345u;
+      EMIT("%s", pool[(x >> 16) % (sizeof(pool) / sizeof(*pool))]);
+    }
+  } else {
+    fprintf(stderr, "unknown shape %s\n", shape);
+    free(s);
+    return 2;
+  }
+
+  GumboOptions options = kGumboDefaultOptions;
+  options.max_errors = -1; /* worst case for the error vector */
+  GumboOutput* output = gumbo_parse_with_options(&options, s, (size_t)(p - s));
+  if (output == NULL) {
+    fprintf(stderr, "FAIL: shape %s returned NULL\n", shape);
+    return 1;
+  }
+  printf("  shape=%-20s n=%-8ld %8zu bytes  root=%s  errors=%u\n", shape, n,
+      (size_t)(p - s),
+      output->root == NULL ? "nil" : gumbo_normalized_tagname(output->root->v.element.tag),
+      output->errors.length);
+  gumbo_destroy_output(&options, output);
+  free(s);
+  return 0;
+}
+
 int main(int argc, char** argv) {
   if (argc < 2) {
     fprintf(stderr, "usage: %s corpus [count] | dump\n", argv[0]);
@@ -350,6 +450,18 @@ int main(int argc, char** argv) {
   if (strcmp(argv[1], "dump") == 0) {
     return dump_mode();
   }
-  fprintf(stderr, "usage: %s corpus [count] | dump\n", argv[0]);
+  if (strcmp(argv[1], "shapes") == 0) {
+    if (argc < 4) {
+      fprintf(stderr, "usage: %s shapes <name> <n>\n", argv[0]);
+      return 2;
+    }
+    long n = strtol(argv[3], NULL, 10);
+    if (n <= 0) {
+      fprintf(stderr, "usage: %s shapes <name> <n>\n", argv[0]);
+      return 2;
+    }
+    return shapes_mode(argv[2], n);
+  }
+  fprintf(stderr, "usage: %s corpus [count] | dump | shapes <name> <n>\n", argv[0]);
   return 2;
 }
