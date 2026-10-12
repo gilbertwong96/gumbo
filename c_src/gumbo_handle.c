@@ -278,6 +278,20 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     return enif_make_badarg(env);
   }
 
+  if (h->output->too_deep) {
+    /* The stack guard stopped the parse before it ran out: a recursion nobody has
+       measured used more of the stack than the budget covered. The tree is whatever
+       had been built, so it is freed and the parse refused — the alternative is a
+       partial tree presented as a parse, or a crash. This is unreachable through this
+       library by construction, since gumbo_parse_stack.c hands the parse a stack the
+       budget says is enough; it is what catches the case where that arithmetic is
+       wrong. */
+    gumbo_destroy_output(&h->options, h->output);
+    h->output = NULL;
+    enif_release_resource(h);
+    return enif_make_tuple2(env, atoms->error, atoms->too_deep);
+  }
+
   if (h->output->too_many_attributes) {
     /* The parse succeeded and the tree is ours to free, but the caller asked for a
        cap on attributes per element and the document went past it. Handing the tree

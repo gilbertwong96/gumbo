@@ -278,6 +278,36 @@ check-sanitizers: $(SAN_HARNESS)
 	done
 	@echo "PASS: AddressSanitizer and UndefinedBehaviorSanitizer clean on 500 corpus documents and $(words $(SAN_SHAPES)) adversarial shapes at $(SAN_DEPTH)"
 
+# The stack guard is the backstop for the recursion nobody has found: a depth-proportional
+# walk whose frame size is unknown cannot be ruled out by arithmetic, so the parse is told
+# how much stack it has and stops before it runs out.
+#
+# What it cannot be tested against any more is a deep *document*, and that is the point:
+# with destroy_node iterative and the tree builder using an explicit stack, no document
+# makes the C stack grow with its nesting depth, so a 200 000-level shape parses under any
+# budget (second case below, which is the control). What is testable is the mechanism, and
+# that is what the first case does: a budget smaller than a single frame's worth of parsing
+# has to stop the parse, report it, and tear the tree down without crashing.
+check-stack-guard: $(PARITY_DUMP_BUILD)
+	@$(PARITY_DUMP_BUILD) shapes soup 100 256 > guard.log 2>&1 || { \
+		echo "FAIL: a budget too small to parse under did not refuse cleanly"; \
+		cat guard.log; rm -f guard.log; exit 1; \
+	}
+	@grep -q 'too_deep=yes' guard.log || { \
+		echo "FAIL: the stack guard did not fire on a budget smaller than one frame"; \
+		cat guard.log; rm -f guard.log; exit 1; \
+	}
+	@$(PARITY_DUMP_BUILD) shapes div-unclosed 200000 > deep.log 2>&1 || { \
+		echo "FAIL: a 200 000-level document did not parse without a budget"; \
+		cat deep.log; rm -f deep.log; exit 1; \
+	}
+	@grep -q 'too_deep=no' deep.log || { \
+		echo "FAIL: a document that needs no depth recursion reported the guard"; \
+		cat deep.log; rm -f deep.log; exit 1; \
+	}
+	@rm -f guard.log deep.log
+	@echo "PASS: the stack guard refuses past its budget, and a 200 000-level document needs no depth recursion to parse"
+
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
 	@echo "--- crash canary: is the patched teardown still non-recursive? ---"
@@ -320,4 +350,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard

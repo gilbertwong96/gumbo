@@ -93,6 +93,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the new attribute index was read as uninitialised memory on the first tag of every
   parse, which was invisible to builds that happened to get zeroed pages.
 
+- A stack budget guard, so a recursion nobody has measured is refused rather than
+  fatal: the parse is told how much stack it has (this library already measures the
+  thread for the sized-thread decision) and stops before it runs out, reporting
+  `{:error, :too_deep}`. It is a backstop under the arithmetic, not a limit a caller
+  has to think about, and `make check-stack-guard` is what holds it to firing when it
+  should — including the measurement that no document makes the C stack grow with its
+  nesting depth any more.
+
 ### Notes
 
 **Attribute counts, measured and then fixed, 2026-10-13.** An element's attributes used
