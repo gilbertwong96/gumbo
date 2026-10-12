@@ -31,6 +31,16 @@ Checks: >
 # cert-err33-c: the value returned by this function should not be disregarded — 47 sites where an
 # enif_* or string function's return is not checked. They are OOM-only paths, the previous state on
 # them was measured to be a badarg that read as the integer 42 (see the ledger's Ruling SS note),
+# and turning all 47 into propagated error codes is a change of its own rather than a lint. The
+# cheap version of that fix was attempted and does not exist: catching the failure where it is
+# consumed would mean testing a term for THE_NON_VALUE, which is internal to ERTS and not in
+# erl_nif.h, so there is nothing portable to compare against. Which is why the fix is the helpers
+# reporting by status code instead of by term — every extractor and every call site, on paths no
+# test reaches.
+#
+# The older note: the value returned by this function should not be disregarded — 47 sites where an
+# enif_* or string function's return is not checked. They are OOM-only paths, the previous state on
+# them was measured to be a badarg that read as the integer 42 (see the ledger's Ruling SS note),
 # and turning all 47 into propagated error codes is a change of its own rather than a lint.
 WarningsAsErrors: ''
 HeaderFilterRegex: ''
