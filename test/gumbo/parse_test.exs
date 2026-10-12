@@ -83,4 +83,46 @@ defmodule Gumbo.ParseTest do
   test "parse!/2 raises ArgumentError with the reason" do
     assert_raise ArgumentError, ~r/nope/, fn -> Gumbo.parse!("<p>", nope: 1) end
   end
+
+  # Two regression tests for a pair of quadratics in gumbo's tree construction,
+  # both fixed by patches in c_src/patches/.
+  #
+  # Neither can be caught by check-parity, because parity compares the patched
+  # build against the pinned sources: with a patch removed the two agree again,
+  # and it passes. So the shapes have to be timed and measured here instead.
+  test "deeply nested block tags parse in time linear in the depth" do
+    # Before the 0002 patches this document took ~274 ms and its cost grew with the
+    # square of the depth: the button-scope query walked the whole stack once per
+    # block-level start tag. Now it is ~3 ms. The threshold splits those two by a
+    # factor of 30 and 2.7 respectively, which is what makes it a regression test
+    # rather than a machine-speed test.
+    html = "<!doctype html>" <> String.duplicate("<div>", 20_000)
+
+    {us, _} = :timer.tc(fn -> Gumbo.parse!(html) end)
+    assert us < 100_000, "20 000 nested <div> took #{us} us"
+  end
+
+  test "an error deep in a document keeps at most 32 open-element tags" do
+    # Errors arrive one per unclosed element or unmatched end tag, and each used to
+    # keep the whole open-element stack: at this depth a 100 KB document cost 3.2 GB,
+    # and a matching run of </p> cost 6.4 GB. The 0003 patch keeps the innermost 32,
+    # so what is left is bounded by max_errors times 32 rather than by depth times
+    # depth.
+    deep = "<!doctype html>" <> String.duplicate("<div>", 20_000)
+    burst = deep <> String.duplicate("</p>", 20_000)
+
+    {:ok, capped} = Gumbo.parse(burst)
+    errors = Gumbo.Output.errors(capped)
+    assert length(errors) == Gumbo.Options.new([]) |> elem(1) |> Map.fetch!(:max_errors)
+
+    stacks =
+      Enum.map(errors, fn error ->
+        assert %{tag_stack: stack} = Gumbo.Error.parser_error(error)
+        length(stack)
+      end)
+
+    assert Enum.all?(stacks, &(&1 <= 32))
+    # And the shape is still the document it was: the divs are what is deep.
+    assert Gumbo.Node.tag(Gumbo.Output.root(capped)) == :html
+  end
 end

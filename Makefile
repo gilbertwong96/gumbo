@@ -198,6 +198,48 @@ check-clean-build: | $(GUMBO_HEADER)
 	}; \
 	echo "PASS: a build from an empty object dir compiles all twelve and links"
 
+# Differential harness: the patches change how the parser decides what to build,
+# and a scope query or an is-open answer that is off by one does not crash or leak
+# — it silently produces a different tree, which is the one kind of mistake the
+# suite's shape matrix cannot see. Both parsers export the same symbols, so they
+# are linked into separate binaries and compared stream by stream over a corpus
+# this same program generates from a seed: the only variable is the parser.
+#
+#   pinned   compiled against the submodule's own sources, i.e. exactly what the
+#            tag pins, with -I ahead of the patched copy so no header leaks in
+#   build    the shipped objects, patches and all
+#
+# The corpus keeps documents a few thousand tokens deep on purpose (the patched
+# hot spots are functions of the open-element stack) but well inside the 8 MB
+# main-thread stack, since the pinned parser still recurses once per level when
+# it frees the tree.
+PARITY_DUMP_SRC := c_src/test/parity_dump.c
+PARITY_DUMP_PINNED := $(OBJ_DIR)/parity_dump_pinned
+PARITY_DUMP_BUILD := $(OBJ_DIR)/parity_dump_build
+PARITY_COUNT ?= 1000
+
+$(PARITY_DUMP_PINNED): $(PARITY_DUMP_SRC) $(GUMBO_SRCS) | $(GUMBO_HEADER)
+	@mkdir -p $(dir $@)
+	$(CC) -I$(GUMBO_DIR)/src $(GUMBO_CFLAGS) -o $@ $(PARITY_DUMP_SRC) $(GUMBO_SRCS)
+
+$(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
+	@mkdir -p $(dir $@)
+	$(CC) $(ALL_CFLAGS) -o $@ $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
+
+check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BUILD)
+	@docs=$$(mktemp); pinned=$$(mktemp); build=$$(mktemp); \
+	trap 'rm -f "$$docs" "$$pinned" "$$build"' EXIT INT TERM; \
+	$(PARITY_DUMP_BUILD) corpus $(PARITY_COUNT) > "$$docs" || exit 1; \
+	$(PARITY_DUMP_PINNED) dump < "$$docs" > "$$pinned" || exit 1; \
+	$(PARITY_DUMP_BUILD) dump < "$$docs" > "$$build" || exit 1; \
+	if cmp -s "$$pinned" "$$build"; then \
+		echo "PASS: $(PARITY_COUNT) documents parse to identical trees, pinned and patched"; \
+	else \
+		echo "FAIL: the patches change tree construction; first divergence:"; \
+		diff "$$pinned" "$$build" | head -20; \
+		exit 1; \
+	fi
+
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance
 	@echo "--- crash canary: is the patched teardown still non-recursive? ---"
@@ -240,4 +282,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity
