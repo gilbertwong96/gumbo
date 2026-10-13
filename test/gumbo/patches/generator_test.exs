@@ -1,5 +1,6 @@
 defmodule Gumbo.Patches.GeneratorTest do
-  use ExUnit.Case, async: true
+  # async: false — the default-root test reads the process-global cwd, which the mix task suite mutates with File.cd!/1.
+  use ExUnit.Case, async: false
 
   alias Gumbo.Patches
 
