@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# One run per ref. The gate builds the NIF, runs the C sanitizers, the static analyzer
+# and dialyzer, so a superseded run is pure cost — the newest verdict is the one that counts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (OTP ${{ matrix.otp }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # See both VMs' results, not just the first one to fail.
+      fail-fast: false
+      matrix:
+        # The two VM majors the project claims to support. Elixir is pinned to the
+        # exact version .mise.toml pins, so a green run here means the same VM and
+        # the same compiler the local gates were verified against.
+        otp: ["27", "29"]
+        elixir: ["1.20.4"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build reads c_src/gumbo-parser/src (the pinned parser) and applies the
+          # patch series to a copy of it, so the submodule has to be checked out.
+          submodules: recursive
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          # c_src and Makefile belong in the key: the NIF is a build input, and a cache
+          # hit from a different submodule commit or a different patch series would hand
+          # the suite a stale library instead of rebuilding it.
+          key: ${{ runner.os }}-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('mix.lock', 'Makefile', 'c_src/**') }}
+
+      - run: mix deps.get --check-locked
+      - run: mix compile --all-warnings --warnings-as-errors
+      - run: mix test
+
+  gate:
+    name: mix ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # The Makefile looks each tool up on PATH and falls back to `mise exec --`, which
+      # CI does not install. LLVM arrives the apt.llvm.org way instead, so the three
+      # `find_tool` lookups and the C compiler are named here. clang is the same major
+      # version .mise.toml pins, and that matters: clang-format's output is
+      # version-specific, and check-c-format compares against the committed .clang-format.
+      CC: clang-23
+      ANALYZER: clang-23
+      CLANG_FORMAT: clang-format-23
+      CLANG_TIDY: clang-tidy-23
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.1.1"
+          elixir-version: "1.20.4"
+
+      - name: Install LLVM 23
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 23
+          echo "/usr/lib/llvm-23/bin" >> "$GITHUB_PATH"
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-otp29.1.1-elixir1.20.4-${{ hashFiles('mix.lock', 'Makefile', 'c_src/**') }}
+
+      - run: mix deps.get --check-locked
+
+      # The project's whole gate, in one step, in the order mix.exs's ci alias runs it:
+      # warnings-as-errors compile, format, credo --strict, unused-lock check, xref,
+      # dialyzer, ex_dna, reach's smells plus the dead-code task, the covered suite in its
+      # own VM (it fails below the threshold in mix.exs's test_coverage), the small-stack
+      # suite in another VM, the teardown contract probe, the patch series and the patch
+      # generator, the pinned-parser parity dump, the C stack guard, clang-analyzer,
+      # clang-format, clang-tidy, the C lint and failure-return checks,
+      # AddressSanitizer/UndefinedBehaviorSanitizer, a clean rebuild, and the allocation
+      # failure sweep. Nothing here is a smoke test the local gate does not run.
+      - run: mix ci
