@@ -14,8 +14,16 @@
 
 #ifdef GUMBO_TEST_FAULTS
 
-/* Reads GUMBO_FAULT_AT and restarts the count, so that each parse in a sweep
-   arms itself. Called from the parse entry point, under the same flag. */
+/* Compiled in by make check-fault-paths. A fault build can therefore only read
+   the file its own build named, and the environment is not consulted for it,
+   because a running VM's getenv does not follow System.put_env. */
+#ifndef GUMBO_FAULT_FILE_PATH
+#define GUMBO_FAULT_FILE_PATH "/tmp/gumbo-fault-at"
+#endif
+
+/* Reads the index from the file named at build time and restarts the count, so
+   that each parse in a sweep arms itself. Called from the parse entry point,
+   under the same flag. */
 void gumbo_fault_arm(void);
 
 /* 1 when this extraction is the one the sweep asked to fail, 0 otherwise. */
