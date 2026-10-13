@@ -93,13 +93,11 @@ defmodule Gumbo.FaultPathsTest do
   # is not visible in this map. That is deliberate: this sweep owns the detail map's path, and the
   # materialized path is what Task 2 converts to a return value and then covers.
   defp observe(html) do
-    try do
-      {:ok, output} = Gumbo.parse(html)
-      {:ok, details} = Gumbo.Node.details(Gumbo.Output.document(output))
+    {:ok, output} = Gumbo.parse(html)
+    {:ok, details} = Gumbo.Node.details(Gumbo.Output.document(output))
 
-      {:returned, details}
-    rescue
-      error -> {:raised, error}
-    end
+    {:returned, details}
+  rescue
+    error -> {:raised, error}
   end
 end

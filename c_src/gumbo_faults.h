@@ -14,16 +14,34 @@
 
 #ifdef GUMBO_TEST_FAULTS
 
-/* Compiled in by make check-fault-paths. A fault build can therefore only read
-   the file its own build named, and the environment is not consulted for it,
-   because a running VM's getenv does not follow System.put_env. */
-#ifndef GUMBO_FAULT_FILE_PATH
+/* The path is compiled in unquoted and stringified here, so that no shell has
+   to keep a pair of quotes alive across three layers: that is how a fault build
+   once failed to compile in silence while a sweep reported that it had found
+   nothing. A fault build can only read the file its own build named. */
+#define GUMBO_FAULT_STRINGIZE_(x) #x
+#define GUMBO_FAULT_STRINGIZE(x) GUMBO_FAULT_STRINGIZE_(x)
+
+#ifdef GUMBO_FAULT_FILE_PATH_RAW
+#define GUMBO_FAULT_FILE_PATH GUMBO_FAULT_STRINGIZE(GUMBO_FAULT_FILE_PATH_RAW)
+#else
 #define GUMBO_FAULT_FILE_PATH "/tmp/gumbo-fault-at"
+#endif
+
+/* What a failed extraction answers. The default is the one a caller can act on:
+   a badarg, which reaches it instead of a value. The canary build turns it into
+   a plain 42, which is what a failure looks like when it is carried into a map
+   that cannot tell it from a term -- and then the sweep must fail and name the
+   index, or the sweep cannot see a swallow at all. */
+#ifdef GUMBO_FAULT_SWALLOW
+#define GUMBO_FAULT_FAILURE_VALUE(env) enif_make_int(env, 42)
+#else
+#define GUMBO_FAULT_FAILURE_VALUE(env) enif_make_badarg(env)
 #endif
 
 /* Reads the index from the file named at build time and restarts the count, so
    that each parse in a sweep arms itself. Called from the parse entry point,
-   under the same flag. */
+   under the same flag. A missing file or an unreadable index means never, so a
+   fault build with no sweep running is inert. */
 void gumbo_fault_arm(void);
 
 /* 1 when this extraction is the one the sweep asked to fail, 0 otherwise. */

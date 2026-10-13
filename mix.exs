@@ -87,7 +87,6 @@ defmodule Gumbo.MixProject do
           Mix.raise("test.fault_paths failed with status #{inspect(status)}")
         end
       end,
-
       "test.small_stack": fn _ ->
         # The child VM's exit status must propagate: a destructor crash
         # (e.g. SIGBUS, reported by System.cmd as exit status 138) has to
