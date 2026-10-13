@@ -1,0 +1,161 @@
+name: Precompile
+
+# Tag a release and this builds the NIF for every target the project ships, as one job per target —
+# and each job tests the library on the platform it is building for before it packages it. That
+# ordering is the whole point: cc_precompiler can cross-build a NIF for another architecture, but a
+# NIF for another architecture cannot be loaded, so a cross-built artefact is one nobody has run.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  # Uploading the archives to the release.
+  contents: write
+
+jobs:
+  nif:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      # One target's failure should not hide another's.
+      fail-fast: false
+      matrix:
+        include:
+          # The runner's OTP is the architecture the artefact is for: macos-15 is the Intel image and
+          # macos-15-arm64 the Apple Silicon one, and the Linux pair is 24.04 in both architectures.
+          - target: x86_64-linux-gnu
+            runner: ubuntu-24.04
+          - target: aarch64-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            runner: macos-15
+          - target: aarch64-apple-darwin
+            runner: macos-15-arm64
+          # Windows needs no cross-compiler: MSYS2 provides make and mingw-w64, which is what the
+          # Makefile detects to name the artefact gumbo_nif.dll.
+          - target: x86_64-windows
+            runner: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: erlef/setup-beam@v1
+        with:
+          # The toolchain .mise.toml pins, so a released archive is built by the same compiler and
+          # the same VM the local gates were verified against.
+          otp-version: "29.1.1"
+          elixir-version: "1.20.4"
+
+      - name: Put MSYS2's make and mingw-w64 on PATH
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+
+      - run: mix deps.get --check-locked
+
+      # Test first, package second: this is what makes "supports Windows" a measurement rather than
+      # a hope. The C gates are not part of it — sanitizers and clang-format are Unix tooling — but
+      # every test the suite has runs here.
+      - run: mix test
+
+      - name: Precompile
+        env:
+          MIX_ENV: prod
+          ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
+          # Only targets whose compiler exists on this host: without it cc_precompiler would try
+          # every target it knows and fail on the cross-compilers this job has no reason to install.
+          CC_PRECOMPILER_PRECOMPILE_ONLY_LOCAL: "true"
+        run: mix elixir_make.precompile
+
+      # macOS can build both of its architectures, so this job's precompile pass also produces the
+      # other one — which is a cross-build nobody ran here. The other macOS job produces and tests
+      # that one properly, so only this job's own architecture is uploaded.
+      - name: Keep this job's own architecture
+        shell: bash
+        run: |
+          ls -la cache
+          mkdir -p upload
+          cp cache/*${{ matrix.target }}*.tar.gz upload/
+          ls -la upload
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target }}
+          path: upload/*.tar.gz
+
+      - uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: upload/*.tar.gz
+          generate_release_notes: true
+
+  # The checksum file is what a consumer's elixir_make verifies a downloaded archive against, and it
+  # can only be written after the archives are published — so it is a separate job that fetches what
+  # the release now serves, and proves the release is complete and consistent while doing it.
+  checksum:
+    name: checksum.exs
+    needs: nif
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.1.1"
+          elixir-version: "1.20.4"
+      - run: mix deps.get --check-locked
+      - run: MIX_ENV=prod mix elixir_make.checksum --all --ignore-unavailable
+      - run: cat checksum.exs
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: checksum.exs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: checksum
+          path: checksum.exs
+
+  # A Hex package has to be able to build from source for every platform that has no archive, and a
+  # Hex package carries files, not a git submodule — so this asserts the two things that would
+  # silently break that: the pinned parser's sources are in the tarball, and the C really does build
+  # from the tarball alone.
+  package:
+    name: hex package builds from source
+    needs: [nif, checksum]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.1.1"
+          elixir-version: "1.20.4"
+      - name: Fetch the checksum file the release carries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${GITHUB_REF_NAME}" --pattern checksum.exs --dir .
+      - run: mix deps.get --check-locked
+      - run: mix hex.build
+      - name: The tarball has the pinned parser and builds without the submodule
+        run: |
+          set -euo pipefail
+          tar -tzf gumbo-*.tar.gz | grep -q 'c_src/gumbo-parser/src/parser.c'
+          tar -tzf gumbo-*.tar.gz | grep -q 'checksum.exs'
+          mkdir -p unpacked && tar -xzf gumbo-*.tar.gz -C unpacked
+          cd unpacked
+          make
+          test -f priv/gumbo_nif.so
+          echo "the package builds its NIF from its own sources"

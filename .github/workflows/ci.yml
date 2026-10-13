@@ -157,6 +157,53 @@ jobs:
           ./codecov --token "$CODECOV_TOKEN" --file ./cover/excoveralls.json
         continue-on-error: true
 
+  # Every platform the project packages a NIF for, verified on each push. A platform that ships an
+  # archive is a platform the suite has to keep passing on — otherwise the archive is a promise
+  # nobody is checking. The whole gate runs on Ubuntu above; what has to hold everywhere is the
+  # suite itself, so that is what this matrix runs.
+  platforms:
+    name: test (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-linux-gnu
+            runner: ubuntu-24.04
+          - target: aarch64-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            runner: macos-15
+          - target: aarch64-apple-darwin
+            runner: macos-15-arm64
+          - target: x86_64-windows
+            runner: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.1.1"
+          elixir-version: "1.20.4"
+
+      # Windows gets its C toolchain from MSYS2: the Makefile is a POSIX makefile, and the .dll it
+      # has to produce is mingw's.
+      - name: Put MSYS2's make and mingw-w64 on PATH
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+
+      - run: mix deps.get --check-locked
+      - run: mix test
+
   gate-macos:
     name: mix ci (macOS, pinned toolchain)
     # macOS runners bill at roughly ten times the Linux rate, so this job exists for one

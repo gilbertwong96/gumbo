@@ -1,15 +1,36 @@
 defmodule Gumbo.MixProject do
   use Mix.Project
 
+  @version "0.1.0"
+
   def project do
     [
       app: :gumbo,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       compilers: [:elixir_make] ++ Mix.compilers(),
       make_clean: ["clean"],
+      # Precompiled NIFs. cc_precompiler gives elixir_make a target triple for the host it is
+      # building on, and elixir_make downloads the matching archive from the release below instead
+      # of running the C build; when no archive matches, `make_precompiler_unavailable_target`
+      # falls back to compiling from the sources in this package, which is why `files:` below still
+      # carries the patches and the pinned vendored parser.
+      #
+      # The filename is named explicitly because the shared library is `gumbo_nif` while the app is
+      # `gumbo`; priv_paths is narrowed to the library alone because `priv/obj` is C build scratch
+      # that has no business in a released archive.
+      make_precompiler: {:nif, CCPrecompiler},
+      make_precompiler_filename: "gumbo_nif",
+      make_precompiler_priv_paths: ["gumbo_nif.*"],
+      make_precompiler_url:
+        "https://github.com/gilbertwong96/gumbo/releases/download/v#{@version}/@{artefact_filename}",
+      # Local work always compiles: an archive for the version being worked on cannot exist yet, and
+      # a release run is the only place where fetching instead of building is the point. The key is
+      # `make_force_build`, not `force_build` — elixir_make reads the former, and the latter is
+      # silently ignored, which is how a build can end up doing neither: no download, no compile.
+      make_force_build: Mix.env() != :prod,
       aliases: aliases(),
       deps: deps(),
       dialyzer: dialyzer(),
@@ -310,6 +331,11 @@ defmodule Gumbo.MixProject do
 
   defp deps do
     [
+      # cc_precompiler is what lets this library ship precompiled NIFs; the `make_precompiler*` keys
+      # in project/0 are its other half. Its requirement is `elixir_make ~> 0.7 or ~> 0.8 or ~> 0.9`,
+      # which — since two-segment requirements mean "below 1.0" — already admits the 0.10 this
+      # project locks, so nothing here is pinned back for it.
+      {:cc_precompiler, "~> 0.1", runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:elixir_make, "~> 0.8", runtime: false},
@@ -337,10 +363,16 @@ defmodule Gumbo.MixProject do
       licenses: ["Apache-2.0"],
       links: %{
         "gumbo-parser" => "https://codeberg.org/gumbo-parser/gumbo-parser",
-        # PLACEHOLDER: guessed, no git remote exists yet — see docs/0.
-        "Source" => "https://github.com/elixir-gumbo/gumbo"
+        "Source" => "https://github.com/gilbertwong96/gumbo"
       },
-      files: ~w(lib c_src mix.exs Makefile README.md CHANGELOG.md LICENSE NOTICE)
+      # c_src/gumbo-parser is a git submodule, and a Hex package cannot carry a submodule — it
+      # carries the files. So the package names the pinned parser's sources directly, and a release
+      # from a checkout whose submodule is not initialised would ship a package that cannot compile:
+      # the release workflow checks for exactly that.
+      files: ~w(
+        lib c_src/*.c c_src/*.h c_src/patches c_src/test c_src/gumbo-parser/src
+        mix.exs Makefile coveralls.json checksum.exs README.md CHANGELOG.md LICENSE NOTICE
+      )
     ]
   end
 
