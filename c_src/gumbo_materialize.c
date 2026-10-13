@@ -38,15 +38,15 @@
    pointer-to-index lookup, which is why no child-index structure is
    needed. scratch holds the child terms transiently; it is shared across
    the whole walk because the list cells copy them. */
-static ERL_NIF_TERM gumbo_materialize_children(ErlNifEnv* env,
-                                               const gumbo_handle_t* h,
-                                               size_t i,
-                                               const ERL_NIF_TERM* terms,
-                                               ERL_NIF_TERM* scratch) {
+static int gumbo_materialize_children(ErlNifEnv* env, const gumbo_handle_t* h,
+                                      size_t i, const ERL_NIF_TERM* terms,
+                                      ERL_NIF_TERM* scratch,
+                                      ERL_NIF_TERM* out) {
   ERL_NIF_TERM list = enif_make_list(env, 0);
   GumboVector* children = gumbo_node_children(h->nodes[i]);
   if (children == NULL || children->length == 0) {
-    return list;
+    *out = list;
+    return 1;
   }
 
   size_t end = i + h->subtree_sizes[i];
@@ -60,7 +60,8 @@ static ERL_NIF_TERM gumbo_materialize_children(ErlNifEnv* env,
   while (n-- > 0) {
     list = enif_make_list_cell(env, scratch[n], list);
   }
-  return list;
+  *out = list;
+  return 1;
 }
 
 /* :full — a list with one map per attribute, built by the same builder
@@ -68,9 +69,10 @@ static ERL_NIF_TERM gumbo_materialize_children(ErlNifEnv* env,
    enif_make_map_put, whose overwrite-on-repeated-key semantics match
    Gumbo.Node.attribute_map/1's Map.new; gumbo itself records duplicate
    names as errors and keeps only the first, so the two surfaces agree. */
-static ERL_NIF_TERM gumbo_materialize_attributes(ErlNifEnv* env,
-                                                 const gumbo_atoms_t* atoms,
-                                                 GumboNode* node, int detail) {
+static int gumbo_materialize_attributes(ErlNifEnv* env,
+                                        const gumbo_atoms_t* atoms,
+                                        GumboNode* node, int detail,
+                                        ERL_NIF_TERM* out) {
   GumboVector* attributes = &node->v.element.attributes;
   if (detail == GUMBO_DETAIL_CONTENT) {
     ERL_NIF_TERM map = enif_make_new_map(env);
@@ -81,13 +83,14 @@ static ERL_NIF_TERM gumbo_materialize_attributes(ErlNifEnv* env,
       ERL_NIF_TERM value;
       if (!gumbo_node_stringz(env, atoms, attr->name, &name) ||
           !gumbo_node_stringz(env, atoms, attr->value, &value)) {
-        return enif_make_badarg(env);
+        return 0;
       }
       if (!enif_make_map_put(env, map, name, value, &map)) {
-        return enif_make_badarg(env);
+        return 0;
       }
     }
-    return map;
+    *out = map;
+    return 1;
   }
 
   ERL_NIF_TERM list = enif_make_list(env, 0);
@@ -95,35 +98,41 @@ static ERL_NIF_TERM gumbo_materialize_attributes(ErlNifEnv* env,
   for (i = attributes->length; i-- > 0;) {
     ERL_NIF_TERM map;
     if (!gumbo_attr_details_map(env, atoms, attributes->data[i], &map)) {
-      return enif_make_badarg(env);
+      return 0;
     }
     list = enif_make_list_cell(env, map, list);
   }
-  return list;
+  *out = list;
+  return 1;
 }
 
 /* The :content shape: a usable tree with no source bookkeeping. Elements
    and templates carry %{type, tag, namespace, attributes, children},
    text-like nodes %{type, text}, and the document node %{type, children} —
    it owns the walk's entry points and nothing else. */
-static ERL_NIF_TERM gumbo_materialize_node_content(ErlNifEnv* env,
-                                                   const gumbo_atoms_t* atoms,
-                                                   GumboNode* node,
-                                                   ERL_NIF_TERM children) {
+static int gumbo_materialize_node_content(ErlNifEnv* env,
+                                          const gumbo_atoms_t* atoms,
+                                          GumboNode* node,
+                                          ERL_NIF_TERM children,
+                                          ERL_NIF_TERM* out) {
   switch (node->type) {
     case GUMBO_NODE_DOCUMENT: {
       ERL_NIF_TERM keys[] = {atoms->node.type, atoms->node.children};
       ERL_NIF_TERM values[] = {atoms->node_types[node->type], children};
       ERL_NIF_TERM map;
       if (!enif_make_map_from_arrays(env, keys, values, 2, &map)) {
-        return enif_make_badarg(env);
+        return 0;
       }
-      return map;
+      *out = map;
+      return 1;
     }
     case GUMBO_NODE_ELEMENT:
     case GUMBO_NODE_TEMPLATE: {
-      ERL_NIF_TERM attributes =
-          gumbo_materialize_attributes(env, atoms, node, GUMBO_DETAIL_CONTENT);
+      ERL_NIF_TERM attributes;
+      if (!gumbo_materialize_attributes(env, atoms, node, GUMBO_DETAIL_CONTENT,
+                                        &attributes)) {
+        return 0;
+      }
       ERL_NIF_TERM keys[] = {atoms->node.type, atoms->node.tag,
                              atoms->node.namespace, atoms->node.attributes,
                              atoms->node.children};
@@ -133,24 +142,28 @@ static ERL_NIF_TERM gumbo_materialize_node_content(ErlNifEnv* env,
                                attributes, children};
       ERL_NIF_TERM map;
       if (!enif_make_map_from_arrays(env, keys, values, 5, &map)) {
-        return enif_make_badarg(env);
+        return 0;
       }
-      return map;
+      *out = map;
+      return 1;
     }
     default: {
       ERL_NIF_TERM text;
       if (!gumbo_node_text_term(env, atoms, node, &text)) {
-        return enif_make_badarg(env);
+        return 0;
       }
       ERL_NIF_TERM keys[] = {atoms->node.type, atoms->node.text};
       ERL_NIF_TERM values[] = {atoms->node_types[node->type], text};
       ERL_NIF_TERM map;
       if (!enif_make_map_from_arrays(env, keys, values, 2, &map)) {
-        return enif_make_badarg(env);
+        return 0;
       }
-      return map;
+      *out = map;
+      return 1;
     }
   }
+
+  return 0; /* unreachable: every node type is one of the cases above */
 }
 
 #define GUMBO_MATERIALIZE_FULL_COUNT 19
@@ -158,14 +171,19 @@ static ERL_NIF_TERM gumbo_materialize_node_content(ErlNifEnv* env,
 /* The :full shape: every gumbo field, with nil where the node type carries
    none — the extractors answer nil off their types, exactly as the lazy
    accessors do — plus the attributes list and the children list. */
-static ERL_NIF_TERM gumbo_materialize_node_full(ErlNifEnv* env,
-                                                const gumbo_atoms_t* atoms,
-                                                GumboNode* node,
-                                                ERL_NIF_TERM children) {
-  ERL_NIF_TERM attributes =
-      gumbo_node_is_element(node)
-          ? gumbo_materialize_attributes(env, atoms, node, GUMBO_DETAIL_FULL)
-          : enif_make_list(env, 0);
+static int gumbo_materialize_node_full(ErlNifEnv* env,
+                                       const gumbo_atoms_t* atoms,
+                                       GumboNode* node, ERL_NIF_TERM children,
+                                       ERL_NIF_TERM* out) {
+  ERL_NIF_TERM attributes;
+  if (gumbo_node_is_element(node)) {
+    if (!gumbo_materialize_attributes(env, atoms, node, GUMBO_DETAIL_FULL,
+                                      &attributes)) {
+      return 0;
+    }
+  } else {
+    attributes = enif_make_list(env, 0);
+  }
 
   ERL_NIF_TERM keys[GUMBO_MATERIALIZE_FULL_COUNT] = {
       atoms->node.type,
@@ -210,38 +228,47 @@ static ERL_NIF_TERM gumbo_materialize_node_full(ErlNifEnv* env,
       !gumbo_node_end_position_term(env, atoms, node, &values[14]) ||
       !gumbo_node_text_term(env, atoms, node, &values[15]) ||
       !gumbo_node_original_text_term(env, atoms, node, &values[16])) {
-    return enif_make_badarg(env);
+    return 0;
   }
   values[17] = attributes;
   values[18] = children;
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values,
                                  GUMBO_MATERIALIZE_FULL_COUNT, &map)) {
-    return enif_make_badarg(env);
+    return 0;
   }
-  return map;
+  *out = map;
+  return 1;
 }
 
 /* One reverse pass over the table range [start, start + count), storing
    each node's map at terms[i]. Children are read from positions greater
    than i, which the pass has already built; scratch is the shared
    child-terms buffer, allocated by gumbo_materialize_scratch to fit any
-   children vector in the range. Allocation failures surface as badarg
-   terms rather than raising. */
-static void gumbo_materialize_range(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                    const gumbo_handle_t* h, size_t start,
-                                    size_t count, int detail,
-                                    ERL_NIF_TERM* terms,
-                                    ERL_NIF_TERM* scratch) {
+   children vector in the range. A failure answers 0 and the entry point
+   turns it into a badarg, so no caller can end up holding half a tree. */
+static int gumbo_materialize_range(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                   const gumbo_handle_t* h, size_t start,
+                                   size_t count, int detail,
+                                   ERL_NIF_TERM* terms, ERL_NIF_TERM* scratch) {
   size_t i;
   for (i = start + count; i-- > start;) {
     GumboNode* node = h->nodes[i];
-    ERL_NIF_TERM children =
-        gumbo_materialize_children(env, h, i, terms, scratch);
-    terms[i] = (detail == GUMBO_DETAIL_CONTENT)
-                   ? gumbo_materialize_node_content(env, atoms, node, children)
-                   : gumbo_materialize_node_full(env, atoms, node, children);
+    ERL_NIF_TERM children;
+    if (!gumbo_materialize_children(env, h, i, terms, scratch, &children)) {
+      return 0;
+    }
+
+    int ok = (detail == GUMBO_DETAIL_CONTENT)
+                 ? gumbo_materialize_node_content(env, atoms, node, children,
+                                                  &terms[i])
+                 : gumbo_materialize_node_full(env, atoms, node, children,
+                                               &terms[i]);
+    if (!ok) {
+      return 0;
+    }
   }
+  return 1;
 }
 
 /* The two scratch arrays every materialize call needs: the per-node terms
@@ -284,8 +311,12 @@ ERL_NIF_TERM gumbo_nif_materialize_output(ErlNifEnv* env,
     return enif_make_badarg(env);
   }
 
-  gumbo_materialize_range(env, atoms, h, 0, h->node_count, detail, terms,
-                          scratch);
+  if (!gumbo_materialize_range(env, atoms, h, 0, h->node_count, detail, terms,
+                               scratch)) {
+    enif_free(terms);
+    enif_free(scratch);
+    return enif_make_badarg(env);
+  }
 
   /* The errors vector in source order, each as gumbo_error_materialized_map
      builds it: the eight fields plus the rendered message, and deliberately no
@@ -358,8 +389,12 @@ ERL_NIF_TERM gumbo_nif_materialize_node(ErlNifEnv* env,
   }
 
   size_t start = (size_t)index;
-  gumbo_materialize_range(env, atoms, h, start, h->subtree_sizes[start], detail,
-                          terms, scratch);
+  if (!gumbo_materialize_range(env, atoms, h, start, h->subtree_sizes[start],
+                               detail, terms, scratch)) {
+    enif_free(terms);
+    enif_free(scratch);
+    return enif_make_badarg(env);
+  }
   ERL_NIF_TERM out = terms[start];
   enif_free(terms);
   enif_free(scratch);
