@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from a term, and a caller read it back as the integer `42`. They answer a status with the term written
   through an out parameter now, and every entry point turns a failure into the same `badarg` the VM
   surfaces as `ArgumentError`. Outside those paths — which are OOM-only — nothing a caller sees has changed.
+- No C in this library reports a failure with a term any more: a failure is a status the caller turns
+  into a `badarg`, so it cannot be stored in a map or a list and read back as a number later.
+- `mix ci` also runs `make check-failure-returns`, which fails if a failure value is ever stored rather
+  than returned, or if a numeric literal is used where a term is expected.
 - `cert-err33-c` is on for the C that ships: it is what found the disregarded returns above. `mix ci`
   also runs the fault-injection sweep, `mix test.fault_paths`, as a step of its own — it arms an
   extraction to fail by index and requires every one of them to reach the caller.

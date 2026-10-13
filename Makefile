@@ -400,6 +400,28 @@ C_TIDY_SRCS := $(filter-out c_src/test/analyzer_canary.c, $(wildcard c_src/*.c c
 # c_src/test: they print diagnostics to stderr, where the return value of a fprintf has no action to
 # take and no caller to inform. The check stays on for every file whose disregard of a return could
 # hide something a caller would have wanted to know. It is what found the defect this work exists for.
+# The precondition of the crash this work removed: a failure is returned, never stored. A value that
+# stands for a failure and travels into a map or a list is read back as a number at best (measured:
+# 42) and crashes the emulator's collector at worst (measured: a bare 1, exit 139). Two shapes would
+# let one in, and neither exists here now. Both were real: the first is the convention the extractors
+# used before they were converted, and the second is what a transform of mine produced at three sites.
+check-failure-returns:
+	@fail=0; \
+	if grep -REn 'enif_make_badarg' c_src/*.c | grep -v 'return enif_make_badarg'; then \
+		echo "FAIL: the enif_make_badarg above is not returned; a failure may not be stored or passed"; \
+		fail=1; \
+	fi; \
+	if grep -REn '\*out = [0-9]' c_src/*.c; then \
+		echo "FAIL: a numeric literal is stored where a term is expected above; a bare integer is not a term"; \
+		fail=1; \
+	fi; \
+	if grep -REn 'ERL_NIF_TERM [a-z_]+ = [0-9]' c_src/*.c; then \
+		echo "FAIL: a numeric literal initializes a term above; a bare integer is not a term"; \
+		fail=1; \
+	fi; \
+	[ $$fail -eq 0 ] || exit 1; \
+	echo "PASS: every failure is returned rather than stored, and no literal is used as a term"
+
 check-c-tidy: $(GUMBO_SRC_STAMP)
 	@command -v $(word 1,$(CLANG_TIDY)) > /dev/null 2>&1 || { \
 		echo "FAIL: clang-tidy is not available (mise manages it: mise trust && mise install)"; \
@@ -472,4 +494,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint check-c-tidy check-fault-paths
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint check-c-tidy check-fault-paths check-failure-returns
