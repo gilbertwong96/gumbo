@@ -7,6 +7,22 @@ defmodule Gumbo.Patches.GeneratorTest do
 
   @repo_root Path.expand("../../..", __DIR__)
 
+  # The default heads are `File.cwd!()`, so this test must run with the repository root as its
+  # working directory — the same assumption the mix task suite already makes. Each head is
+  # exercised through its default-root arity and pinned to the explicit-root call.
+  test "the default root is the working directory, one head per arity" do
+    assert Patches.definitions() == Patches.definitions(@repo_root)
+    assert Patches.patches() == Patches.patches(@repo_root)
+
+    assert Patches.generate("0002-open-element-queries") ==
+             Patches.generate("0002-open-element-queries", @repo_root)
+
+    assert Patches.check("0002-open-element-queries") == :ok
+
+    # Safe: the committed bytes are what generate/2 produces, so write/1 writes nothing.
+    assert Patches.write("0002-open-element-queries") == :unchanged
+  end
+
   test "every committed patch is what its definition produces" do
     for {name, _} <- Patches.definitions(@repo_root) do
       assert Patches.check(name, @repo_root) == :ok
@@ -43,6 +59,25 @@ defmodule Gumbo.Patches.GeneratorTest do
 
     fresh = fake_root(%{patch: :generated})
     assert Patches.write("0001-fixture", fresh) == :unchanged
+  end
+
+  test "a prior patch that does not apply refuses to generate, naming the patch" do
+    # A well-formed patch with non-matching context is not enough: inside this repository
+    # git apply resolves `--directory` paths against the worktree root and skips them with
+    # exit 0, so the bogus prior must be input git rejects outright.
+    bogus = "this is not a patch at all\n"
+
+    root = fake_root(%{priors: true, extra_patches: [{"0000-bogus", bogus}]})
+    message = assert_raise RuntimeError, fn -> Patches.generate("0001-fixture", root) end
+
+    assert message.message =~ "0000-bogus.patch does not apply to the pinned source"
+  end
+
+  test "fake_root/0 defaults to an empty option map" do
+    root = fake_root()
+
+    assert File.dir?(root)
+    assert String.starts_with?(root, Path.expand("../../../tmp/generator-", __DIR__))
   end
 
   test "a substitution that finds the wrong number of occurrences refuses to generate" do
