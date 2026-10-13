@@ -1,6 +1,10 @@
 # Gumbo
 
 [![CI](https://github.com/gilbertwong96/gumbo/actions/workflows/ci.yml/badge.svg)](https://github.com/gilbertwong96/gumbo/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/gilbertwong96/gumbo/graph/badge.svg)](https://codecov.io/gh/gilbertwong96/gumbo)
+[![Elixir](https://img.shields.io/badge/elixir-1.20+-purple.svg)](https://elixir-lang.org)
+[![OTP](https://img.shields.io/badge/otp-27_%7C_29-blue.svg)](https://github.com/gilbertwong96/gumbo/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 An Elixir binding to [gumbo-parser 0.14.1](https://codeberg.org/gumbo-parser/gumbo-parser/src/tag/0.14.1),
 Google's C99 HTML5 parser.

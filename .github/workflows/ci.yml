@@ -120,6 +120,43 @@ jobs:
       # failure sweep. Nothing here is a smoke test the local gate does not run.
       - run: mix ci
 
+      # The number the README badge shows, and nothing else: codecov is here for visibility, so
+      # its status checks and its PR comment are off in codecov.yml. The gate stays
+      # coveralls.json's minimum_coverage, which the step above has just enforced — a second gate
+      # would be a second source of truth for the same claim. No MIX_ENV is needed: cli/0's
+      # preferred_envs already runs the coveralls tasks in :test.
+      - name: Coverage for the badge
+        run: mix coveralls.json
+
+      - name: Upload the coverage report as an artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-linux
+          path: |
+            cover/excoveralls.json
+            cover/*.html
+
+      - name: Post coverage to Codecov
+        # The bash uploader rather than codecov-cli, for the reason recorded in gilbertwong96's
+        # longbridge workflow: the cli ships no Elixir/coveralls-format plugin and answers
+        # "Found 0 coverage files to report" for this very file.
+        #
+        # Skipping when the secret is absent is deliberate: a missing upload must not turn a green
+        # gate red, and the artifact above already uploaded keeps the data reachable until the
+        # repo is enabled at codecov.io and the token is added as a secret.
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [ -z "$CODECOV_TOKEN" ]; then
+            echo "::notice::CODECOV_TOKEN not set - skipping the Codecov upload."
+            echo "Enable https://codecov.io/gh/gilbertwong96/gumbo and add its token as a secret."
+            exit 0
+          fi
+          curl -Os https://uploader.codecov.io/latest/linux/codecov
+          chmod +x codecov
+          ./codecov --token "$CODECOV_TOKEN" --file ./cover/excoveralls.json
+        continue-on-error: true
+
   gate-macos:
     name: mix ci (macOS, pinned toolchain)
     # macOS runners bill at roughly ten times the Linux rate, so this job exists for one
