@@ -147,6 +147,26 @@ static const char* kRaw[] = {"<script>var a = '<div>';</script>",
 
 static void append(char** buf, size_t* len, size_t* cap, const char* s);
 
+/* A nested run, deeper than the reference implementation's default ceiling on
+ * purpose. The depth cap is a lever whose default must not fire, and a corpus
+ * that never nests could not notice if it did; 450 levels and up is past the
+ * 400 (401 for a fragment) the reference carries, so a cap that fired would
+ * show up as a tree difference rather than as a passing comparison. */
+static void append_depth_cluster(char** buf, size_t* len, size_t* cap,
+                                 unsigned seed) {
+  static const char* kOpens[] = {"<div>", "<section>", "<span>", "<b>", "<i>"};
+  static const char* kCloses[] = {"</div>", "</section>", "</span>", "</b>",
+                                  "</i>"};
+  const unsigned tag_count = sizeof(kOpens) / sizeof(*kOpens);
+  unsigned levels = 450u + (seed % 200u);
+  for (unsigned i = 0; i < levels; ++i) {
+    append(buf, len, cap, kOpens[i % tag_count]);
+  }
+  for (unsigned i = levels; i > 0; --i) {
+    append(buf, len, cap, kCloses[(i - 1) % tag_count]);
+  }
+}
+
 /* Elements carrying a pile of attributes, which is where the duplicate check
  * lives: many distinct names, many duplicates of one name, names that differ
  * only in a trailing character, and names long enough that a length check would
@@ -206,6 +226,11 @@ static char* make_document(unsigned tokens, unsigned bias) {
 
   if (bias % 4 == 0) {
     append(&buf, &len, &cap, "<!doctype html>");
+  }
+  /* Every eighth document opens with the nested run, which is the shape the
+   * depth cap's default has to leave alone. */
+  if (bias % 8 == 1) {
+    append_depth_cluster(&buf, &len, &cap, bias);
   }
   for (unsigned i = 0; i < tokens; ++i) {
     unsigned roll = pick(100);
