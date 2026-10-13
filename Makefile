@@ -65,8 +65,12 @@ ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -pthread -Wall -Wextra -MMD -MP \
 # places, and they are patched in a copy rather than fixed in place, so those
 # warnings are not ours to remove; silence only those two for the vendored objects
 # so a warning in our own c_src/*.c still stands out. Our sources keep the full
-# $(ALL_CFLAGS) set — do not re-broaden this.
-GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare
+# $(ALL_CFLAGS) set — do not re-broaden this. -Wtype-limits joins them for the same
+# reason plus one: gcc enables it under -Wextra and clang, which the local gates
+# happen to use, does not, so without it the two always-true comparisons in the
+# vendored vector.c are reported by a Linux runner on every build and by nothing
+# locally.
+GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-type-limits
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
