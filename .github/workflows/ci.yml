@@ -145,6 +145,19 @@ jobs:
       - run: mise trust
       - run: mise install
 
+      # Homebrew's LLVM download and keg, so a rerun does not re-download 2 GB of it. The key
+      # follows .mise.toml, where the clang major is pinned; if Homebrew's llvm@23 moves to a
+      # newer build, `brew install` sees the restored keg as outdated and upgrades it rather
+      # than letting a stale one stand.
+      - name: Cache Homebrew's LLVM
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/Cellar/llvm@23
+            /opt/homebrew/opt/llvm@23
+          key: ${{ runner.os }}-brew-llvm23-${{ hashFiles('.mise.toml') }}
+
       # Homebrew's LLVM, because mise's clang is the compiler only: it ships no clang-format
       # and no clang-tidy, which is why .mise.toml names a Homebrew LLVM bin directory as the
       # place this project's tools come from (Homebrew keeps llvm keg-only, so that path has
