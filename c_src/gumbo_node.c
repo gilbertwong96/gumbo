@@ -30,17 +30,24 @@
 static ERL_NIF_TERM gumbo_node_invalid(ErlNifEnv* env,
                                        const gumbo_atoms_t* atoms, int status,
                                        const ERL_NIF_TERM argv[]) {
+  /* The casts acknowledge what cert-err33-c is right to notice: snprintf's
+     return value is disregarded. Safe here, and it has to be said rather than
+     assumed: 64 bytes holds every format below with room to spare — "invalid
+     node index: %lu" is the longest, and an unsigned long prints in at most 20
+     digits — so truncation cannot happen. The length that matters is built by
+     strlen below, not by snprintf. */
   char message[64];
   if (status == GUMBO_NODE_INVALID_HANDLE) {
-    snprintf(message, sizeof(message), "invalid output handle");
+    (void)snprintf(message, sizeof(message), "invalid output handle");
   } else {
     unsigned long index;
     if (enif_get_ulong(env, argv[1], &index)) {
-      snprintf(message, sizeof(message), "invalid node index: %lu", index);
+      (void)snprintf(message, sizeof(message), "invalid node index: %lu",
+                     index);
     } else {
       /* A negative or bignum index has no ulong value, so report the
          failure without a bogus index of 0. */
-      snprintf(message, sizeof(message), "invalid node index");
+      (void)snprintf(message, sizeof(message), "invalid node index");
     }
   }
   ERL_NIF_TERM message_term;
