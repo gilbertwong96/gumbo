@@ -17,7 +17,7 @@ defmodule Gumbo.MixProject do
       # excluded from the measurement: Gumbo.Patches.Diff's dead `split/5` clause, Gumbo.Native's
       # load_nif/0 raise (only a broken build runs it), and Gumbo.Native's thirty-odd pre-load stub
       # bodies — :cover instruments them, load_nif/2 replaces them, and NIF entries are invisible to
-      # coverage, so no test can move that module's percentage.
+      # coverage, so no test can cover those stub bodies.
       test_coverage: [summary: [threshold: 92]],
       package: package(),
       docs: docs()
@@ -56,7 +56,7 @@ defmodule Gumbo.MixProject do
         "ci.dead_code",
         # The threshold in project/0 is a gate or it is a report: run the covered suite here so
         # the number cannot rot silently.
-        "test.coverage",
+        "test.covered",
         "test.small_stack",
         "test.teardown_contract",
         "check.patch",
@@ -119,7 +119,7 @@ defmodule Gumbo.MixProject do
       # registered that load_nif/2 call fails with {:upgrade, ...}, the module drops out of the
       # table, and the suite's lowest line is erased from the ci sum. A fresh VM loads the NIF
       # exactly once, so the table keeps all modules and the log stays clean.
-      "test.coverage": fn _ ->
+      "test.covered": fn _ ->
         # The child VM's exit status must propagate: the threshold lives in
         # project/0 and failing it must fail the alias or the gate is a report.
         {_output, status} =
@@ -131,7 +131,7 @@ defmodule Gumbo.MixProject do
           )
 
         if status != 0 do
-          Mix.raise("test.coverage failed with status #{inspect(status)}")
+          Mix.raise("test.covered failed with status #{inspect(status)}")
         end
       end,
       # The vendored sources are patched out of tree, so the patch has to keep
