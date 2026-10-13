@@ -177,8 +177,6 @@ jobs:
             runner: macos-15-intel
           - target: aarch64-apple-darwin
             runner: macos-15
-          - target: x86_64-windows
-            runner: windows-2025
     steps:
       - uses: actions/checkout@v7
         with:
@@ -189,10 +187,31 @@ jobs:
           otp-version: "29.1.1"
           elixir-version: "1.20.4"
 
-      # Windows gets its C toolchain from MSYS2: the Makefile is a POSIX makefile, and the .dll it
-      # has to produce is mingw's.
-      - name: Put MSYS2's make and mingw-w64 on PATH
-        if: runner.os == 'Windows'
+      - run: mix deps.get --check-locked
+      - run: mix test
+
+  # Windows is a job of its own because its steps have to run inside MSYS2's shell. elixir_make wants
+  # a POSIX toolchain — make, a compiler, uname — which a Windows runner has in MSYS2 and not on the
+  # PATH a pwsh step inherits; `shell:` cannot be templated or made conditional, so the only way to
+  # say "these steps run in MSYS2" is a job whose default shell is MSYS2's.
+  platforms-windows:
+    name: test (x86_64-windows)
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.1.1"
+          elixir-version: "1.20.4"
+
+      - name: MSYS2's make and mingw-w64
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64

@@ -35,10 +35,6 @@ jobs:
             runner: macos-15-intel
           - target: aarch64-apple-darwin
             runner: macos-15
-          # Windows needs no cross-compiler: MSYS2 provides make and mingw-w64, which is what the
-          # Makefile detects to name the artefact gumbo_nif.dll.
-          - target: x86_64-windows
-            runner: windows-2025
     steps:
       - uses: actions/checkout@v7
         with:
@@ -81,7 +77,6 @@ jobs:
       # other one — which is a cross-build nobody ran here. The other macOS job produces and tests
       # that one properly, so only this job's own architecture is uploaded.
       - name: Keep this job's own architecture
-        shell: bash
         run: |
           ls -la cache
           mkdir -p upload
@@ -99,12 +94,74 @@ jobs:
           files: upload/*.tar.gz
           generate_release_notes: true
 
+  # Windows is a job of its own because its steps must run inside MSYS2's shell — `shell:` cannot be
+  # templated or made conditional, and elixir_make needs the POSIX toolchain a Windows runner keeps in
+  # MSYS2 rather than on the PATH a pwsh step inherits. MSYS2 is also where the make and mingw-w64 that
+  # produce gumbo_nif.dll come from, and the Makefile names the artefact .dll for exactly that reason.
+  nif-windows:
+    name: x86_64-windows
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.1.1"
+          elixir-version: "1.20.4"
+
+      - name: MSYS2's make and mingw-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+
+      - run: mix deps.get --check-locked
+
+      # Test first, package second — the same ordering as the Unix jobs, and the same reason: a NIF
+      # nobody has run is not a supported platform.
+      - run: mix test
+
+      - name: Precompile
+        env:
+          MIX_ENV: prod
+          ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
+          # Only targets whose compiler exists here. On this runner that is the native mingw target
+          # alone, which is why everything in cache/ is this job's own archive.
+          CC_PRECOMPILER_PRECOMPILE_ONLY_LOCAL: "true"
+        run: mix elixir_make.precompile
+
+      - name: Keep what this job built
+        run: |
+          ls -la cache
+          mkdir -p upload
+          cp cache/*.tar.gz upload/
+          ls -la upload
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: x86_64-windows
+          path: upload/*.tar.gz
+
+      - uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: upload/*.tar.gz
+
   # The checksum file is what a consumer's elixir_make verifies a downloaded archive against, and it
   # can only be written after the archives are published — so it is a separate job that fetches what
   # the release now serves, and proves the release is complete and consistent while doing it.
   checksum:
     name: checksum.exs
-    needs: nif
+    needs: [nif, nif-windows]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 20
