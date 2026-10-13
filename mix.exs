@@ -56,7 +56,7 @@ defmodule Gumbo.MixProject do
         "ci.dead_code",
         # The threshold in project/0 is a gate or it is a report: run the covered suite here so
         # the number cannot rot silently.
-        "test --cover",
+        "test.coverage",
         "test.small_stack",
         "test.teardown_contract",
         "check.patch",
@@ -112,6 +112,26 @@ defmodule Gumbo.MixProject do
 
         if status != 0 do
           Mix.raise("test.small_stack failed with status #{inspect(status)}")
+        end
+      end,
+      # Like test.small_stack, the covered suite gets its own VM. Cover forces a recompile and
+      # reload, which re-runs Gumbo.Native's @on_load; in a VM that already has the NIF
+      # registered that load_nif/2 call fails with {:upgrade, ...}, the module drops out of the
+      # table, and the suite's lowest line is erased from the ci sum. A fresh VM loads the NIF
+      # exactly once, so the table keeps all modules and the log stays clean.
+      "test.coverage": fn _ ->
+        # The child VM's exit status must propagate: the threshold lives in
+        # project/0 and failing it must fail the alias or the gate is a report.
+        {_output, status} =
+          System.cmd(
+            "elixir",
+            ["-S", "mix", "test", "--cover"],
+            into: IO.stream(),
+            stderr_to_stdout: true
+          )
+
+        if status != 0 do
+          Mix.raise("test.coverage failed with status #{inspect(status)}")
         end
       end,
       # The vendored sources are patched out of tree, so the patch has to keep
