@@ -472,4 +472,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint check-c-tidy
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint check-c-tidy check-fault-paths
