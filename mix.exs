@@ -13,12 +13,16 @@ defmodule Gumbo.MixProject do
       aliases: aliases(),
       deps: deps(),
       dialyzer: dialyzer(),
-      # The suite's honest floor. Three classes of line cannot be covered here and none of them is
-      # excluded from the measurement: Gumbo.Patches.Diff's dead `split/5` clause, Gumbo.Native's
-      # load_nif/0 raise (only a broken build runs it), and Gumbo.Native's thirty-odd pre-load stub
-      # bodies — :cover instruments them, load_nif/2 replaces them, and NIF entries are invisible to
-      # coverage, so no test can cover those stub bodies.
-      test_coverage: [summary: [threshold: 92]],
+      # ExCoveralls, because the number is published: codecov reads the coveralls JSON that
+      # `mix coveralls.json` writes. The floor moved with the tool — from the built-in :cover
+      # summary to coveralls.json's `minimum_coverage` — and stayed the same 92 for the same
+      # reason: three classes of line cannot be covered and none of them is excluded from the
+      # measurement. Gumbo.Patches.Diff's dead `split/5` clause, Gumbo.Native's load_nif/0 raise
+      # (only a broken build runs it), and Gumbo.Native's thirty-odd pre-load stub bodies, which
+      # :cover instruments, load_nif/2 replaces, and NIF entries are invisible to coverage, so no
+      # test can cover them. `mix coveralls` enforces the floor; `mix coveralls.json` only writes
+      # the file codecov reads, which is why the uploaded number is never the gate.
+      test_coverage: [tool: ExCoveralls],
       package: package(),
       docs: docs()
     ]
@@ -28,8 +32,10 @@ defmodule Gumbo.MixProject do
   # running the chain in :test keeps every step on one environment: compile
   # then also covers test/support, and dialyzer gets its own PLT under
   # _build/test/plts instead of sharing dev's.
+  # `ci` runs the whole chain in :test, and the coveralls tasks are :test tasks too: naming them
+  # here is what keeps `mix coveralls` from needing a MIX_ENV prefix that only CI would remember.
   def cli do
-    [preferred_envs: [ci: :test]]
+    [preferred_envs: [ci: :test, coveralls: :test, "coveralls.json": :test]]
   end
 
   # Run "mix help compile.app" to learn about applications.
@@ -120,12 +126,15 @@ defmodule Gumbo.MixProject do
       # table, and the suite's lowest line is erased from the ci sum. A fresh VM loads the NIF
       # exactly once, so the table keeps all modules and the log stays clean.
       "test.covered": fn _ ->
-        # The child VM's exit status must propagate: the threshold lives in
-        # project/0 and failing it must fail the alias or the gate is a report.
+        # `mix coveralls` is what enforces coveralls.json's minimum_coverage, so its exit status
+        # must propagate or the gate is a report. The child VM is not about isolation: inside
+        # `mix ci`'s single VM the dead-code steps have already loaded Gumbo.Native, cover's forced
+        # reload of it then fails with {:upgrade, …}, and the lowest module silently drops out of
+        # the table — the exact shape the no-ignore_modules rule exists to prevent.
         {_output, status} =
           System.cmd(
             "elixir",
-            ["-S", "mix", "test", "--cover"],
+            ["-S", "mix", "coveralls"],
             into: IO.stream(),
             stderr_to_stdout: true
           )
@@ -307,6 +316,11 @@ defmodule Gumbo.MixProject do
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
+      # What the README's coverage badge shows. The gate is coveralls.json's minimum_coverage,
+      # enforced by `mix coveralls` in mix ci's test.covered step; this dependency exists only to
+      # write the coveralls format codecov reads, so it stays out of the runtime and out of every
+      # env but :test.
+      {:excoveralls, "~> 0.18", only: [:test], runtime: false},
       {:reach, "~> 2.8", only: [:dev, :test], runtime: false}
     ]
   end

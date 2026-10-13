@@ -1,0 +1,16 @@
+# Codecov is here for the visible number, not as a gate.
+#
+# The coverage gate is mix.exs's `test_coverage` threshold, enforced by `mix ci` through the
+# `test.covered` step — this repository already proved that gate can fail, by removing a single
+# `(void)` cast on a scratch branch and watching CI reject it. Turning codecov's status checks on
+# as well would create a second source of truth for the same claim, and would make a public build
+# depend on a third party's availability for a decision the repository can already make itself.
+#
+# So the checks are off and the PR comment is off. What is left is the badge and the uploaded
+# report: the same measurement, published.
+coverage:
+  status:
+    project: off
+    patch: off
+
+comment: false
