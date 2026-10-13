@@ -18,10 +18,12 @@ defmodule Gumbo.FaultPathsTest do
 
   @sweep 1..64
   @html ~s(<div a=1><p>x</p><!--c--></div>)
+  @attribute_html ~s(<div class="a" id="b">x</div>)
 
   test "a failed extraction reaches the caller instead of becoming a value" do
     sentinel = fault_file() <> ".armed"
     File.rm(sentinel)
+    File.write!(fault_file(), "0")
     {:returned, reference} = observe(@html)
 
     # The library that ran was a fault build: gumbo_fault_arm exists only in one, and it leaves this
@@ -97,6 +99,53 @@ defmodule Gumbo.FaultPathsTest do
     {:ok, details} = Gumbo.Node.details(Gumbo.Output.document(output))
 
     {:returned, details}
+  rescue
+    error -> {:raised, error}
+  end
+
+  # The attribute path is a second, nested one: an attribute is a map inside the list a node carries,
+  # and the failure it has to survive is the same failure one level deeper. The observation is the
+  # attribute map itself, which is made of values derived from the HTML and is therefore the same on
+  # every run, so it can be compared against an unarmed one.
+  test "an armed failure in the attribute path reaches the caller too" do
+    File.write!(fault_file(), "0")
+    {:returned, reference} = observe_attribute(@attribute_html)
+
+    outcomes =
+      for n <- @sweep do
+        File.write!(fault_file(), Integer.to_string(n))
+        {n, observe_attribute(@attribute_html)}
+      end
+
+    assert Enum.any?(outcomes, fn
+             {_n, {:raised, _}} -> true
+             {_n, {:returned, observed}} -> observed != reference
+           end),
+           """
+           no armed extraction changed the attribute path's answer, so this sweep never fired: the
+           library has a hook, but nothing here reached it.
+           """
+
+    swallowed =
+      for {n, {:returned, observed}} <- outcomes, observed != reference, do: n
+
+    assert swallowed == [],
+           "these extractions failed and the failure came back as a value instead of raising: " <>
+             inspect(swallowed)
+  end
+
+  defp observe_attribute(html) do
+    {:ok, output} = Gumbo.parse(html)
+
+    element =
+      output
+      |> Gumbo.Output.document()
+      |> Gumbo.Node.descendants()
+      |> Enum.find(&(Gumbo.Node.tag(&1) == :div))
+
+    {:ok, map} = Gumbo.Native.attr_details(output.resource, element.index, 0)
+
+    {:returned, map}
   rescue
     error -> {:raised, error}
   end
