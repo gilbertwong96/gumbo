@@ -380,6 +380,7 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->stop_on_first_error = enif_make_atom(env, "stop_on_first_error");
   atoms->max_errors = enif_make_atom(env, "max_errors");
   atoms->max_attributes = enif_make_atom(env, "max_attributes");
+  atoms->max_tree_depth = enif_make_atom(env, "max_tree_depth");
   atoms->fragment_context = enif_make_atom(env, "fragment_context");
   atoms->fragment_namespace = enif_make_atom(env, "fragment_namespace");
   atoms->dirty = enif_make_atom(env, "dirty");
@@ -389,6 +390,7 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->input_too_large = enif_make_atom(env, "input_too_large");
   atoms->too_many_attributes = enif_make_atom(env, "too_many_attributes");
   atoms->too_deep = enif_make_atom(env, "too_deep");
+  atoms->tree_too_deep = enif_make_atom(env, "tree_too_deep");
 
   /* Node accessors: details-map keys named after the accessors they feed,
      the %Gumbo.Position{} struct keys, and the error atoms. */

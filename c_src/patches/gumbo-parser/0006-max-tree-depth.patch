@@ -1,0 +1,111 @@
+From: patched for this project, not from upstream
+Subject: [PATCH 6/6] Cap the parse tree's depth, the lever Nokogiri's gumbo exposes
+
+Upstream gumbo has no ceiling on the parse tree's depth, and this library does not
+need one: the parse's recursion follows the input's nesting depth for its stack, not
+for its time, so a 200 000-level body fragment parses in 78 ms, linear in depth, and
+c_src/gumbo_parse_stack.c sizes or refuses the stack it needs. What this patch adds
+is the lever an application needs when it wants the tree its reference implementation
+builds: Nokogiri's vendored gumbo carries `max_tree_depth` (400 by default, and its
+Ruby layer translates a negative value to UINT_MAX and adds one for a fragment, to
+account for the implied `<html>`), and an application pinned to that reference cannot
+ask this parser for the same behaviour without it.
+
+So GumboOptions.max_tree_depth sets how many open elements the parse may have, and
+GumboOutput.tree_too_deep reports that it stopped because of it. Exceeding the limit
+terminates the token stream as if EOF had been reached, exactly as the reference
+does, because breaking out of the loop mid-parse leaves the document in an
+inconsistent state. Nothing else changes: the default is no limit, so a parse that
+sets nothing is bit-identical to the pin, which is what `make check-parity` asserts.
+--- a/src/gumbo.h
++++ b/src/gumbo.h
+@@ -656,6 +656,19 @@
+    * the number, because the caller is the one that chose the thread.
+    */
+   size_t stack_budget;
++
++  /**
++   * The largest number of open elements the parse may have, or UINT_MAX (the -1
++   * this library passes for it) for no limit. The comparison is against the parser's
++   * open-element stack, so an implied <html> counts and a fragment's context element
++   * counts too: a caller meaning "400 levels of content" passes 401 for a fragment,
++   * which is what the reference implementation's Ruby layer does. Exceeding it
++   * terminates the token stream as if EOF, so the tree is truncated at that point and
++   * GumboOutput.tree_too_deep is set. There is no default ceiling here on purpose:
++   * this patch adds a lever, and a parse that sets nothing must build exactly what
++   * the unpatched parser builds.
++   */
++  unsigned int max_tree_depth;
+ } GumboOptions;
+ 
+ /**
+@@ -705,6 +718,14 @@
+    * rather than returning it.
+    */
+   bool too_deep;
++
++  /**
++   * True if the parse stopped because the open-element stack went past
++   * GumboOptions.max_tree_depth. The tree is what had been built when the limit was
++   * reached, which differs from what the parser builds without the cap, so this
++   * library refuses such a parse rather than returning it.
++   */
++  bool tree_too_deep;
+ } GumboOutput;
+ 
+ /**
+--- a/src/parser.c
++++ b/src/parser.c
+@@ -106,7 +106,8 @@
+ static void free_wrapper(void* unused, void* ptr) { free(ptr); }
+ 
+ const GumboOptions kGumboDefaultOptions = {&malloc_wrapper, &free_wrapper, NULL,
+-    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML, 1024, 0};
++    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML, 1024, 0,
++    (unsigned int) -1};
+ 
+ static const GumboStringPiece kDoctypeHtml = GUMBO_STRING("html");
+ static const GumboStringPiece kPublicIdHtml4_0 =
+@@ -535,6 +536,7 @@
+   output->root = NULL;
+   output->too_many_attributes = false;
+   output->too_deep = false;
++  output->tree_too_deep = false;
+   output->document = new_document_node(parser);
+   parser->_output = output;
+   gumbo_init_errors(parser);
+@@ -4625,6 +4627,7 @@
+   // Sanity check so that infinite loops die with an assertion failure instead
+   // of hanging the process before we ever get an error.
+   int loop_count = 0;
++  const unsigned int max_tree_depth = options->max_tree_depth;
+ 
+   GumboToken token;
+   bool has_error = false;
+@@ -4637,7 +4640,15 @@
+       gumbo_tokenizer_set_is_current_node_foreign(&parser,
+           current_node &&
+               current_node->v.element.tag_namespace != GUMBO_NAMESPACE_HTML);
+-      has_error = !gumbo_lex(&parser, &token) || has_error;
++      // If the tree depth limit has been exceeded, proceed as if EOF has been
++      // reached: the loop is left to finish the parse normally, because breaking out
++      // of it here leaves the document in an inconsistent state.
++      if (state->_open_elements.length > max_tree_depth) {
++        parser._output->tree_too_deep = true;
++        token.type = GUMBO_TOKEN_EOF;
++      } else {
++        has_error = !gumbo_lex(&parser, &token) || has_error;
++      }
+     }
+     const char* token_type = "text";
+     switch (token.type) {
+@@ -4687,7 +4698,8 @@
+ 
+   } while ((token.type != GUMBO_TOKEN_EOF || state->_reprocess_current_token) &&
+            !(options->stop_on_first_error && has_error) &&
+-           !parser._output->too_deep);
++           !parser._output->too_deep &&
++           !parser._output->tree_too_deep);
+ 
+   finish_parsing(&parser);
+   // For API uniformity reasons, if the doctype still has nulls, convert them to

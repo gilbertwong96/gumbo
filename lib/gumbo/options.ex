@@ -46,34 +46,54 @@ defmodule Gumbo.Options do
   # measured 13.6 seconds (c_src/patches/0004 now indexes names, which makes that
   # linear, and this cap is what keeps the answer finite whether or not the index is
   # there). It is also the same lever Nokogiri's gumbo exposes as max_attributes,
-  # with the same 1024. Exceeding it is refused rather than truncated, so a caller
+  # though not with the same default: Nokogiri's own is 400, this one is 1024.
+  # Exceeding it is refused rather than truncated, so a caller
   # never gets a tree that differs from what the pinned parser builds.
   @max_attributes_default 1024
+
+  # GumboOptions.max_tree_depth, and the same convention: -1 for no cap. Nokogiri's
+  # vendored gumbo is where the lever comes from — its own default is 400, and its
+  # Ruby layer translates a negative value to UINT_MAX and adds one for a fragment,
+  # to account for the implied <html> — so it exists here for callers pinned to that
+  # reference, which is the only thing it is for. This library's own answer to deep
+  # nesting is the stack budget: the parse's cost is linear in depth and its stack is
+  # sized for the worst case the input can produce, so 200 000 levels parse in 78 ms,
+  # measured, and no ceiling is needed. The default is therefore uncapped rather than
+  # Nokogiri's 400, because a default ceiling would truncate documents that parse
+  # today; the patch that adds the option changes nothing unless a caller sets it.
+  @max_tree_depth_default -1
   @c_int_max 2_147_483_647
 
   defstruct tab_stop: 8,
             stop_on_first_error: false,
             max_errors: @max_errors_default,
             max_attributes: @max_attributes_default,
+            max_tree_depth: @max_tree_depth_default,
             fragment_context: nil,
             fragment_namespace: :html,
             dirty: :auto
 
   @typedoc """
   `tab_stop`, `stop_on_first_error`, `max_errors`, `max_attributes`,
-  `fragment_context` and `fragment_namespace` are `GumboOptions` fields; `:dirty`
+  `max_tree_depth`, `fragment_context` and `fragment_namespace` are `GumboOptions`
+  fields; `:dirty`
   is this library's scheduler policy. `fragment_context` is `nil` (no fragment,
-  gumbo's `GUMBO_TAG_LAST`) or a tag atom. `tab_stop`, `max_errors` and
-  `max_attributes` are bounded by C `int` range, so a value that passes `new/1`
-  can never fail the NIF decode. `max_errors` defaults to #{@max_errors_default} and
-  `max_attributes` to #{@max_attributes_default} rather than to gumbo's "no cap";
-  see the comments on the defaults for why, and pass -1 to either for no cap.
+  gumbo's `GUMBO_TAG_LAST`) or a tag atom. `tab_stop`, `max_errors`,
+  `max_attributes` and `max_tree_depth` are bounded by C `int` range, so a value
+  that passes `new/1` can never fail the NIF decode. `max_errors` defaults to
+  #{@max_errors_default} and `max_attributes` to #{@max_attributes_default} rather
+  than to gumbo's "no cap"; see the comments on the defaults for why, and pass -1
+  to either for no cap. `max_tree_depth` counts the parser's open elements, so an
+  implied `<html>` counts and a fragment passes 401 to mean 400 levels of content,
+  as the reference implementation's Ruby layer does; it defaults to
+  #{@max_tree_depth_default}, because the stack budget is what bounds depth here.
   """
   @type t :: %__MODULE__{
           tab_stop: 1..2_147_483_647,
           stop_on_first_error: boolean(),
           max_errors: -1..2_147_483_647,
           max_attributes: -1..2_147_483_647,
+          max_tree_depth: -1..2_147_483_647,
           fragment_context: nil | Gumbo.Tag.t(),
           fragment_namespace: Gumbo.Types.namespace(),
           dirty: :auto | boolean()
@@ -124,7 +144,7 @@ defmodule Gumbo.Options do
   ## Examples
 
       iex> Gumbo.Options.to_nif(Gumbo.Options.new()) |> Map.keys() |> Enum.sort()
-      [:dirty, :fragment_context, :fragment_namespace, :max_attributes, :max_errors, :stop_on_first_error, :tab_stop]
+      [:dirty, :fragment_context, :fragment_namespace, :max_attributes, :max_errors, :max_tree_depth, :stop_on_first_error, :tab_stop]
   """
   @spec to_nif(t()) :: map()
   def to_nif(%__MODULE__{} = options) do
@@ -133,6 +153,7 @@ defmodule Gumbo.Options do
       stop_on_first_error: options.stop_on_first_error,
       max_errors: options.max_errors,
       max_attributes: options.max_attributes,
+      max_tree_depth: options.max_tree_depth,
       fragment_context: options.fragment_context,
       fragment_namespace: options.fragment_namespace,
       dirty: options.dirty
@@ -192,6 +213,10 @@ defmodule Gumbo.Options do
        do: :ok
 
   defp validate_option(:max_attributes, value)
+       when is_integer(value) and value >= -1 and value <= @c_int_max,
+       do: :ok
+
+  defp validate_option(:max_tree_depth, value)
        when is_integer(value) and value >= -1 and value <= @c_int_max,
        do: :ok
 

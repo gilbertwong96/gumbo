@@ -19,7 +19,9 @@ defmodule Gumbo do
   reasonable. An element with more than `:max_attributes` attributes (1024 by
   default) is rejected with `{:error, :too_many_attributes}` rather than having
   the extra attributes dropped, because a tree missing attributes would be one
-  this library's fidelity claim does not cover. A document that runs the parse out
+  this library's fidelity claim does not cover. A document past `:max_tree_depth`
+  open elements (no limit by default) is rejected with `{:error, :tree_too_deep}`
+  rather than handed back truncated, for the same reason. A document that runs the parse out
   of the C stack it was given is rejected with `{:error, :too_deep}`: the stack is
   sized from the input's length, so this is a backstop under the arithmetic rather
   than a limit a caller has to think about.

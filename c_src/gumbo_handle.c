@@ -303,6 +303,21 @@ ERL_NIF_TERM gumbo_nif_parse(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     return enif_make_tuple2(env, atoms->error, atoms->too_many_attributes);
   }
 
+  if (h->output->tree_too_deep) {
+    /* The parse stopped because the open-element stack went past the caller's
+       max_tree_depth and the token stream was terminated as if EOF. The tree is
+       what had been built by then, which differs from what the parser builds
+       without the cap — so, exactly as above, it is freed and the parse refused
+       rather than handed back truncated. This is a different failure from
+       :too_deep: that one means the stack budget's arithmetic was wrong, this
+       one means the document went past a cap the caller chose. The cap is the
+       caller's to raise, or to lift with -1. */
+    gumbo_destroy_output(&h->options, h->output);
+    h->output = NULL;
+    enif_release_resource(h);
+    return enif_make_tuple2(env, atoms->error, atoms->tree_too_deep);
+  }
+
   if (gumbo_node_table_build(h) != 0) {
     /* The table is the handle's index — the node accessors read it — so a
        partial one makes the handle unusable, but not the tree: destroy_node is

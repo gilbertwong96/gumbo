@@ -73,6 +73,7 @@ typedef struct {
   ERL_NIF_TERM stop_on_first_error;
   ERL_NIF_TERM max_errors;
   ERL_NIF_TERM max_attributes;
+  ERL_NIF_TERM max_tree_depth;
   ERL_NIF_TERM fragment_context;
   ERL_NIF_TERM fragment_namespace;
   ERL_NIF_TERM dirty;
@@ -82,6 +83,7 @@ typedef struct {
   ERL_NIF_TERM input_too_large;
   ERL_NIF_TERM too_many_attributes;
   ERL_NIF_TERM too_deep;
+  ERL_NIF_TERM tree_too_deep;
 
   /* Node accessor atoms, grouped so the details-map key :parse_flags and the
      enum table parse_flags[] cannot be confused. Includes the

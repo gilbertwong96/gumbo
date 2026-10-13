@@ -82,6 +82,18 @@ int gumbo_options_decode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   h->options.max_attributes =
       (max_attributes < 0) ? UINT_MAX : (unsigned int)max_attributes;
 
+  /* Same convention, and the same reason the reference implementation's Ruby
+     layer translates a negative depth to UINT_MAX. */
+  if (!enif_get_map_value(env, options_map, atoms->max_tree_depth, &value)) {
+    return 0;
+  }
+  int max_tree_depth;
+  if (!enif_get_int(env, value, &max_tree_depth) || max_tree_depth < -1) {
+    return 0;
+  }
+  h->options.max_tree_depth =
+      (max_tree_depth < 0) ? UINT_MAX : (unsigned int)max_tree_depth;
+
   if (!enif_get_map_value(env, options_map, atoms->fragment_context, &value)) {
     return 0;
   }
@@ -130,8 +142,8 @@ static ERL_NIF_TERM gumbo_dirty_atom(const gumbo_atoms_t* atoms,
 
 int gumbo_options_encode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                          const gumbo_handle_t* h, ERL_NIF_TERM* out) {
-  ERL_NIF_TERM keys[7];
-  ERL_NIF_TERM values[7];
+  ERL_NIF_TERM keys[8];
+  ERL_NIF_TERM values[8];
 
   keys[0] = atoms->tab_stop;
   values[0] = enif_make_int(env, h->options.tab_stop);
@@ -151,6 +163,10 @@ int gumbo_options_encode(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   values[6] = enif_make_int(env, (h->options.max_attributes == UINT_MAX)
                                      ? -1
                                      : (int)h->options.max_attributes);
+  keys[7] = atoms->max_tree_depth;
+  values[7] = enif_make_int(env, (h->options.max_tree_depth == UINT_MAX)
+                                     ? -1
+                                     : (int)h->options.max_tree_depth);
 
-  return enif_make_map_from_arrays(env, keys, values, 7, out);
+  return enif_make_map_from_arrays(env, keys, values, 8, out);
 }

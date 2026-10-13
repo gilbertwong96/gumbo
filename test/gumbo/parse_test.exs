@@ -137,6 +137,31 @@ defmodule Gumbo.ParseTest do
     assert {:ok, _} = Gumbo.parse(over, max_attributes: -1)
   end
 
+  test "a fragment deeper than max_tree_depth is refused, not silently truncated" do
+    deep = fn levels -> Enum.map_join(1..levels, "", fn _ -> "<div>" end) end
+
+    # No cap is the default, and no cap is what this library parsed before the
+    # option existed: the patch adds a knob, it does not change the pin.
+    assert {:ok, _} = Gumbo.parse_fragment(deep.(20_000), :body)
+    assert {:ok, _} = Gumbo.parse_fragment(deep.(20_000), :body, max_tree_depth: -1)
+
+    # A cap refuses rather than truncating, as max_attributes does. The reference
+    # app's own C refuses on a non-OK status too, so a truncated tree is a
+    # behaviour neither the pin nor the app that wants this option has.
+    assert {:error, :tree_too_deep} =
+             Gumbo.parse_fragment(deep.(10_000), :body, max_tree_depth: 100)
+
+    # Inside the cap the same shape is fine.
+    assert {:ok, _} = Gumbo.parse_fragment("<p>shallow</p>", :body, max_tree_depth: 100)
+
+    # The comparison counts open elements, so the implied <html> is one of them:
+    # 99 levels of content fit under a cap of 100 and 100 do not. That is the "+1
+    # for a fragment" the reference implementation's Ruby layer applies, and the
+    # reason the port that asked for this option passes 401 for a body fragment.
+    assert {:ok, _} = Gumbo.parse_fragment(deep.(99), :body, max_tree_depth: 100)
+    assert {:error, :tree_too_deep} = Gumbo.parse_fragment(deep.(100), :body, max_tree_depth: 100)
+  end
+
   # The third quadratic: the duplicate-attribute check used to scan every attribute
   # already collected, so one element's attributes cost the square of their count.
   # 80 000 distinct names from 0.7 MB of input took 13.6 s before the 0004 patch and

@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a `dirty: :auto | true | false` override.
 - A 13-shape small-stack regression matrix (`mix test.small_stack`) and a
   teardown-contract probe (`make check-teardown`).
+- `:max_tree_depth` — the depth ceiling Nokogiri's gumbo exposes, for callers
+  pinned to that reference. It counts the parser's open elements, so a fragment's
+  implied `<html>` is one of them and 401 means 400 levels of content; it defaults
+  to `-1` for no limit, because this library's stack budget is what bounds depth
+  here, and a document past it is refused with `{:error, :tree_too_deep}` rather
+  than handed back truncated.
 
 ### Changed
 
