@@ -49,6 +49,15 @@ build() {
   fi
 }
 
+# The shipping library goes back however this ends, including when a build fails: a half-built fault
+# library left in place is a library that cannot load, and it will be blamed on the next change.
+restore() {
+  rm -f "$fault_file" "$fault_file.armed"
+  make clean > /dev/null 2>&1 || true
+  make > /dev/null 2>&1 || true
+}
+trap restore EXIT INT TERM
+
 canary_log=$(mktemp)
 sweep_log=$(mktemp)
 
@@ -78,8 +87,6 @@ if [ "$status" -eq 0 ]; then
   GUMBO_FAULT_FILE="$fault_file" elixir -S mix test --only fault_paths || status=$?
 fi
 
-rm -f "$canary_log" "$sweep_log" "$fault_file" "$fault_file.armed"
-make clean > /dev/null 2>&1 || true
-make > /dev/null 2>&1 || true
+rm -f "$canary_log" "$sweep_log"
 
 exit "$status"

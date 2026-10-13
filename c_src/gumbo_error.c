@@ -5,6 +5,7 @@
 #include "error.h" /* gumbo's internal header; see the note below */
 #include "gumbo.h"
 #include "gumbo_atoms.h"
+#include "gumbo_faults.h"
 #include "gumbo_handle.h"
 #include "gumbo_node.h"
 #include "parser.h"
@@ -49,19 +50,26 @@
 
 /* ---- one extractor per details-map field ---- */
 
-/* The extractors that build fresh terms answer success as a status code
-   with the term in *out instead of returning a term: a badarg sentinel
-   returned from inside the details-map assembly would be embedded into the
-   map as the integer 42 rather than surfaced, so allocation failure must
-   propagate as 0 up to the NIF. The infallible ones (type, codepoint)
-   return terms directly. */
+/* Every extractor answers success as a status code with the term in *out
+   rather than returning a term: a badarg sentinel returned from inside the
+   details-map assembly would be embedded into the map as the integer 42
+   rather than surfaced, so a failure must propagate as 0 up to the NIF. An
+   extractor that cannot fail answers 1 like the rest, because a convention
+   with exceptions is a convention a reader has to check against. */
 
-static ERL_NIF_TERM gumbo_error_type_term(ErlNifEnv* env,
-                                          const gumbo_atoms_t* atoms,
-                                          const GumboError* error) {
+static int gumbo_error_type_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                 const GumboError* error, ERL_NIF_TERM* out) {
+#ifdef GUMBO_TEST_FAULTS
+  if (gumbo_fault_should_fail()) {
+    /* A failure, on purpose: see gumbo_faults.h. */
+    return GUMBO_FAULT_FAILURE(env, out);
+  }
+#endif
+
   (void)env;
   /* Parser-produced, so the table index is in range by construction. */
-  return atoms->error_types[error->type];
+  *out = atoms->error_types[error->type];
+  return 1;
 }
 
 static int gumbo_error_position_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
@@ -126,17 +134,20 @@ static int gumbo_error_render_term(ErlNifEnv* env, const gumbo_handle_t* h,
   return ok;
 }
 
-static ERL_NIF_TERM gumbo_error_codepoint_term(ErlNifEnv* env,
-                                               const gumbo_atoms_t* atoms,
-                                               const GumboError* error) {
+static int gumbo_error_codepoint_term(ErlNifEnv* env,
+                                      const gumbo_atoms_t* atoms,
+                                      const GumboError* error,
+                                      ERL_NIF_TERM* out) {
   switch (error->type) {
     case GUMBO_ERR_UTF8_INVALID:
     case GUMBO_ERR_UTF8_TRUNCATED:
     case GUMBO_ERR_NUMERIC_CHAR_REF_WITHOUT_SEMICOLON:
     case GUMBO_ERR_NUMERIC_CHAR_REF_INVALID:
-      return enif_make_uint64(env, error->v.codepoint);
+      *out = enif_make_uint64(env, error->v.codepoint);
+      return 1;
     default:
-      return atoms->nil;
+      *out = atoms->nil;
+      return 1;
   }
 }
 
@@ -283,14 +294,13 @@ static int gumbo_error_fields_values(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                      const gumbo_handle_t* h,
                                      const GumboError* error,
                                      ERL_NIF_TERM values[]) {
-  values[0] = gumbo_error_type_term(env, atoms, error);
-  values[3] = gumbo_error_codepoint_term(env, atoms, error);
-  /* Each fallible extractor is checked before its term joins the map: a
-     badarg sentinel embedded as a value would surface as the integer 42.
-     Failure here is allocation failure, and it propagates to the NIF as
-     badarg. */
-  if (!gumbo_error_position_term(env, atoms, error, &values[1]) ||
+  /* Each extraction is checked before its term joins the map: a value that
+     stands for a failure would surface as the integer 42. Failure here is
+     allocation failure, and it propagates to the NIF as badarg. */
+  if (!gumbo_error_type_term(env, atoms, error, &values[0]) ||
+      !gumbo_error_position_term(env, atoms, error, &values[1]) ||
       !gumbo_error_original_text_term(env, atoms, h, error, &values[2]) ||
+      !gumbo_error_codepoint_term(env, atoms, error, &values[3]) ||
       !gumbo_error_tokenizer_term(env, atoms, error, &values[4]) ||
       !gumbo_error_text_term(env, atoms, error, &values[5]) ||
       !gumbo_error_duplicate_attr_term(env, atoms, error, &values[6]) ||
