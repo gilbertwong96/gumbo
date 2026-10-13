@@ -38,8 +38,8 @@ archive is built on the platform it is for and the test suite passes there befor
 | --- | --- |
 | `x86_64-linux-gnu` | `ubuntu-24.04` |
 | `aarch64-linux-gnu` | `ubuntu-24.04-arm` |
-| `x86_64-apple-darwin` | `macos-15` |
-| `aarch64-apple-darwin` | `macos-15-arm64` |
+| `x86_64-apple-darwin` |  `macos-15-intel` |
+| `aarch64-apple-darwin` | `macos-15` |
 | `x86_64-windows` | `windows-2025` |
 
 `elixir_make` downloads the archive for your host from the GitHub release of the version you are
