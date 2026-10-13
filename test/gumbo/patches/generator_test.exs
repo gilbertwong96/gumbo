@@ -20,8 +20,18 @@ defmodule Gumbo.Patches.GeneratorTest do
 
     assert Patches.check("0002-open-element-queries") == :ok
 
-    # Safe: the committed bytes are what generate/2 produces, so write/1 writes nothing.
-    assert Patches.write("0002-open-element-queries") == :unchanged
+    # write/1 mutates, so its default-root arity runs against a fake root whose committed
+    # fixture bytes are what generate/2 produces: it returns :unchanged without writing,
+    # and the tracked tree is never the write target. async: false makes File.cd! safe.
+    fake = fake_root(%{patch: :generated})
+    previous = File.cwd!()
+    File.cd!(fake)
+
+    try do
+      assert Patches.write("0001-fixture") == :unchanged
+    after
+      File.cd!(previous)
+    end
   end
 
   test "every committed patch is what its definition produces" do
