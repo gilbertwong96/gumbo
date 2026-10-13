@@ -30,7 +30,7 @@ jobs:
         otp: ["27", "29"]
         elixir: ["1.20.4"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The build reads c_src/gumbo-parser/src (the pinned parser) and applies the
           # patch series to a copy of it, so the submodule has to be checked out.
@@ -42,7 +42,7 @@ jobs:
           elixir-version: ${{ matrix.elixir }}
 
       - name: Cache deps and build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             deps
@@ -71,7 +71,7 @@ jobs:
       CLANG_FORMAT: clang-format-23
       CLANG_TIDY: clang-tidy-23
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -84,11 +84,23 @@ jobs:
         run: |
           wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
-          sudo /tmp/llvm.sh 23
+          # `all` is load-bearing: the default package set is llvm-23's libraries and tools,
+          # which leaves out clang and clang-tools — and clang-format-23 and clang-tidy-23
+          # live in those. Without it this step succeeds while installing neither, and
+          # check-c-format is the gate that fails, three steps later, on a missing tool.
+          sudo /tmp/llvm.sh 23 all
           echo "/usr/lib/llvm-23/bin" >> "$GITHUB_PATH"
 
+      # Print the versions the gate will actually use: a missing tool or a system clang of
+      # another major stops here, naming itself, instead of inside an unrelated-looking gate.
+      - name: Report the C toolchain
+        run: |
+          clang-23 --version
+          clang-format-23 --version
+          clang-tidy-23 --version
+
       - name: Cache deps and build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             deps
@@ -115,8 +127,19 @@ jobs:
     # a `paths` or `if` filter if that comparison is not worth the minutes on every push.
     runs-on: macos-latest
     timeout-minutes: 60
+    env:
+      # `mise exec --` is the Makefile's own fallback for a machine whose tools are not on
+      # PATH, and a macOS runner is exactly that machine: Xcode ships a clang-format of its
+      # own, PATH finds that one first, and its idea of formatting is not LLVM 23's — which
+      # is how this job first went red on a file that is formatted on the machine the gate
+      # was written on. Naming the pinned tools this way keeps the job a comparison of
+      # platforms rather than a comparison of two Xcode releases.
+      CC: mise exec -- clang
+      ANALYZER: mise exec -- clang
+      CLANG_FORMAT: mise exec -- clang-format
+      CLANG_TIDY: mise exec -- clang-tidy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -127,14 +150,22 @@ jobs:
       # which is another way of saying mise is the intended source of these tools.
       # (The ubuntu jobs use setup-beam and llvm.sh instead: mise would build Erlang from
       # source on Linux, and those jobs are there for the suite, not for that.)
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v5
         with:
           install: false
       - run: mise trust
       - run: mise install
 
+      # Print what the gate will actually use, so a failure below is never "which
+      # clang-format was that?" — this is the step that would have caught the runner's own.
+      - name: Report the C toolchain
+        run: |
+          mise exec -- clang --version
+          mise exec -- clang-format --version
+          mise exec -- clang-tidy --version
+
       - name: Cache deps and build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             deps
