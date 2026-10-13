@@ -70,6 +70,11 @@ defmodule Gumbo.ParseTest do
 
     assert {:ok, %Gumbo.Options{fragment_context: :div, fragment_namespace: :svg}} =
              Gumbo.Options.new(fragment_context: :div, fragment_namespace: :svg)
+
+    # fragment_context: nil is the documented "no fragment context" value, and it must stay
+    # valid: a parser that rejected it would reject the default-shaped call.
+    assert {:ok, %Gumbo.Options{fragment_context: nil}} =
+             Gumbo.Options.new(fragment_context: nil)
   end
 
   test "dispatch/2 is the single scheduler policy, threshold included" do
