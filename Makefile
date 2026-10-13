@@ -64,12 +64,19 @@ ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -pthread -Wall -Wextra -MMD -MP \
 # The vendored sources are third-party code patched in a copy rather than fixed in place, so
 # their warnings are not ours to remove. What is silenced is named one at a time, and only for
 # the vendored objects: -Wunused-parameter and -Wsign-compare are tripped throughout, while
-# -Wtype-limits and -Wold-style-declaration are gcc's under -Wextra where clang — which the
-# local gates use — stays quiet, so on a Linux runner they were reporting the vendored vector.c
-# and utf8.c on every single build. Our own c_src/*.c keeps the full $(ALL_CFLAGS) set: do not
-# replace this list with a wider switch, or a warning in our code stops standing out.
+# -Wtype-limits and -Wold-style-declaration are gcc's under -Wextra where clang stays quiet, so
+# a Linux runner was reporting the vendored vector.c and utf8.c on every build. Our own
+# c_src/*.c keeps the full $(ALL_CFLAGS) set: do not replace this list with a wider switch, or
+# a warning in our code stops standing out.
+#
+# The last of the four belongs to gcc alone, and clang answers a flag it does not know with
+# "unknown warning option" on every compile — which is why it is asked for rather than assumed:
+# the configured compiler is handed the flag together with -Werror, and it is kept only if the
+# compiler does not complain about it. The Linux test jobs compile with gcc; everything else
+# compiles with clang.
+OLD_STYLE_QUIET := $(shell echo 'int gumbo_probe;' | $(CC) -Wno-old-style-declaration -Werror -x c -c - -o /dev/null 2>/dev/null && echo -Wno-old-style-declaration)
 GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-type-limits \
-	-Wno-old-style-declaration
+	$(OLD_STYLE_QUIET)
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
