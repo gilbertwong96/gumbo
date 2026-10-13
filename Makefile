@@ -61,16 +61,15 @@ CFLAGS ?= -O2
 ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -pthread -Wall -Wextra -MMD -MP \
 	-Ic_src -I$(GUMBO_SRC_DIR)/src -I$(ERTS_INCLUDE_DIR)
 
-# The vendored sources trip -Wunused-parameter and -Wsign-compare in several
-# places, and they are patched in a copy rather than fixed in place, so those
-# warnings are not ours to remove; silence only those two for the vendored objects
-# so a warning in our own c_src/*.c still stands out. Our sources keep the full
-# $(ALL_CFLAGS) set — do not re-broaden this. -Wtype-limits joins them for the same
-# reason plus one: gcc enables it under -Wextra and clang, which the local gates
-# happen to use, does not, so without it the two always-true comparisons in the
-# vendored vector.c are reported by a Linux runner on every build and by nothing
-# locally.
-GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-type-limits
+# The vendored sources are third-party code patched in a copy rather than fixed in place, so
+# their warnings are not ours to remove. What is silenced is named one at a time, and only for
+# the vendored objects: -Wunused-parameter and -Wsign-compare are tripped throughout, while
+# -Wtype-limits and -Wold-style-declaration are gcc's under -Wextra where clang — which the
+# local gates use — stays quiet, so on a Linux runner they were reporting the vendored vector.c
+# and utf8.c on every single build. Our own c_src/*.c keeps the full $(ALL_CFLAGS) set: do not
+# replace this list with a wider switch, or a warning in our code stops standing out.
+GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-type-limits \
+	-Wno-old-style-declaration
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
