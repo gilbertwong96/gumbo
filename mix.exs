@@ -13,6 +13,12 @@ defmodule Gumbo.MixProject do
       aliases: aliases(),
       deps: deps(),
       dialyzer: dialyzer(),
+      # The suite's honest floor. Three classes of line cannot be covered here and none of them is
+      # excluded from the measurement: Gumbo.Patches.Diff's dead `split/5` clause, Gumbo.Native's
+      # load_nif/0 raise (only a broken build runs it), and Gumbo.Native's thirty-odd pre-load stub
+      # bodies — :cover instruments them, load_nif/2 replaces them, and NIF entries are invisible to
+      # coverage, so no test can move that module's percentage.
+      test_coverage: [summary: [threshold: 92]],
       package: package(),
       docs: docs()
     ]
@@ -48,7 +54,9 @@ defmodule Gumbo.MixProject do
         "ex_dna",
         "reach.check --dead-code --smells --strict",
         "ci.dead_code",
-        "test",
+        # The threshold in project/0 is a gate or it is a report: run the covered suite here so
+        # the number cannot rot silently.
+        "test --cover",
         "test.small_stack",
         "test.teardown_contract",
         "check.patch",
