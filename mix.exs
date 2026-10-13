@@ -52,6 +52,7 @@ defmodule Gumbo.MixProject do
         "test.small_stack",
         "test.teardown_contract",
         "check.patch",
+        "check.generators",
         "check.parity",
         "check.stack_guard",
         "check.analyzer",
@@ -116,6 +117,12 @@ defmodule Gumbo.MixProject do
         if status != 0 do
           Mix.raise("check.patch failed with status #{inspect(status)}")
         end
+      end,
+      # The patch definitions had no check of their own before this: a definition could stop
+      # reproducing its patch and nothing would say so — and one already had, in the rebase
+      # recipe. This regenerates every defined patch and requires the committed bytes.
+      "check.generators": fn _ ->
+        Mix.Task.rerun("gumbo.patches", ["--check"])
       end,
       # The build has to work from an empty object directory: that is what a fresh
       # clone, a cold CI cache and a hex consumer all do, and it is the one path the
@@ -255,7 +262,12 @@ defmodule Gumbo.MixProject do
   defp dialyzer do
     [
       plt_local_path: "_build/plts",
-      plt_core_path: "_build/plts"
+      plt_core_path: "_build/plts",
+      # The patch generator is a Mix.Task (`mix gumbo.patches`), so `:mix` has to be in
+      # the PLT: without it its `Mix.raise/1` and `Mix.shell/0` calls are unknown
+      # functions and the Mix.Task callback is an unknown behaviour. This is the whole
+      # of that dependency — no other module here touches Mix.
+      plt_add_apps: [:mix]
     ]
   end
 
