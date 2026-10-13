@@ -30,3 +30,8 @@ gumbo-*.tar
 # Armed by make check-fault-paths, removed by it afterwards: a sweep that dies mid-run must not
 # leave the tree dirty.
 /priv/.gumbo-fault-at*
+
+# Written by the precompile/checksum tasks; generated per release, never tracked.
+/checksum.exs
+# ELIXIR_MAKE_CACHE_DIR when precompiling locally; see .github/workflows/precompile.yml.
+/cache/

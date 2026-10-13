@@ -29,6 +29,28 @@ def deps do
 end
 ```
 
+### Precompiled binaries
+
+The NIF is precompiled for these targets, so most installations never run a C compiler. Each
+archive is built on the platform it is for and the test suite passes there before it is packaged:
+
+| Target | Built and tested on |
+| --- | --- |
+| `x86_64-linux-gnu` | `ubuntu-24.04` |
+| `aarch64-linux-gnu` | `ubuntu-24.04-arm` |
+| `x86_64-apple-darwin` | `macos-15` |
+| `aarch64-apple-darwin` | `macos-15-arm64` |
+| `x86_64-windows` | `windows-2025` |
+
+`elixir_make` downloads the archive for your host from the GitHub release of the version you are
+installing and verifies it against the `checksum.exs` in the package. When no archive matches, it
+compiles from source instead — which is why the package also carries the pinned parser's sources and
+the patch series applied to them.
+
+The Linux archives are built against glibc 2.39 (Ubuntu 24.04), so an older distribution compiles
+from source rather than downloading a binary it cannot load. If that matters to you, the release
+workflow is one runner label away from a wider floor.
+
 Building requires only a C compiler and Erlang — gumbo-parser is vendored in
 the package, so Hex consumers need no git and no separate download.
 

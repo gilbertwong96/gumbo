@@ -38,8 +38,20 @@ GUMBO_SRCS := \
 C_SRCS := $(wildcard c_src/*.c)
 
 PRIV_DIR := priv
-OBJ_DIR := $(PRIV_DIR)/obj
-NIF_SO := $(PRIV_DIR)/gumbo_nif.so
+# The library itself goes where elixir_make looks for it: the app's own priv, which is
+# $(MIX_APP_PATH)/priv when Mix drives the build and the source priv when make is run by hand. This is
+# not cosmetic — elixir_make archives the precompiled NIF out of the app priv, so a build that writes
+# into the source tree produces an archive with nothing in it, which publishes happily and then fails
+# at load_nif/2 for everyone who downloads it. The C scratch below stays in the source tree either way,
+# so every check-* target keeps the paths it had.
+APP_PRIV_DIR := $(if $(MIX_APP_PATH),$(MIX_APP_PATH)/priv,$(PRIV_DIR))
+# elixir_make.precompile builds one target after another in this same source tree, so the C objects
+# and the patched-source copy have to be told apart by target. Without this, the aarch64 pass would
+# link the x86_64 objects the previous pass left behind and the archive would carry a library for the
+# wrong architecture with nothing in the log to show for it. cc_precompiler sets
+# CC_PRECOMPILER_CURRENT_TARGET for each pass and leaves it unset for ordinary builds, so local work
+# and every gate keep using priv/obj exactly as before.
+OBJ_DIR := $(PRIV_DIR)/obj$(if $(CC_PRECOMPILER_CURRENT_TARGET),/$(CC_PRECOMPILER_CURRENT_TARGET))
 
 # The copy the build actually reads, and the stamp that records that it was made
 # from the current pin and the current patches. Both live under $(OBJ_DIR),
@@ -79,11 +91,24 @@ GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-type-
 	$(OLD_STYLE_QUIET)
 
 UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
+# MINGW and MSYS both mean a Windows toolchain under a POSIX shell — the shape a Windows runner and
+# an MSYS2 terminal present — and on Windows the artefact has to be .dll for load_nif/2 to find it.
+ifneq (,$(findstring MINGW,$(UNAME_S))$(findstring MSYS,$(UNAME_S)))
+	NIF_EXT := .dll
+	LDSHARED_FLAGS := -shared
+else ifeq ($(UNAME_S),Darwin)
+	NIF_EXT := .so
 	LDSHARED_FLAGS := -bundle -flat_namespace -undefined dynamic_lookup
 else
+	NIF_EXT := .so
 	LDSHARED_FLAGS := -shared
 endif
+
+# NIF_EXT is why this definition sits after the branch above rather than beside PRIV_DIR: `:=`
+# expands on the spot, so naming the library earlier would have produced `priv/gumbo_nif` with no
+# extension and a NIF that load_nif/2 cannot find. Everything that touches the library — the rules
+# below, `make clean`, the gates — goes through NIF_SO and does not care which extension it has.
+NIF_SO := $(APP_PRIV_DIR)/gumbo_nif$(NIF_EXT)
 
 all: $(NIF_SO)
 
@@ -137,7 +162,7 @@ $(OBJ_DIR)/%.o: c_src/%.c
 # at build time: OBJS is wildcard-driven, so it cannot detect its own
 # emptiness, and a gumbo-only bundle would fail at load time instead.
 $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
-	@mkdir -p $(PRIV_DIR)
+	@mkdir -p $(APP_PRIV_DIR)
 	$(CC) $(LDSHARED_FLAGS) -pthread -o $@ $(OBJS)
 
 # Teardown-contract probe, in two modes, and both are hard gates now that the walk
