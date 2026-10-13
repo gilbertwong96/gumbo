@@ -273,7 +273,7 @@ defmodule Gumbo.Patches.Diff do
     n = tuple_size(b)
 
     b2j =
-      0..(n - 1)
+      0..(n - 1)//1
       |> Enum.reduce(%{}, fn i, acc -> Map.update(acc, elem(b, i), [i], &[i | &1]) end)
       |> Map.new(fn {line, idxs} -> {line, Enum.reverse(idxs)} end)
 
