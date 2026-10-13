@@ -23,16 +23,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The runner's OTP is the architecture the artefact is for: macos-15 is the Intel image and
-          # macos-15-arm64 the Apple Silicon one, and the Linux pair is 24.04 in both architectures.
+          # The runner's OTP is the architecture the artefact is for. GitHub's macOS labels name
+          # Intel explicitly — `macos-15-intel` is the x86_64 image and plain `macos-15` is the
+          # Apple Silicon one — and actionlint's label list is what settled that, after a first
+          # attempt had the pair reversed.
           - target: x86_64-linux-gnu
             runner: ubuntu-24.04
           - target: aarch64-linux-gnu
             runner: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
-            runner: macos-15
+            runner: macos-15-intel
           - target: aarch64-apple-darwin
-            runner: macos-15-arm64
+            runner: macos-15
           # Windows needs no cross-compiler: MSYS2 provides make and mingw-w64, which is what the
           # Makefile detects to name the artefact gumbo_nif.dll.
           - target: x86_64-windows
