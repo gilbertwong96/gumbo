@@ -422,6 +422,9 @@ check-failure-returns:
 	[ $$fail -eq 0 ] || exit 1; \
 	echo "PASS: every failure is returned rather than stored, and no literal is used as a term"
 
+check-generators:
+	@mix gumbo.patches --check
+
 check-c-tidy: $(GUMBO_SRC_STAMP)
 	@command -v $(word 1,$(CLANG_TIDY)) > /dev/null 2>&1 || { \
 		echo "FAIL: clang-tidy is not available (mise manages it: mise trust && mise install)"; \
@@ -494,4 +497,4 @@ gumbo-fetch:
 clean:
 	rm -rf $(OBJ_DIR) $(NIF_SO)
 
-.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint check-c-tidy check-fault-paths check-failure-returns
+.PHONY: all clean gumbo-fetch check-teardown check-patch check-clean-build check-parity check-sanitizers check-stack-guard check-analyzer check-c-format check-c-lint check-c-tidy check-fault-paths check-failure-returns check-generators

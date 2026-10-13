@@ -1,25 +1,23 @@
-#!/usr/bin/env python3
-"""Regenerates 0004-max-attributes.patch against a pristine gumbo-parser.
+# The 0004 generator: what it substitutes, and the count each substitution must
+# match. `mix gumbo.patches` reads this, applies the earlier patches when `priors` is
+# true, runs the substitutions in order, and writes 0004-max-attributes.patch. Ported one to one
+# from the Python generator when that tooling was replaced, so the header below is the
+# same prose and the substitutions are the same ones.
+#
+# `priors` mirrors what that generator did: 0004 was written before the earlier patches existed, so it diffs against the pinned tree.
+#
+# Files touched, in the order the substitutions run: gumbo.h, parser.c, tokenizer.c
 
-    python3 c_src/patches/gumbo-parser/0004-max-attributes.py
+# The texts below are C, so they are written as heredocs and read as C. A heredoc's
+# value ends with the newline before its terminator, which is exactly right for a text
+# that ends with one; for the rest, `t/1` drops that single newline. No other shape
+# occurs here, and `mix gumbo.patches --check` fails if a text is misrepresented.
+t = &String.replace_suffix(&1, "\n", "")
 
-Same contract as the other generators: every substitution asserts a count, so a
-submodule bump that moves any of this fails here instead of producing a patch that
-applies with a different meaning.
-"""
-
-import difflib
-import re
-import subprocess
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "c_src" / "gumbo-parser" / "src"
-SCRATCH = Path("/tmp/gumbo-patch-0004")
-PATCH = Path(__file__).resolve().parent / "0004-max-attributes.patch"
-
-HEADER = """From: patched for this project, not from upstream
+%{
+  priors: false,
+  header: ~S"""
+From: patched for this project, not from upstream
 Subject: [PATCH 4/4] Index attribute names, and cap how many one element may carry
 
 Two things about attributes, both measured on a 16 MiB input:
@@ -48,32 +46,17 @@ changes what the parser builds for a document inside the cap, which is what
 attributes, distinct and repeated, precisely so that a mistake here shows up as a
 tree difference rather than as a hang nobody tests.
 ---
-"""
-
-
-def sub(text: str, old: str, new: str, count: int = 1) -> str:
-    found = text.count(old)
-    if found != count:
-        sys.exit(f"FAIL: expected {count} occurrence(s), found {found} of:\n{old[:400]}")
-    return text.replace(old, new)
-
-
-def main() -> int:
-    subprocess.run(["rm", "-rf", str(SCRATCH)], check=True)
-    SCRATCH.mkdir(parents=True)
-    subprocess.run(["cp", "-R", str(SRC), str(SCRATCH / "src")], check=True)
-
-    header = SCRATCH / "src" / "gumbo.h"
-    parser = SCRATCH / "src" / "parser.c"
-    tokenizer = SCRATCH / "src" / "tokenizer.c"
-
-    # ---- gumbo.h: the option and the report ---------------------------------
-    text = header.read_text()
-    text = sub(
-        text,
-        """  GumboNamespaceEnum fragment_namespace;
-} GumboOptions;""",
-        """  GumboNamespaceEnum fragment_namespace;
+""",
+  subs: [
+    %{
+      file: "gumbo.h",
+      count: 1,
+      from: t.(~S"""
+  GumboNamespaceEnum fragment_namespace;
+} GumboOptions;
+"""),
+      to: t.(~S"""
+  GumboNamespaceEnum fragment_namespace;
 
   /**
    * The largest number of attributes one element may carry. Attributes beyond it
@@ -83,13 +66,18 @@ def main() -> int:
    * and an element well inside the limit is unaffected.
    */
   unsigned int max_attributes;
-} GumboOptions;""",
-    )
-    text = sub(
-        text,
-        """  GumboVector /* GumboError */ errors;
-} GumboOutput;""",
-        """  GumboVector /* GumboError */ errors;
+} GumboOptions;
+""")
+    },
+    %{
+      file: "gumbo.h",
+      count: 1,
+      from: t.(~S"""
+  GumboVector /* GumboError */ errors;
+} GumboOutput;
+"""),
+      to: t.(~S"""
+  GumboVector /* GumboError */ errors;
 
   /**
    * True if any attribute was dropped because its element reached
@@ -98,38 +86,44 @@ def main() -> int:
    * to keep.
    */
   bool too_many_attributes;
-} GumboOutput;""",
-    )
-    header.write_text(text)
-
-    # ---- parser.c: the default, and the flag's initial value ----------------
-    text = parser.read_text()
-    text = sub(
-        text,
-        """const GumboOptions kGumboDefaultOptions = {&malloc_wrapper, &free_wrapper, NULL,
-    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML};""",
-        """const GumboOptions kGumboDefaultOptions = {&malloc_wrapper, &free_wrapper, NULL,
-    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML, 1024};""",
-    )
-    text = sub(
-        text,
-        """static void output_init(GumboParser* parser) {
-  GumboOutput* output = gumbo_parser_allocate(parser, sizeof(GumboOutput));
-  output->root = NULL;""",
-        """static void output_init(GumboParser* parser) {
+} GumboOutput;
+""")
+    },
+    %{
+      file: "parser.c",
+      count: 1,
+      from: t.(~S"""
+const GumboOptions kGumboDefaultOptions = {&malloc_wrapper, &free_wrapper, NULL,
+    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML};
+"""),
+      to: t.(~S"""
+const GumboOptions kGumboDefaultOptions = {&malloc_wrapper, &free_wrapper, NULL,
+    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML, 1024};
+""")
+    },
+    %{
+      file: "parser.c",
+      count: 1,
+      from: t.(~S"""
+static void output_init(GumboParser* parser) {
   GumboOutput* output = gumbo_parser_allocate(parser, sizeof(GumboOutput));
   output->root = NULL;
-  output->too_many_attributes = false;""",
-    )
-    parser.write_text(text)
-
-    # ---- tokenizer.c: the index, and the cap --------------------------------
-    text = tokenizer.read_text()
-
-    text = sub(
-        text,
-        """  GumboVector /* GumboAttribute */ _attributes;""",
-        """  GumboVector /* GumboAttribute */ _attributes;
+"""),
+      to: t.(~S"""
+static void output_init(GumboParser* parser) {
+  GumboOutput* output = gumbo_parser_allocate(parser, sizeof(GumboOutput));
+  output->root = NULL;
+  output->too_many_attributes = false;
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+  GumboVector /* GumboAttribute */ _attributes;
+"""),
+      to: t.(~S"""
+  GumboVector /* GumboAttribute */ _attributes;
 
   // Buckets over the attribute names collected for the current tag, so that
   // deciding whether a name has already been seen is not a scan of every attribute
@@ -141,13 +135,17 @@ def main() -> int:
   // names cannot be made to collide on purpose.
   GumboVector /* unsigned int */ _attribute_buckets;
   GumboVector /* unsigned int */ _attribute_next;
-  unsigned int _attribute_hash_seed;""",
-    )
-
-    text = sub(
-        text,
-        """static void mark_tag_state_as_empty(GumboTagState* tag_state) {""",
-        """#define kAttributeBucketsInitial 16
+  unsigned int _attribute_hash_seed;
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+static void mark_tag_state_as_empty(GumboTagState* tag_state) {
+"""),
+      to: t.(~S"""
+#define kAttributeBucketsInitial 16
 
 // FNV-1a over the name bytes, seeded per tag. Collisions cost an extra comparison,
 // never correctness: every bucket hit is confirmed with the full name comparison.
@@ -204,76 +202,96 @@ static void grow_attribute_buckets(GumboParser* parser, GumboTagState* tag_state
   }
 }
 
-static void mark_tag_state_as_empty(GumboTagState* tag_state) {""",
-    )
-
-    # The tokenizer state is allocated, not zeroed, and the one place that would
-    # clear the tag state (mark_tag_state_as_empty) is compiled out without NDEBUG.
-    # _attributes survives that because start_new_tag overwrites it before use; the
-    # index below has to be cleared explicitly, or start_new_tag's assert fires on
-    # whatever the allocator left there — which is what a build under ASan does, since
-    # ASan fills fresh bytes with a pattern instead of handing back zeroed pages.
-    text = sub(
-        text,
-        """  tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;""",
-        """  tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;
+static void mark_tag_state_as_empty(GumboTagState* tag_state) {
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+  tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;
+"""),
+      to: t.(~S"""
+  tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;
   tokenizer->_tag_state._attribute_buckets.data = NULL;
   tokenizer->_tag_state._attribute_buckets.length = 0;
   tokenizer->_tag_state._attribute_buckets.capacity = 0;
   tokenizer->_tag_state._attribute_next.data = NULL;
   tokenizer->_tag_state._attribute_next.length = 0;
   tokenizer->_tag_state._attribute_next.capacity = 0;
-  tokenizer->_tag_state._attribute_hash_seed = 0;""",
-    )
-
-    # The three places the tag's attributes are dealt with, and the one that starts
-    # a tag: the index has to be released at all four, or it leaks per tag.
-    text = sub(
-        text,
-        """    output->v.start_tag.is_self_closing = tag_state->_is_self_closing;
+  tokenizer->_tag_state._attribute_hash_seed = 0;
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+    output->v.start_tag.is_self_closing = tag_state->_is_self_closing;
     tag_state->_last_start_tag = tag_state->_tag;
-    mark_tag_state_as_empty(tag_state);""",
-        """    output->v.start_tag.is_self_closing = tag_state->_is_self_closing;
+    mark_tag_state_as_empty(tag_state);
+"""),
+      to: t.(~S"""
+    output->v.start_tag.is_self_closing = tag_state->_is_self_closing;
     tag_state->_last_start_tag = tag_state->_tag;
     release_tag_attribute_index(parser, tag_state);
-    mark_tag_state_as_empty(tag_state);""",
-    )
-    text = sub(
-        text,
-        """    gumbo_parser_deallocate(parser, tag_state->_attributes.data);
+    mark_tag_state_as_empty(tag_state);
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+    gumbo_parser_deallocate(parser, tag_state->_attributes.data);
     mark_tag_state_as_empty(tag_state);
     gumbo_debug(
-        "Emitted end tag %s.\\n", gumbo_normalized_tagname(tag_state->_tag));""",
-        """    gumbo_parser_deallocate(parser, tag_state->_attributes.data);
+        "Emitted end tag %s.\n", gumbo_normalized_tagname(tag_state->_tag));
+"""),
+      to: t.(~S"""
+    gumbo_parser_deallocate(parser, tag_state->_attributes.data);
     release_tag_attribute_index(parser, tag_state);
     mark_tag_state_as_empty(tag_state);
     gumbo_debug(
-        "Emitted end tag %s.\\n", gumbo_normalized_tagname(tag_state->_tag));""",
-    )
-    text = sub(
-        text,
-        """  gumbo_parser_deallocate(parser, tag_state->_attributes.data);
+        "Emitted end tag %s.\n", gumbo_normalized_tagname(tag_state->_tag));
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+  gumbo_parser_deallocate(parser, tag_state->_attributes.data);
   mark_tag_state_as_empty(tag_state);
   gumbo_string_buffer_destroy(parser, &tag_state->_buffer);
-  gumbo_debug("Abandoning current tag.\\n");""",
-        """  gumbo_parser_deallocate(parser, tag_state->_attributes.data);
+  gumbo_debug("Abandoning current tag.\n");
+"""),
+      to: t.(~S"""
+  gumbo_parser_deallocate(parser, tag_state->_attributes.data);
   release_tag_attribute_index(parser, tag_state);
   mark_tag_state_as_empty(tag_state);
   gumbo_string_buffer_destroy(parser, &tag_state->_buffer);
-  gumbo_debug("Abandoning current tag.\\n");""",
-    )
-    text = sub(
-        text,
-        """  assert(tag_state->_attributes.data == NULL);""",
-        """  assert(tag_state->_attributes.data == NULL);
+  gumbo_debug("Abandoning current tag.\n");
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+  assert(tag_state->_attributes.data == NULL);
+"""),
+      to: t.(~S"""
+  assert(tag_state->_attributes.data == NULL);
   assert(tag_state->_attribute_buckets.data == NULL);
-  assert(tag_state->_attribute_next.data == NULL);""",
-    )
-    text = sub(
-        text,
-        """  gumbo_vector_init(parser, 1, &tag_state->_attributes);
-  tag_state->_drop_next_attr_value = false;""",
-        """  gumbo_vector_init(parser, 1, &tag_state->_attributes);
+  assert(tag_state->_attribute_next.data == NULL);
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+  gumbo_vector_init(parser, 1, &tag_state->_attributes);
+  tag_state->_drop_next_attr_value = false;
+"""),
+      to: t.(~S"""
+  gumbo_vector_init(parser, 1, &tag_state->_attributes);
   gumbo_vector_init(parser, kAttributeBucketsInitial, &tag_state->_attribute_buckets);
   tag_state->_attribute_buckets.length = kAttributeBucketsInitial;
   memset(tag_state->_attribute_buckets.data, 0,
@@ -283,13 +301,14 @@ static void mark_tag_state_as_empty(GumboTagState* tag_state) {""",
   tag_state->_attribute_next.capacity = 0;
   tag_state->_attribute_hash_seed =
       (unsigned int) (uintptr_t) tag_state->_attribute_buckets.data;
-  tag_state->_drop_next_attr_value = false;""",
-    )
-
-    # The lookup, and the insert with the cap in front of it.
-    text = sub(
-        text,
-        """  GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
+  tag_state->_drop_next_attr_value = false;
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+  GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
   for (unsigned int i = 0; i < attributes->length; ++i) {
     GumboAttribute* attr = attributes->data[i];
     if (strlen(attr->name) == tag_state->_buffer.length &&
@@ -302,8 +321,10 @@ static void mark_tag_state_as_empty(GumboTagState* tag_state) {""",
     }
   }
 
-  GumboAttribute* attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));""",
-        """  GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
+  GumboAttribute* attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));
+"""),
+      to: t.(~S"""
+  GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
   unsigned int hash = hash_attribute_name(tag_state->_attribute_hash_seed,
       tag_state->_buffer.data, tag_state->_buffer.length);
   unsigned int bucket = attribute_bucket_index(tag_state, hash);
@@ -334,13 +355,18 @@ static void mark_tag_state_as_empty(GumboTagState* tag_state) {""",
     return false;
   }
 
-  GumboAttribute* attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));""",
-    )
-    text = sub(
-        text,
-        """  gumbo_vector_add(parser, attr, attributes);
-  reinitialize_tag_buffer(parser);""",
-        """  gumbo_vector_add(parser, attr, attributes);
+  GumboAttribute* attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));
+""")
+    },
+    %{
+      file: "tokenizer.c",
+      count: 1,
+      from: t.(~S"""
+  gumbo_vector_add(parser, attr, attributes);
+  reinitialize_tag_buffer(parser);
+"""),
+      to: t.(~S"""
+  gumbo_vector_add(parser, attr, attributes);
   gumbo_vector_add(parser, tag_state->_attribute_buckets.data[bucket],
       &tag_state->_attribute_next);
   tag_state->_attribute_buckets.data[bucket] =
@@ -348,27 +374,8 @@ static void mark_tag_state_as_empty(GumboTagState* tag_state) {""",
   if (attributes->length > tag_state->_attribute_buckets.length / 2) {
     grow_attribute_buckets(parser, tag_state);
   }
-  reinitialize_tag_buffer(parser);""",
-    )
-
-    tokenizer.write_text(text)
-
-    body = ""
-    for name in ("gumbo.h", "parser.c", "tokenizer.c"):
-        before = (SRC / name).read_text().splitlines(keepends=True)
-        after = (SCRATCH / "src" / name).read_text().splitlines(keepends=True)
-        body += "".join(
-            difflib.unified_diff(before, after, f"a/src/{name}", f"b/src/{name}")
-        )
-    body = re.sub(r"^(--- a/src/\S+)\t.*$", r"\1", body, flags=re.M)
-    body = re.sub(r"^(\+\+\+ b/src/\S+)\t.*$", r"\1", body, flags=re.M)
-    if not body.endswith("\n"):
-        body += "\n"
-
-    PATCH.write_text(HEADER + body)
-    print(f"wrote {PATCH} ({body.count(chr(10))} lines)")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+  reinitialize_tag_buffer(parser);
+""")
+    },
+  ]
+}
