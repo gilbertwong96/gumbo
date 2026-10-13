@@ -396,13 +396,23 @@ check-c-lint: $(GUMBO_SRC_STAMP)
 # be reported by the analyzer gate rather than to pass this one.
 C_TIDY_SRCS := $(filter-out c_src/test/analyzer_canary.c, $(wildcard c_src/*.c c_src/test/*.c))
 
+# cert-err33-c is on for everything that ships, and off for the two harness programs under
+# c_src/test: they print diagnostics to stderr, where the return value of a fprintf has no action to
+# take and no caller to inform. The check stays on for every file whose disregard of a return could
+# hide something a caller would have wanted to know. It is what found the defect this work exists for.
 check-c-tidy: $(GUMBO_SRC_STAMP)
 	@command -v $(word 1,$(CLANG_TIDY)) > /dev/null 2>&1 || { \
 		echo "FAIL: clang-tidy is not available (mise manages it: mise trust && mise install)"; \
 		exit 1; \
 	}
 	@for f in $(C_TIDY_SRCS); do \
-		$(CLANG_TIDY) "$$f" -- -std=c99 -Ic_src -isystem $(GUMBO_SRC_DIR)/src \
+		extra=; \
+		case "$$f" in \
+			c_src/test/*) \
+				extra="--checks=-cert-err33-c"; \
+				;; \
+		esac; \
+		$(CLANG_TIDY) "$$f" $$extra -- -std=c99 -Ic_src -isystem $(GUMBO_SRC_DIR)/src \
 			-isystem $(ERTS_INCLUDE_DIR) \
 			|| { echo "FAIL: clang-tidy has something to say about $$f"; exit 1; }; \
 	done

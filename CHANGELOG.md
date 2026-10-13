@@ -35,6 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A failed extraction inside the NIF can no longer reach a caller as a value.** The extractors
+  answered a term for both outcomes, so an allocation failure was a value a detail map could not tell
+  from a term, and a caller read it back as the integer `42`. They answer a status with the term written
+  through an out parameter now, and every entry point turns a failure into the same `badarg` the VM
+  surfaces as `ArgumentError`. The paths are OOM-only and nothing a caller sees has changed.
+- `cert-err33-c` is on for the C that ships: it is what found the disregarded returns above. `mix ci`
+  also runs the fault-injection sweep, `mix test.fault_paths`, as a step of its own — it arms an
+  extraction to fail by index and requires every one of them to reach the caller.
+
 - `:max_errors` now defaults to `100` instead of gumbo's `-1`, which disables
   the cap. gumbo records one error per unclosed element at EOF and each of those
   carries a copy of the open-element tag stack, so an N-deep unclosed document

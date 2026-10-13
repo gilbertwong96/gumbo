@@ -14,7 +14,6 @@ Checks: >
   cert-*,
   -bugprone-easily-swappable-parameters,
   -bugprone-multi-level-implicit-pointer-conversion,
-  -cert-err33-c,
   -readability-*,
   -clang-analyzer-optin.*,
 
@@ -28,19 +27,13 @@ Checks: >
 # input. For a library whose subject is parsing input, that is the whole program, and for the two
 # harnesses it flags they are allocating the documents they were asked to build.
 #
-# cert-err33-c: the value returned by this function should not be disregarded — 47 sites where an
-# enif_* or string function's return is not checked. They are OOM-only paths, the previous state on
-# them was measured to be a badarg that read as the integer 42 (see the ledger's Ruling SS note),
-# and turning all 47 into propagated error codes is a change of its own rather than a lint. The
-# cheap version of that fix was attempted and does not exist: catching the failure where it is
-# consumed would mean testing a term for THE_NON_VALUE, which is internal to ERTS and not in
-# erl_nif.h, so there is nothing portable to compare against. Which is why the fix is the helpers
-# reporting by status code instead of by term — every extractor and every call site, on paths no
-# test reaches.
+# cert-err33-c: enabled. It is the check this work exists to be able to turn on: it found 47 sites
+# where a NIF's return value was disregarded, among them the enif_make_map_from_arrays family, whose
+# failure used to travel into a detail map as a term and come back to a caller as the integer 42. Every
+# extractor now reports by status code with the term in an out parameter, every call site checks it, and
+# the entry points turn a 0 into a badarg. The check reports nothing in the C that ships.
 #
-# The older note: the value returned by this function should not be disregarded — 47 sites where an
-# enif_* or string function's return is not checked. They are OOM-only paths, the previous state on
-# them was measured to be a badarg that read as the integer 42 (see the ledger's Ruling SS note),
-# and turning all 47 into propagated error codes is a change of its own rather than a lint.
-WarningsAsErrors: ''
-HeaderFilterRegex: ''
+# It is off for c_src/test/parity_dump.c and c_src/test/teardown_probe.c, by the case in the
+# Makefile's check-c-tidy: both print diagnostics to stderr, where the return value of a fprintf has no
+# action to take and no caller to inform. That is the one disregard this project can name, and it is
+# named here rather than paid for with ninety-four casts.
