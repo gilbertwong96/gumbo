@@ -107,3 +107,39 @@ jobs:
       # AddressSanitizer/UndefinedBehaviorSanitizer, a clean rebuild, and the allocation
       # failure sweep. Nothing here is a smoke test the local gate does not run.
       - run: mix ci
+
+  gate-macos:
+    name: mix ci (macOS, pinned toolchain)
+    # macOS runners bill at roughly ten times the Linux rate, so this job exists for one
+    # reason: to tell a genuine failure apart from a platform difference. Restrict it with
+    # a `paths` or `if` filter if that comparison is not worth the minutes on every push.
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # The project's own toolchain file, rather than a second set of pins: .mise.toml
+      # names erlang 29.1.1, elixir 1.20.4-otp-29 and clang 23, so this job runs the gate
+      # with the exact VM and the exact clang-format the committed .clang-format was
+      # written for — and the Makefile's own tool lookup falls back to `mise exec --`,
+      # which is another way of saying mise is the intended source of these tools.
+      # (The ubuntu jobs use setup-beam and llvm.sh instead: mise would build Erlang from
+      # source on Linux, and those jobs are there for the suite, not for that.)
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+      - run: mise trust
+      - run: mise install
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mise-${{ hashFiles('mix.lock', 'Makefile', 'c_src/**', '.mise.toml') }}
+
+      - run: mix deps.get --check-locked
+      - run: mix ci
