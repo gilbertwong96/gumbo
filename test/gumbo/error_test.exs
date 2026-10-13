@@ -9,6 +9,15 @@ defmodule Gumbo.ErrorTest do
     assert is_list(Gumbo.Output.errors(output))
   end
 
+  # An index the output does not have is a caller error, not a parse error: the accessor must
+  # raise, and the message names the index that was never there.
+  test "message/1 rejects an index the output never had" do
+    {:ok, output} = Gumbo.parse("<p>x</p>")
+    error = %Gumbo.Error{output: output, index: 999}
+
+    assert_raise ArgumentError, "invalid error index: 999", fn -> Gumbo.Error.message(error) end
+  end
+
   test "a duplicate attribute is reported with both indices" do
     {:ok, output} = Gumbo.parse(~s(<div class="a" class="b">x</div>))
     err = Enum.find(Gumbo.Output.errors(output), &(Error.type(&1) == :duplicate_attr))
