@@ -20,6 +20,7 @@ defmodule Gumbo.FaultPathsTest do
   @html ~s(<div a=1><p>x</p><!--c--></div>)
   @attribute_html ~s(<div class="a" id="b">x</div>)
   @error_html "<!doctype html>\n<div a=1 a=2>\xFF"
+  @materialize_html ~s(<div class="a" id="b"><p>x</p></div>)
 
   test "a failed extraction reaches the caller instead of becoming a value" do
     sentinel = fault_file() <> ".armed"
@@ -189,6 +190,44 @@ defmodule Gumbo.FaultPathsTest do
       end
 
     {:returned, errors}
+  rescue
+    error -> {:raised, error}
+  end
+
+  # The materialized path is the one the lazy accessors never take: Gumbo.materialize/2 asks the NIF
+  # for whole trees, built by the builders that were the last to answer terms. It walks the same
+  # extractors through a different set of call sites, and those call sites are what this case covers.
+  test "an armed failure in the materialized path reaches the caller too" do
+    File.write!(fault_file(), "0")
+    {:returned, reference} = observe_materialized(@materialize_html)
+
+    outcomes =
+      for n <- @sweep do
+        File.write!(fault_file(), Integer.to_string(n))
+        {n, observe_materialized(@materialize_html)}
+      end
+
+    assert Enum.any?(outcomes, fn
+             {_n, {:raised, _}} -> true
+             {_n, {:returned, observed}} -> observed != reference
+           end),
+           """
+           no armed extraction changed the materialized path's answer, so this sweep never fired:
+           the library has a hook, but nothing here reached it.
+           """
+
+    swallowed =
+      for {n, {:returned, observed}} <- outcomes, observed != reference, do: n
+
+    assert swallowed == [],
+           "these extractions failed and the failure came back as a value instead of raising: " <>
+             inspect(swallowed)
+  end
+
+  defp observe_materialized(html) do
+    {:ok, output} = Gumbo.parse(html)
+
+    {:returned, Gumbo.materialize(output)}
   rescue
     error -> {:raised, error}
   end
