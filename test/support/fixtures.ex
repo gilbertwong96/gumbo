@@ -23,6 +23,10 @@ defmodule Gumbo.Test.Fixtures do
     * `:file_body` — the pinned file's content, default `"alpha\n"`, which
       makes the default substitution match exactly once.
     * `:definition` — `false` writes no `.exs` definition. Defaults to `true`.
+    * `:priors` — the definition's `priors` flag: `true` makes generation apply
+      the earlier-numbered patches first. Defaults to `false`.
+    * `:extra_patches` — extra `{name, bytes}` written as `.patch` files next to
+      the fixture's own. Defaults to `[]`.
   """
   @spec fake_root(map()) :: binary()
   def fake_root(opts \\ %{}) do
@@ -41,7 +45,7 @@ defmodule Gumbo.Test.Fixtures do
 
     if Map.get(opts, :definition, true) do
       definition = %{
-        priors: false,
+        priors: Map.get(opts, :priors, false),
         header: "Subject: [PATCH] fixture\n\n",
         subs: [%{file: @source, count: Map.get(opts, :count, 1), from: "alpha", to: "beta"}]
       }
@@ -57,6 +61,10 @@ defmodule Gumbo.Test.Fixtures do
       :generated -> File.write!(patch_path(root), Gumbo.Patches.generate(@name, root))
       bytes -> File.write!(patch_path(root), bytes)
     end
+
+    Enum.each(Map.get(opts, :extra_patches, []), fn {name, bytes} ->
+      File.write!(Path.join([root, "c_src/patches/gumbo-parser", name <> ".patch"]), bytes)
+    end)
 
     root
   end
