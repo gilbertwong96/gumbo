@@ -127,17 +127,6 @@ jobs:
     # a `paths` or `if` filter if that comparison is not worth the minutes on every push.
     runs-on: macos-latest
     timeout-minutes: 60
-    env:
-      # `mise exec --` is the Makefile's own fallback for a machine whose tools are not on
-      # PATH, and a macOS runner is exactly that machine: Xcode ships a clang-format of its
-      # own, PATH finds that one first, and its idea of formatting is not LLVM 23's — which
-      # is how this job first went red on a file that is formatted on the machine the gate
-      # was written on. Naming the pinned tools this way keeps the job a comparison of
-      # platforms rather than a comparison of two Xcode releases.
-      CC: mise exec -- clang
-      ANALYZER: mise exec -- clang
-      CLANG_FORMAT: mise exec -- clang-format
-      CLANG_TIDY: mise exec -- clang-tidy
     steps:
       - uses: actions/checkout@v7
         with:
@@ -156,13 +145,24 @@ jobs:
       - run: mise trust
       - run: mise install
 
-      # Print what the gate will actually use, so a failure below is never "which
-      # clang-format was that?" — this is the step that would have caught the runner's own.
+      # Homebrew's LLVM, because mise's clang is the compiler only: it ships no clang-format
+      # and no clang-tidy, which is why .mise.toml names a Homebrew LLVM bin directory as the
+      # place this project's tools come from (Homebrew keeps llvm keg-only, so that path has
+      # to be said rather than inherited). This reproduces the local arrangement — Xcode's
+      # clang compiles, LLVM 23's clang-format and clang-tidy judge the C — and $GITHUB_PATH
+      # prepends, so the keg's tools win over the Xcode ones a runner already has.
+      - name: Install LLVM's tools
+        run: |
+          brew install llvm@23
+          echo "$(brew --prefix)/opt/llvm@23/bin" >> "$GITHUB_PATH"
+
+      # Print what the gate will actually use, by the same PATH lookup the Makefile does:
+      # a missing tool or a system clang of another major stops here, naming itself.
       - name: Report the C toolchain
         run: |
-          mise exec -- clang --version
-          mise exec -- clang-format --version
-          mise exec -- clang-tidy --version
+          clang --version
+          clang-format --version
+          clang-tidy --version
 
       - name: Cache deps and build
         uses: actions/cache@v6
