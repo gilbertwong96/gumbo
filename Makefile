@@ -38,12 +38,19 @@ GUMBO_SRCS := \
 C_SRCS := $(wildcard c_src/*.c)
 
 PRIV_DIR := priv
-# The library itself goes where elixir_make looks for it: the app's own priv, which is
-# $(MIX_APP_PATH)/priv when Mix drives the build and the source priv when make is run by hand. This is
-# not cosmetic — elixir_make archives the precompiled NIF out of the app priv, so a build that writes
-# into the source tree produces an archive with nothing in it, which publishes happily and then fails
-# at load_nif/2 for everyone who downloads it. The C scratch below stays in the source tree either way,
-# so every check-* target keeps the paths it had.
+# elixir_make archives the precompiled NIF out of the app priv — $(MIX_APP_PATH)/priv — while this
+# Makefile builds into the source priv, which is where every check-* target, the fault-paths harness
+# and the tests expect to find it. So the library is built in the source tree and copied into the app
+# priv when Mix is driving the build, which is the only thing the archive step needs. The copy is
+# best effort on purpose: in :dev and :test Mix symlinks priv into _build, so the two paths are the
+# same file and `cp` says so — and in :prod, which is where archiving happens, it is a real directory
+# and the copy is what puts the library where the archive looks for it. The archive step fails loudly
+# on its own if the library is not there, so nothing is hidden by tolerating cp's complaint here.
+#
+# Pointing the build itself at the app priv looks tidier and is wrong: c_src/test/fault-paths.sh
+# proves a failure path by swapping the library a live VM has already mapped, and rewriting a mapped
+# file in place is a SIGSEGV — which is exactly how the first attempt at this failed in CI while
+# passing locally.
 APP_PRIV_DIR := $(if $(MIX_APP_PATH),$(MIX_APP_PATH)/priv,$(PRIV_DIR))
 # elixir_make.precompile builds one target after another in this same source tree, so the C objects
 # and the patched-source copy have to be told apart by target. Without this, the aarch64 pass would
@@ -108,7 +115,7 @@ endif
 # expands on the spot, so naming the library earlier would have produced `priv/gumbo_nif` with no
 # extension and a NIF that load_nif/2 cannot find. Everything that touches the library — the rules
 # below, `make clean`, the gates — goes through NIF_SO and does not care which extension it has.
-NIF_SO := $(APP_PRIV_DIR)/gumbo_nif$(NIF_EXT)
+NIF_SO := $(PRIV_DIR)/gumbo_nif$(NIF_EXT)
 
 all: $(NIF_SO)
 
@@ -162,8 +169,9 @@ $(OBJ_DIR)/%.o: c_src/%.c
 # at build time: OBJS is wildcard-driven, so it cannot detect its own
 # emptiness, and a gumbo-only bundle would fail at load time instead.
 $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
-	@mkdir -p $(APP_PRIV_DIR)
+	@mkdir -p $(PRIV_DIR)
 	$(CC) $(LDSHARED_FLAGS) -pthread -o $@ $(OBJS)
+	@if [ -n "$(MIX_APP_PATH)" ]; then mkdir -p "$(APP_PRIV_DIR)" 2>/dev/null; cp -f "$@" "$(APP_PRIV_DIR)/" 2>/dev/null || true; fi
 
 # Teardown-contract probe, in two modes, and both are hard gates now that the walk
 # it exercises is our patch rather than upstream's code.
