@@ -14,6 +14,7 @@ Checks: >
   cert-*,
   -bugprone-easily-swappable-parameters,
   -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-not-null-terminated-result,
   -readability-*,
   -clang-analyzer-optin.*,
 
@@ -23,6 +24,11 @@ Checks: >
 # bugprone-multi-level-implicit-pointer-conversion: the vendored vector API takes void*, so every
 # GumboNode** handed to it is that conversion, and there is nothing to fix on our side.
 #
+# bugprone-not-null-terminated-result: what this library moves between the two sides is always a
+# (pointer, length) pair — Erlang binaries and GumboStringPiece are both length-delimited — so a
+# memcpy into one of them is the whole operation and there is no terminator to add. The check is
+# written for C strings, which is the representation this project deliberately does not use.
+#
 # clang-analyzer-optin.*: an opt-in heuristic that flags any allocation whose size comes from the
 # input. For a library whose subject is parsing input, that is the whole program, and for the two
 # harnesses it flags they are allocating the documents they were asked to build.
@@ -31,7 +37,9 @@ Checks: >
 # where a NIF's return value was disregarded, among them the enif_make_map_from_arrays family, whose
 # failure used to travel into a detail map as a term and come back to a caller as the integer 42. Every
 # extractor now reports by status code with the term in an out parameter, every call site checks it, and
-# the entry points turn a 0 into a badarg. The check reports nothing in the C that ships.
+# the entry points turn a 0 into a badarg. The check reports nothing in the C that ships — and check-c-tidy
+# upgrades warnings to errors, so that sentence is now enforced rather than observed: a finding here
+# fails the build instead of printing into a log nobody reads.
 #
 # It is off for c_src/test/parity_dump.c and c_src/test/teardown_probe.c, by the case in the
 # Makefile's check-c-tidy: both print diagnostics to stderr, where the return value of a fprintf has no

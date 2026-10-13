@@ -440,7 +440,7 @@ check-c-tidy: $(GUMBO_SRC_STAMP)
 				extra="--checks=-cert-err33-c"; \
 				;; \
 		esac; \
-		$(CLANG_TIDY) "$$f" $$extra -- -std=c99 -Ic_src -isystem $(GUMBO_SRC_DIR)/src \
+		$(CLANG_TIDY) --warnings-as-errors='*' "$$f" $$extra -- -std=c99 -Ic_src -isystem $(GUMBO_SRC_DIR)/src \
 			-isystem $(ERTS_INCLUDE_DIR) \
 			|| { echo "FAIL: clang-tidy has something to say about $$f"; exit 1; }; \
 	done
