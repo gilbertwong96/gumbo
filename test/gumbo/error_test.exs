@@ -127,4 +127,43 @@ defmodule Gumbo.ErrorTest do
     assert caret =~ "Invalid UTF8"
     assert caret =~ "^"
   end
+
+  test "each error type's fields survive the conversion" do
+    cases = [
+      {"<p>\xFF</p>", :utf8_invalid},
+      {~s(<div a=1 a=2>), :duplicate_attr},
+      {"<div><span>", :parser}
+    ]
+
+    for {html, type} <- cases do
+      {:ok, output} = Gumbo.parse(html)
+
+      error =
+        output
+        |> Gumbo.Output.errors()
+        |> Enum.find(&(Gumbo.Error.type(&1) == type))
+
+      assert error, "no #{type} error in #{inspect(html)}"
+      assert is_binary(Gumbo.Error.message(error))
+      assert Gumbo.Error.position(error).line >= 1
+    end
+
+    # The parser error carries the open tag stack, which is where the nested
+    # extraction lives: a list of atoms inside a map inside the error vector.
+    {:ok, output} = Gumbo.parse("<div><span>")
+
+    # The premature-EOF error is the parser one with a non-empty stack; the
+    # doctype error carries an empty one, exactly as the case above says.
+    parser =
+      output
+      |> Gumbo.Output.errors()
+      |> Enum.find(fn error ->
+        Gumbo.Error.type(error) == :parser and
+          match?(%{tag_stack: [_ | _]}, Gumbo.Error.parser_error(error))
+      end)
+
+    assert %{tag_stack: stack} = Gumbo.Error.parser_error(parser)
+    assert stack != []
+    assert Enum.all?(stack, &is_atom/1)
+  end
 end

@@ -19,6 +19,7 @@ defmodule Gumbo.FaultPathsTest do
   @sweep 1..64
   @html ~s(<div a=1><p>x</p><!--c--></div>)
   @attribute_html ~s(<div class="a" id="b">x</div>)
+  @error_html "<!doctype html>\n<div a=1 a=2>\xFF"
 
   test "a failed extraction reaches the caller instead of becoming a value" do
     sentinel = fault_file() <> ".armed"
@@ -146,6 +147,48 @@ defmodule Gumbo.FaultPathsTest do
     {:ok, map} = Gumbo.Native.attr_details(output.resource, element.index, 0)
 
     {:returned, map}
+  rescue
+    error -> {:raised, error}
+  end
+
+  # The error vector is the third nesting: a list of maps hanging off the output, built by its own
+  # extractors. A failure one level deeper has to reach the caller the same way.
+  test "an armed failure in the error path reaches the caller too" do
+    File.write!(fault_file(), "0")
+    {:returned, reference} = observe_errors(@error_html)
+
+    outcomes =
+      for n <- @sweep do
+        File.write!(fault_file(), Integer.to_string(n))
+        {n, observe_errors(@error_html)}
+      end
+
+    assert Enum.any?(outcomes, fn
+             {_n, {:raised, _}} -> true
+             {_n, {:returned, observed}} -> observed != reference
+           end),
+           """
+           no armed extraction changed the error path's answer, so this sweep never fired: the
+           library has a hook, but nothing here reached it.
+           """
+
+    swallowed =
+      for {n, {:returned, observed}} <- outcomes, observed != reference, do: n
+
+    assert swallowed == [],
+           "these extractions failed and the failure came back as a value instead of raising: " <>
+             inspect(swallowed)
+  end
+
+  defp observe_errors(html) do
+    {:ok, output} = Gumbo.parse(html)
+
+    errors =
+      for error <- Gumbo.Output.errors(output) do
+        {Gumbo.Error.type(error), Gumbo.Error.message(error), Gumbo.Error.position(error)}
+      end
+
+    {:returned, errors}
   rescue
     error -> {:raised, error}
   end
