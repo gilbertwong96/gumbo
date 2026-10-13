@@ -84,6 +84,29 @@ defmodule Gumbo.Patches.DiffTest do
     assert diff("a\nb\n", "a\nb\n") == ""
   end
 
+  # Both sides empty is difflib's empty-opcodes case: unified_diff([], []) produces
+  # no output at all, so the port must return "" rather than anything else.
+  test "two empty files diff to nothing" do
+    assert diff("", "") == ""
+  end
+
+  # A one-line hunk with context 0 is the only shape that renders a zero-length
+  # range: difflib trims the leading equal to (9, 9, 9, 9), so take/3 gets an
+  # empty range and emits nothing. Expectation is difflib's n=0 output.
+  test "a one-line hunk with zero context" do
+    a = Enum.map(0..9, &"l#{&1}\n")
+    b = Enum.map(0..8, &"l#{&1}\n") ++ ["Y\n"]
+
+    assert Diff.unified(a, b, "a/src/x", "b/src/x", 0) ==
+             ~S"""
+             --- a/src/x
+             +++ b/src/x
+             @@ -10 +10 @@
+             -l9
+             +Y
+             """
+  end
+
   test "splitlines/1 matches str.splitlines(keepends=True) for the shapes we read" do
     assert Diff.splitlines("") == []
     assert Diff.splitlines("a\n") == ["a\n"]
