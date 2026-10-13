@@ -413,21 +413,12 @@ check-c-tidy: $(GUMBO_SRC_STAMP)
 # is inert without -DGUMBO_TEST_FAULTS, so the rebuilt library is the one that ships.
 check-fault-paths: FAULT_FILE := $(CURDIR)/priv/.gumbo-fault-at
 
-# The flags go in through the environment rather than through a build of ours, because mix builds
-# this library through elixir_make and would otherwise be free to replace whatever we built with a
-# library of its own: that is not a hypothesis, it is the reason the sweep once reported every index
-# while the library loaded at run time had no hook in it. make reads CFLAGS from the environment as
-# its default, so the build mix runs is the fault build. make clean first, so there is something to
-# rebuild. The library is put back afterwards either way, including when the sweep fails.
+# The harness owns its own build and says so: c_src/test/fault-paths.sh builds the library twice and
+# runs the sweep twice, because a green sweep only means something once it has been shown failing on
+# a swallow caused on purpose. Nothing about it is silent, and the shipping library is put back
+# however it ends, including on failure.
 check-fault-paths:
-	@$(MAKE) --no-print-directory clean > /dev/null
-	@status=0; \
-		CFLAGS="$(CFLAGS) -DGUMBO_TEST_FAULTS -DGUMBO_FAULT_FILE_PATH=\\\"$(FAULT_FILE)\\\"" \
-		GUMBO_FAULT_FILE="$(FAULT_FILE)" \
-		elixir -S mix test --only fault_paths || status=$$?; \
-		rm -f "$(FAULT_FILE)" "$(FAULT_FILE).armed"; \
-		$(MAKE) --no-print-directory clean > /dev/null; $(MAKE) --no-print-directory > /dev/null; \
-		exit $$status
+	@c_src/test/fault-paths.sh "$(FAULT_FILE)"
 
 check-teardown: $(TEARDOWN_PROBE)
 	$(TEARDOWN_PROBE) balance

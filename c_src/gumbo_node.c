@@ -125,7 +125,7 @@ ERL_NIF_TERM gumbo_node_type_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     /* 这是本计划针对的缺陷，故意重演：这个值会落进下面 values[] 的数组，被
        enif_make_map_from_arrays 消费，而它无法把它和一个 term 区分开 ——
        调用方读回来是 42。 */
-    return enif_make_badarg(env);
+    return GUMBO_FAULT_FAILURE_VALUE(env);
   }
 #endif
 
