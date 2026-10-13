@@ -59,7 +59,8 @@ defmodule Gumbo.MixProject do
         "check.c_lint",
         "check.c_tidy",
         "check.sanitizers",
-        "check.clean_build"
+        "check.clean_build",
+        "test.fault_paths"
       ],
 
       # `reach.check --dead-code` only renders: unlike --smells it never reads
