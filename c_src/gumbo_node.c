@@ -83,26 +83,20 @@ static int gumbo_node_is_text_like(const GumboNode* node) {
 /* ---- small term builders shared by several extractors ---- */
 
 /* NUL-terminated string (doctype names, decoded text) or nil when NULL. */
-ERL_NIF_TERM gumbo_node_stringz(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                const char* s) {
+int gumbo_node_stringz(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                       const char* s, ERL_NIF_TERM* out) {
   if (s == NULL) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  ERL_NIF_TERM out;
-  if (!gumbo_make_binary(env, s, strlen(s), &out)) {
-    return enif_make_badarg(env);
-  }
-  return out;
+  return gumbo_make_binary(env, s, strlen(s), out);
 }
 
 /* Length-delimited piece (original text, original tag). A zero-length piece
    is the empty binary; its data pointer is never touched in that case. */
-ERL_NIF_TERM gumbo_node_string_piece(ErlNifEnv* env, GumboStringPiece piece) {
-  ERL_NIF_TERM out;
-  if (!gumbo_make_binary(env, piece.data, piece.length, &out)) {
-    return enif_make_badarg(env);
-  }
-  return out;
+int gumbo_node_string_piece(ErlNifEnv* env, GumboStringPiece piece,
+                            ERL_NIF_TERM* out) {
+  return gumbo_make_binary(env, piece.data, piece.length, out);
 }
 
 /* %Gumbo.Position{} built from a GumboSourcePosition. */
@@ -118,36 +112,37 @@ int gumbo_node_position_map(ErlNifEnv* env, const gumbo_atoms_t* atoms,
 
 /* ---- one scalar extractor per field ---- */
 
-ERL_NIF_TERM gumbo_node_type_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                  const GumboNode* node) {
+int gumbo_node_type_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                         const GumboNode* node, ERL_NIF_TERM* out) {
 #ifdef GUMBO_TEST_FAULTS
   if (gumbo_fault_should_fail()) {
-    /* 这是本计划针对的缺陷，故意重演：这个值会落进下面 values[] 的数组，被
-       enif_make_map_from_arrays 消费，而它无法把它和一个 term 区分开 ——
-       调用方读回来是 42。 */
-    return GUMBO_FAULT_FAILURE_VALUE(env);
+    /* A failure, on purpose: see gumbo_faults.h. */
+    return GUMBO_FAULT_FAILURE(env, out);
   }
 #endif
 
   (void)env;
-  return atoms->node_types[node->type];
+  *out = atoms->node_types[node->type];
+  return 1;
 }
 
-ERL_NIF_TERM gumbo_node_index_within_parent_term(ErlNifEnv* env,
-                                                 const gumbo_atoms_t* atoms,
-                                                 const GumboNode* node) {
+int gumbo_node_index_within_parent_term(ErlNifEnv* env,
+                                        const gumbo_atoms_t* atoms,
+                                        const GumboNode* node,
+                                        ERL_NIF_TERM* out) {
   /* create_node sets parent to NULL and index_within_parent to (size_t)-1
      for never-appended nodes (the document node above all); without a
      parent there is no position, so nil — not SIZE_MAX as an integer. */
   if (node->parent == NULL) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  return enif_make_ulong(env, (unsigned long)node->index_within_parent);
+  *out = enif_make_ulong(env, (unsigned long)node->index_within_parent);
+  return 1;
 }
 
-ERL_NIF_TERM gumbo_node_parse_flags_term(ErlNifEnv* env,
-                                         const gumbo_atoms_t* atoms,
-                                         const GumboNode* node) {
+int gumbo_node_parse_flags_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                const GumboNode* node, ERL_NIF_TERM* out) {
   /* parse_flags is a bitvector; GUMBO_INSERTION_NORMAL (0) is the empty
      list. Cons from the highest bit down so the list stays in declaration
      order. */
@@ -159,89 +154,98 @@ ERL_NIF_TERM gumbo_node_parse_flags_term(ErlNifEnv* env,
       list = enif_make_list_cell(env, atoms->parse_flags[bit], list);
     }
   }
-  return list;
+  *out = list;
+  return 1;
 }
 
 /* Start position. The document node's union member carries no position, so
    it reports kGumboEmptySourcePosition (all zeros), exactly as parser-
    inserted elements do. */
-ERL_NIF_TERM gumbo_node_position_term(ErlNifEnv* env,
-                                      const gumbo_atoms_t* atoms,
-                                      const GumboNode* node) {
+int gumbo_node_position_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                             const GumboNode* node, ERL_NIF_TERM* out) {
   GumboSourcePosition pos = kGumboEmptySourcePosition;
   if (gumbo_node_is_element(node)) {
     pos = node->v.element.start_pos;
   } else if (gumbo_node_is_text_like(node)) {
     pos = node->v.text.start_pos;
   }
-  ERL_NIF_TERM out;
-  if (!gumbo_node_position_map(env, atoms, pos, &out)) {
-    return enif_make_badarg(env);
+  if (!gumbo_node_position_map(env, atoms, pos, out)) {
+    return 0;
   }
-  return out;
+  return 1;
 }
 
-ERL_NIF_TERM gumbo_node_has_doctype_term(ErlNifEnv* env,
-                                         const gumbo_atoms_t* atoms,
-                                         const GumboNode* node) {
+int gumbo_node_has_doctype_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                const GumboNode* node, ERL_NIF_TERM* out) {
   (void)env;
   if (node->type != GUMBO_NODE_DOCUMENT) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  return node->v.document.has_doctype ? atoms->true_ : atoms->false_;
+  *out = node->v.document.has_doctype ? atoms->true_ : atoms->false_;
+  return 1;
 }
 
-ERL_NIF_TERM gumbo_node_doctype_name_term(ErlNifEnv* env,
-                                          const gumbo_atoms_t* atoms,
-                                          const GumboNode* node) {
+int gumbo_node_doctype_name_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                 const GumboNode* node, ERL_NIF_TERM* out) {
   if (node->type != GUMBO_NODE_DOCUMENT) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  return gumbo_node_stringz(env, atoms, node->v.document.name);
+  return gumbo_node_stringz(env, atoms, node->v.document.name, out);
 }
 
-ERL_NIF_TERM gumbo_node_public_identifier_term(ErlNifEnv* env,
-                                               const gumbo_atoms_t* atoms,
-                                               const GumboNode* node) {
-  if (node->type != GUMBO_NODE_DOCUMENT) {
-    return atoms->nil;
-  }
-  return gumbo_node_stringz(env, atoms, node->v.document.public_identifier);
-}
-
-ERL_NIF_TERM gumbo_node_system_identifier_term(ErlNifEnv* env,
-                                               const gumbo_atoms_t* atoms,
-                                               const GumboNode* node) {
-  if (node->type != GUMBO_NODE_DOCUMENT) {
-    return atoms->nil;
-  }
-  return gumbo_node_stringz(env, atoms, node->v.document.system_identifier);
-}
-
-ERL_NIF_TERM gumbo_node_quirks_mode_term(ErlNifEnv* env,
-                                         const gumbo_atoms_t* atoms,
-                                         const GumboNode* node) {
-  (void)env;
-  if (node->type != GUMBO_NODE_DOCUMENT) {
-    return atoms->nil;
-  }
-  return atoms->quirks_modes[node->v.document.doc_type_quirks_mode];
-}
-
-ERL_NIF_TERM gumbo_node_tag_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                 const GumboNode* node) {
-  (void)env;
-  if (!gumbo_node_is_element(node)) {
-    return atoms->nil;
-  }
-  return atoms->tags[node->v.element.tag];
-}
-
-ERL_NIF_TERM gumbo_node_tag_name_term(ErlNifEnv* env,
+int gumbo_node_public_identifier_term(ErlNifEnv* env,
                                       const gumbo_atoms_t* atoms,
-                                      const GumboNode* node) {
+                                      const GumboNode* node,
+                                      ERL_NIF_TERM* out) {
+  if (node->type != GUMBO_NODE_DOCUMENT) {
+    *out = atoms->nil;
+    return 1;
+  }
+  return gumbo_node_stringz(env, atoms, node->v.document.public_identifier,
+                            out);
+}
+
+int gumbo_node_system_identifier_term(ErlNifEnv* env,
+                                      const gumbo_atoms_t* atoms,
+                                      const GumboNode* node,
+                                      ERL_NIF_TERM* out) {
+  if (node->type != GUMBO_NODE_DOCUMENT) {
+    *out = atoms->nil;
+    return 1;
+  }
+  return gumbo_node_stringz(env, atoms, node->v.document.system_identifier,
+                            out);
+}
+
+int gumbo_node_quirks_mode_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                const GumboNode* node, ERL_NIF_TERM* out) {
+  (void)env;
+  if (node->type != GUMBO_NODE_DOCUMENT) {
+    *out = atoms->nil;
+    return 1;
+  }
+  *out = atoms->quirks_modes[node->v.document.doc_type_quirks_mode];
+  return 1;
+}
+
+int gumbo_node_tag_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                        const GumboNode* node, ERL_NIF_TERM* out) {
+  (void)env;
   if (!gumbo_node_is_element(node)) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
+  }
+  *out = atoms->tags[node->v.element.tag];
+  return 1;
+}
+
+int gumbo_node_tag_name_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                             const GumboNode* node, ERL_NIF_TERM* out) {
+  if (!gumbo_node_is_element(node)) {
+    *out = atoms->nil;
+    return 1;
   }
   const GumboElement* element = &node->v.element;
 
@@ -259,12 +263,14 @@ ERL_NIF_TERM gumbo_node_tag_name_term(ErlNifEnv* env,
     size_t piece_len = element->original_tag.length;
     if (piece_len < 2 || data[0] != '<' || data[piece_len - 1] != '>' ||
         (data[1] == '/' && piece_len < 3)) {
-      return atoms->nil;
+      *out = atoms->nil;
+      return 1;
     }
     GumboStringPiece piece = {data, piece_len};
     gumbo_tag_from_original_text(&piece);
     if (piece.length == 0) {
-      return atoms->nil; /* "<>" or "</>": empty name, not a tag */
+      *out = atoms->nil;
+      return 1; /* "<>" or "</>": empty name, not a tag */
     }
     name = piece.data;
     len = piece.length;
@@ -285,69 +291,69 @@ ERL_NIF_TERM gumbo_node_tag_name_term(ErlNifEnv* env,
     }
   }
 
-  ERL_NIF_TERM out;
-  if (!gumbo_make_binary(env, name, len, &out)) {
-    return enif_make_badarg(env);
+  if (!gumbo_make_binary(env, name, len, out)) {
+    return 0;
   }
-  return out;
+  return 1;
 }
 
-ERL_NIF_TERM gumbo_node_namespace_term(ErlNifEnv* env,
-                                       const gumbo_atoms_t* atoms,
-                                       const GumboNode* node) {
+int gumbo_node_namespace_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                              const GumboNode* node, ERL_NIF_TERM* out) {
   (void)env;
   if (!gumbo_node_is_element(node)) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  return atoms->namespaces[node->v.element.tag_namespace];
+  *out = atoms->namespaces[node->v.element.tag_namespace];
+  return 1;
 }
 
-ERL_NIF_TERM gumbo_node_original_tag_term(ErlNifEnv* env,
-                                          const gumbo_atoms_t* atoms,
-                                          const GumboNode* node) {
+int gumbo_node_original_tag_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                 const GumboNode* node, ERL_NIF_TERM* out) {
   if (!gumbo_node_is_element(node)) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  return gumbo_node_string_piece(env, node->v.element.original_tag);
+  return gumbo_node_string_piece(env, node->v.element.original_tag, out);
 }
 
-ERL_NIF_TERM gumbo_node_original_end_tag_term(ErlNifEnv* env,
-                                              const gumbo_atoms_t* atoms,
-                                              const GumboNode* node) {
+int gumbo_node_original_end_tag_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                     const GumboNode* node, ERL_NIF_TERM* out) {
   if (!gumbo_node_is_element(node)) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  return gumbo_node_string_piece(env, node->v.element.original_end_tag);
+  return gumbo_node_string_piece(env, node->v.element.original_end_tag, out);
 }
 
-ERL_NIF_TERM gumbo_node_end_position_term(ErlNifEnv* env,
-                                          const gumbo_atoms_t* atoms,
-                                          const GumboNode* node) {
+int gumbo_node_end_position_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                 const GumboNode* node, ERL_NIF_TERM* out) {
   if (!gumbo_node_is_element(node)) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  ERL_NIF_TERM out;
-  if (!gumbo_node_position_map(env, atoms, node->v.element.end_pos, &out)) {
-    return enif_make_badarg(env);
+  if (!gumbo_node_position_map(env, atoms, node->v.element.end_pos, out)) {
+    return 0;
   }
-  return out;
+  return 1;
 }
 
-ERL_NIF_TERM gumbo_node_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
-                                  const GumboNode* node) {
+int gumbo_node_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                         const GumboNode* node, ERL_NIF_TERM* out) {
   if (!gumbo_node_is_text_like(node)) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  return gumbo_node_stringz(env, atoms, node->v.text.text);
+  return gumbo_node_stringz(env, atoms, node->v.text.text, out);
 }
 
-ERL_NIF_TERM gumbo_node_original_text_term(ErlNifEnv* env,
-                                           const gumbo_atoms_t* atoms,
-                                           const GumboNode* node) {
+int gumbo_node_original_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                                  const GumboNode* node, ERL_NIF_TERM* out) {
   if (!gumbo_node_is_text_like(node)) {
-    return atoms->nil;
+    *out = atoms->nil;
+    return 1;
   }
-  return gumbo_node_string_piece(env, node->v.text.original_text);
+  return gumbo_node_string_piece(env, node->v.text.original_text, out);
 }
 
 /* ---- the NIF entry points ---- */
@@ -384,25 +390,30 @@ ERL_NIF_TERM gumbo_nif_node_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       atoms->node.text,
       atoms->node.original_text,
   };
-  ERL_NIF_TERM values[GUMBO_NODE_DETAILS_COUNT] = {
-      gumbo_node_type_term(env, atoms, node),
-      gumbo_node_index_within_parent_term(env, atoms, node),
-      gumbo_node_parse_flags_term(env, atoms, node),
-      gumbo_node_position_term(env, atoms, node),
-      gumbo_node_has_doctype_term(env, atoms, node),
-      gumbo_node_doctype_name_term(env, atoms, node),
-      gumbo_node_public_identifier_term(env, atoms, node),
-      gumbo_node_system_identifier_term(env, atoms, node),
-      gumbo_node_quirks_mode_term(env, atoms, node),
-      gumbo_node_tag_term(env, atoms, node),
-      gumbo_node_tag_name_term(env, atoms, node),
-      gumbo_node_namespace_term(env, atoms, node),
-      gumbo_node_original_tag_term(env, atoms, node),
-      gumbo_node_original_end_tag_term(env, atoms, node),
-      gumbo_node_end_position_term(env, atoms, node),
-      gumbo_node_text_term(env, atoms, node),
-      gumbo_node_original_text_term(env, atoms, node),
-  };
+  ERL_NIF_TERM values[GUMBO_NODE_DETAILS_COUNT];
+
+  /* Each extraction is asked whether it succeeded. This is the array the defect
+     lived in: a failure used to travel into it and be read back as a term that
+     was never a value. */
+  if (!gumbo_node_type_term(env, atoms, node, &values[0]) ||
+      !gumbo_node_index_within_parent_term(env, atoms, node, &values[1]) ||
+      !gumbo_node_parse_flags_term(env, atoms, node, &values[2]) ||
+      !gumbo_node_position_term(env, atoms, node, &values[3]) ||
+      !gumbo_node_has_doctype_term(env, atoms, node, &values[4]) ||
+      !gumbo_node_doctype_name_term(env, atoms, node, &values[5]) ||
+      !gumbo_node_public_identifier_term(env, atoms, node, &values[6]) ||
+      !gumbo_node_system_identifier_term(env, atoms, node, &values[7]) ||
+      !gumbo_node_quirks_mode_term(env, atoms, node, &values[8]) ||
+      !gumbo_node_tag_term(env, atoms, node, &values[9]) ||
+      !gumbo_node_tag_name_term(env, atoms, node, &values[10]) ||
+      !gumbo_node_namespace_term(env, atoms, node, &values[11]) ||
+      !gumbo_node_original_tag_term(env, atoms, node, &values[12]) ||
+      !gumbo_node_original_end_tag_term(env, atoms, node, &values[13]) ||
+      !gumbo_node_end_position_term(env, atoms, node, &values[14]) ||
+      !gumbo_node_text_term(env, atoms, node, &values[15]) ||
+      !gumbo_node_original_text_term(env, atoms, node, &values[16])) {
+    return enif_make_badarg(env);
+  }
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values, GUMBO_NODE_DETAILS_COUNT,
                                  &map)) {

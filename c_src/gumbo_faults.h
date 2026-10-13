@@ -27,15 +27,16 @@
 #define GUMBO_FAULT_FILE_PATH "/tmp/gumbo-fault-at"
 #endif
 
-/* What a failed extraction answers. The default is the one a caller can act on:
-   a badarg, which reaches it instead of a value. The canary build turns it into
-   a plain 42, which is what a failure looks like when it is carried into a map
-   that cannot tell it from a term -- and then the sweep must fail and name the
-   index, or the sweep cannot see a swallow at all. */
+/* What a failed extraction answers, in the convention every extractor now uses:
+   a 0 the caller must turn into a badarg. In the canary build it answers 1
+   after storing a plain 42 instead, which is what a failure looks like when it
+   is reported as success and carried into a map that cannot tell it from a
+   term. The sweep must catch that and name the index, or it cannot see a
+   swallow. */
 #ifdef GUMBO_FAULT_SWALLOW
-#define GUMBO_FAULT_FAILURE_VALUE(env) enif_make_int(env, 42)
+#define GUMBO_FAULT_FAILURE(env, out) (*(out) = enif_make_int(env, 42), 1)
 #else
-#define GUMBO_FAULT_FAILURE_VALUE(env) enif_make_badarg(env)
+#define GUMBO_FAULT_FAILURE(env, out) 0
 #endif
 
 /* Reads the index from the file named at build time and restarts the count, so

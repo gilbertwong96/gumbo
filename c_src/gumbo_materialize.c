@@ -77,8 +77,12 @@ static ERL_NIF_TERM gumbo_materialize_attributes(ErlNifEnv* env,
     unsigned int i;
     for (i = 0; i < attributes->length; ++i) {
       GumboAttribute* attr = attributes->data[i];
-      ERL_NIF_TERM name = gumbo_node_stringz(env, atoms, attr->name);
-      ERL_NIF_TERM value = gumbo_node_stringz(env, atoms, attr->value);
+      ERL_NIF_TERM name;
+      ERL_NIF_TERM value;
+      if (!gumbo_node_stringz(env, atoms, attr->name, &name) ||
+          !gumbo_node_stringz(env, atoms, attr->value, &value)) {
+        return enif_make_badarg(env);
+      }
       if (!enif_make_map_put(env, map, name, value, &map)) {
         return enif_make_badarg(env);
       }
@@ -134,9 +138,12 @@ static ERL_NIF_TERM gumbo_materialize_node_content(ErlNifEnv* env,
       return map;
     }
     default: {
+      ERL_NIF_TERM text;
+      if (!gumbo_node_text_term(env, atoms, node, &text)) {
+        return enif_make_badarg(env);
+      }
       ERL_NIF_TERM keys[] = {atoms->node.type, atoms->node.text};
-      ERL_NIF_TERM values[] = {atoms->node_types[node->type],
-                               gumbo_node_text_term(env, atoms, node)};
+      ERL_NIF_TERM values[] = {atoms->node_types[node->type], text};
       ERL_NIF_TERM map;
       if (!enif_make_map_from_arrays(env, keys, values, 2, &map)) {
         return enif_make_badarg(env);
@@ -181,27 +188,32 @@ static ERL_NIF_TERM gumbo_materialize_node_full(ErlNifEnv* env,
       atoms->node.attributes,
       atoms->node.children,
   };
-  ERL_NIF_TERM values[GUMBO_MATERIALIZE_FULL_COUNT] = {
-      gumbo_node_type_term(env, atoms, node),
-      gumbo_node_index_within_parent_term(env, atoms, node),
-      gumbo_node_parse_flags_term(env, atoms, node),
-      gumbo_node_position_term(env, atoms, node),
-      gumbo_node_has_doctype_term(env, atoms, node),
-      gumbo_node_doctype_name_term(env, atoms, node),
-      gumbo_node_public_identifier_term(env, atoms, node),
-      gumbo_node_system_identifier_term(env, atoms, node),
-      gumbo_node_quirks_mode_term(env, atoms, node),
-      gumbo_node_tag_term(env, atoms, node),
-      gumbo_node_tag_name_term(env, atoms, node),
-      gumbo_node_namespace_term(env, atoms, node),
-      gumbo_node_original_tag_term(env, atoms, node),
-      gumbo_node_original_end_tag_term(env, atoms, node),
-      gumbo_node_end_position_term(env, atoms, node),
-      gumbo_node_text_term(env, atoms, node),
-      gumbo_node_original_text_term(env, atoms, node),
-      attributes,
-      children,
-  };
+  ERL_NIF_TERM values[GUMBO_MATERIALIZE_FULL_COUNT];
+
+  /* Each extraction is asked whether it succeeded, for the same reason the
+     detail maps are: a failed value that travels into an array is a value no
+     reader can tell from a term. */
+  if (!gumbo_node_type_term(env, atoms, node, &values[0]) ||
+      !gumbo_node_index_within_parent_term(env, atoms, node, &values[1]) ||
+      !gumbo_node_parse_flags_term(env, atoms, node, &values[2]) ||
+      !gumbo_node_position_term(env, atoms, node, &values[3]) ||
+      !gumbo_node_has_doctype_term(env, atoms, node, &values[4]) ||
+      !gumbo_node_doctype_name_term(env, atoms, node, &values[5]) ||
+      !gumbo_node_public_identifier_term(env, atoms, node, &values[6]) ||
+      !gumbo_node_system_identifier_term(env, atoms, node, &values[7]) ||
+      !gumbo_node_quirks_mode_term(env, atoms, node, &values[8]) ||
+      !gumbo_node_tag_term(env, atoms, node, &values[9]) ||
+      !gumbo_node_tag_name_term(env, atoms, node, &values[10]) ||
+      !gumbo_node_namespace_term(env, atoms, node, &values[11]) ||
+      !gumbo_node_original_tag_term(env, atoms, node, &values[12]) ||
+      !gumbo_node_original_end_tag_term(env, atoms, node, &values[13]) ||
+      !gumbo_node_end_position_term(env, atoms, node, &values[14]) ||
+      !gumbo_node_text_term(env, atoms, node, &values[15]) ||
+      !gumbo_node_original_text_term(env, atoms, node, &values[16])) {
+    return enif_make_badarg(env);
+  }
+  values[17] = attributes;
+  values[18] = children;
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values,
                                  GUMBO_MATERIALIZE_FULL_COUNT, &map)) {
