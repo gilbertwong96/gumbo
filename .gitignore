@@ -27,3 +27,6 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 gumbo-*.tar
 
+# Armed by make check-fault-paths, removed by it afterwards: a sweep that dies mid-run must not
+# leave the tree dirty.
+/priv/.gumbo-fault-at*
