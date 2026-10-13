@@ -1,5 +1,7 @@
 # Gumbo
 
+[![CI](https://github.com/gilbertwong96/gumbo/actions/workflows/ci.yml/badge.svg)](https://github.com/gilbertwong96/gumbo/actions/workflows/ci.yml)
+
 An Elixir binding to [gumbo-parser 0.14.1](https://codeberg.org/gumbo-parser/gumbo-parser/src/tag/0.14.1),
 Google's C99 HTML5 parser.
 
