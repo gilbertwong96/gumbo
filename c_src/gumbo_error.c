@@ -247,6 +247,13 @@ static int gumbo_error_parser_error_term(ErlNifEnv* env,
                                          const gumbo_atoms_t* atoms,
                                          const GumboError* error,
                                          ERL_NIF_TERM* out) {
+#ifdef GUMBO_TEST_FAULTS
+  if (gumbo_fault_should_fail()) {
+    /* A failure, on purpose: see gumbo_faults.h. */
+    return GUMBO_FAULT_FAILURE(env, out);
+  }
+#endif
+
   switch (error->type) {
     case GUMBO_ERR_PARSER:
     case GUMBO_ERR_UNACKNOWLEDGED_SELF_CLOSING_TAG:

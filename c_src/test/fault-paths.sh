@@ -53,8 +53,13 @@ build() {
 # library left in place is a library that cannot load, and it will be blamed on the next change.
 restore() {
   rm -f "$fault_file" "$fault_file.armed"
-  make clean > /dev/null 2>&1 || true
-  make > /dev/null 2>&1 || true
+
+  # A restore that fails silently would leave a fault library in the place the shipping one belongs,
+  # which is worse than a failing sweep: the next reader would have no way to know. The exit status is
+  # left alone so a failing sweep still reports itself.
+  if ! make clean > /dev/null 2>&1 || ! make > /dev/null 2>&1; then
+    echo "FAIL: could not restore the shipping library; priv/gumbo_nif.so may be a fault build" >&2
+  fi
 }
 trap restore EXIT INT TERM
 

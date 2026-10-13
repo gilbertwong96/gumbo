@@ -118,6 +118,13 @@ static int gumbo_attr_value_start_term(ErlNifEnv* env,
 static int gumbo_attr_value_end_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                      const GumboAttribute* attr,
                                      ERL_NIF_TERM* out) {
+#ifdef GUMBO_TEST_FAULTS
+  if (gumbo_fault_should_fail()) {
+    /* A failure, on purpose: see gumbo_faults.h. */
+    return GUMBO_FAULT_FAILURE(env, out);
+  }
+#endif
+
   return gumbo_attr_position_term(env, atoms, attr->value_end, out);
 }
 

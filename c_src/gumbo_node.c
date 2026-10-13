@@ -349,6 +349,13 @@ int gumbo_node_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
 
 int gumbo_node_original_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                   const GumboNode* node, ERL_NIF_TERM* out) {
+#ifdef GUMBO_TEST_FAULTS
+  if (gumbo_fault_should_fail()) {
+    /* A failure, on purpose: see gumbo_faults.h. */
+    return GUMBO_FAULT_FAILURE(env, out);
+  }
+#endif
+
   if (!gumbo_node_is_text_like(node)) {
     *out = atoms->nil;
     return 1;
