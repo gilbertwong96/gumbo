@@ -18,20 +18,20 @@
    the VM. The name comes from gumbo's own static table and is copied into a
    fresh binary in the caller's environment on every call; caching it at load
    time would return a term whose environment has died. */
-static ERL_NIF_TERM gumbo_tag_name_binary(ErlNifEnv* env, GumboTag tag) {
+static int gumbo_tag_name_binary(ErlNifEnv* env, GumboTag tag,
+                                 ERL_NIF_TERM* out) {
   const char* name = gumbo_normalized_tagname(tag);
   size_t len = strlen(name);
-  ERL_NIF_TERM out;
-  unsigned char* buf = enif_make_new_binary(env, len, &out);
+  unsigned char* buf = enif_make_new_binary(env, len, out);
   if (buf == NULL) {
-    /* Allocation failure surfaces as an ArgumentError; it is unreachable in
-       practice and this path must not create atoms. */
-    return enif_make_badarg(env);
+    /* A failure is a status, not a term: the entry point is the only place
+       that can answer it, and this path must not create atoms. */
+    return 0;
   }
   if (len > 0) {
     memcpy(buf, name, len);
   }
-  return out;
+  return 1;
 }
 
 ERL_NIF_TERM gumbo_nif_tag_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
@@ -42,7 +42,11 @@ ERL_NIF_TERM gumbo_nif_tag_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
     int i;
     for (i = 0; i < GUMBO_TAG_COUNT; ++i) {
       if (enif_is_identical(argv[0], atoms->tags[i])) {
-        return gumbo_tag_name_binary(env, (GumboTag)i);
+        ERL_NIF_TERM name;
+        if (!gumbo_tag_name_binary(env, (GumboTag)i, &name)) {
+          return enif_make_badarg(env);
+        }
+        return name;
       }
     }
     return atoms->nil; /* an atom that is not a tag */
@@ -57,7 +61,11 @@ ERL_NIF_TERM gumbo_nif_tag_name(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   if (tag < 0 || tag > GUMBO_TAG_LAST) {
     return atoms->nil;
   }
-  return gumbo_tag_name_binary(env, (GumboTag)tag);
+  ERL_NIF_TERM name;
+  if (!gumbo_tag_name_binary(env, (GumboTag)tag, &name)) {
+    return enif_make_badarg(env);
+  }
+  return name;
 }
 
 /* from_name/1: gumbo_tagn_enum is length-aware and case-insensitive, so the

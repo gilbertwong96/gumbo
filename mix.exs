@@ -58,6 +58,7 @@ defmodule Gumbo.MixProject do
         "check.c_format",
         "check.c_lint",
         "check.c_tidy",
+        "check.failure_returns",
         "check.sanitizers",
         "check.clean_build",
         "test.fault_paths"
@@ -199,6 +200,14 @@ defmodule Gumbo.MixProject do
       # the ERTS headers as system headers so that findings are attributed to our code. The
       # first run reported 125 signed-bitwise findings and every one of them was inside
       # gumbo.h, which is what that distinction is for.
+      "check.failure_returns": fn _ ->
+        {_output, status} =
+          System.cmd("make", ["check-failure-returns"], into: IO.stream(), stderr_to_stdout: true)
+
+        if status != 0 do
+          Mix.raise("check.failure_returns failed with status #{inspect(status)}")
+        end
+      end,
       "check.c_tidy": fn _ ->
         {_output, status} =
           System.cmd("make", ["check-c-tidy"], into: IO.stream(), stderr_to_stdout: true)
