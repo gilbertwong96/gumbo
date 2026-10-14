@@ -50,9 +50,10 @@ defmodule Gumbo.NativeTest do
   # Review Focus 5: a hook that could fire in a build that did not ask for it would make a real
   # allocation failure look like a test failure. This build has no GUMBO_TEST_FAULTS, so its library
   # has no arm and no hook, and the file the fault sweep writes is simply a file the parser never
-  # reads. The path is the one a fault build is compiled with, and the default when it is not.
+  # reads. The path is the platform's temporary directory rather than /tmp: Windows has no /tmp, and a
+  # test that cannot write its file says nothing about whether a hook is inert.
   test "the fault hook is inert in a build that did not ask for it" do
-    fault_file = "/tmp/gumbo-fault-at"
+    fault_file = Path.join(System.tmp_dir!(), "gumbo-fault-at")
     File.write!(fault_file, "1")
 
     on_exit(fn -> File.rm(fault_file) end)

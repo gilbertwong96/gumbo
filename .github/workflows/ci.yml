@@ -203,8 +203,6 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - uses: erlef/setup-beam@v1
         with:
@@ -223,6 +221,16 @@ jobs:
           install: >-
             make
             mingw-w64-x86_64-gcc
+
+      # .gitattributes governs this repository, not the submodule: c_src/gumbo-parser is a checkout
+      # of its own, and a Windows runner's default core.autocrlf=true hands the build CRLF sources
+      # there. The generator's terminator guard is what caught it — it refused to generate a patch
+      # and named gumbo.h — which is the guard doing its job and the checkout being wrong.
+      - name: Check the vendored parser out as LF
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+          git submodule update --init --recursive --force
 
       - run: mix deps.get --check-locked
       - run: mix test

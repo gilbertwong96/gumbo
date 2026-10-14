@@ -23,6 +23,12 @@
 
 #ifdef GUMBO_FAULT_FILE_PATH_RAW
 #define GUMBO_FAULT_FILE_PATH GUMBO_FAULT_STRINGIZE(GUMBO_FAULT_FILE_PATH_RAW)
+#elif defined(_WIN32)
+/* A fallback, not the path that matters: the sweep compiles a fault build with
+   its own path injected above, so the library and the harness agree by
+   construction. This is what a fault build compiled by hand gets, and Windows
+   has no /tmp to name — the tests write to System.tmp_dir!/0 instead. */
+#define GUMBO_FAULT_FILE_PATH "gumbo-fault-at"
 #else
 #define GUMBO_FAULT_FILE_PATH "/tmp/gumbo-fault-at"
 #endif
