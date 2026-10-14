@@ -60,25 +60,35 @@ defmodule Gumbo.SchedulerTest do
     # way), dirty-path gaps stay <= 0.2 ms — so a 10 ms bound fails without
     # the dirty dispatch and passes with it. The brief's 50 ms bound never
     # fails here: forced normal peaked at 41 ms in the brief's shape.
-    ticker =
-      Task.async(fn ->
-        parsers =
-          for _ <- 1..(System.schedulers_online() * 2) do
-            Task.async(fn -> for _ <- 1..2, do: Gumbo.parse(html) end)
-          end
+    # Three storms, and the smallest max-gap is the result. A shared runner is not this machine: the
+    # first release rehearsal measured 11.9 ms on an Intel macOS runner — above the bound, and far
+    # below the 28-50 ms a missing dirty dispatch produces — so one sample of this measurement can be
+    # about the runner rather than about the dispatch. The minimum cannot be: a build without the
+    # dirty path is over the bound on every pass, which is the same 9-of-10 caveat the numbers above
+    # were measured with.
+    storm = fn ->
+      ticker =
+        Task.async(fn ->
+          parsers =
+            for _ <- 1..(System.schedulers_online() * 2) do
+              Task.async(fn -> for _ <- 1..2, do: Gumbo.parse(html) end)
+            end
 
-        gaps =
-          Enum.map(1..2000, fn _ ->
-            t0 = System.monotonic_time(:microsecond)
-            :erlang.yield()
-            System.monotonic_time(:microsecond) - t0
-          end)
+          gaps =
+            Enum.map(1..2000, fn _ ->
+              t0 = System.monotonic_time(:microsecond)
+              :erlang.yield()
+              System.monotonic_time(:microsecond) - t0
+            end)
 
-        Enum.each(parsers, &Task.await/1)
-        Enum.max(gaps)
-      end)
+          Enum.each(parsers, &Task.await/1)
+          Enum.max(gaps)
+        end)
 
-    assert Task.await(ticker) < 10_000
+      Task.await(ticker)
+    end
+
+    assert Enum.min(Enum.map(1..3, fn _ -> storm.() end)) < 10_000
   end
 
   # Deliberately no test for the no-dirty-schedulers fallback in run/4: the
