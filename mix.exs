@@ -45,7 +45,10 @@ defmodule Gumbo.MixProject do
           # containing the other. `true` means "my entries win, yours fill the rest".
           {:unix, :darwin} => %{include_default_ones: true},
           {:unix, :linux} => %{include_default_ones: true},
-          {:win32, :nt} => %{include_default_ones: true, "x86_64-windows-msvc" => {"gcc", "g++"}}
+          {:win32, :nt} => %{
+            "x86_64-windows-msvc" => {"gcc", "g++"},
+            include_default_ones: true
+          }
         }
       ],
       aliases: aliases(),
