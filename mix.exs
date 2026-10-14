@@ -39,16 +39,19 @@ defmodule Gumbo.MixProject do
       # environment that job builds in — that is how the first release rehearsal failed.
       cc_precompiler: [
         compilers: %{
-          # Merge into cc_precompiler's own tables rather than replacing them. The darwin entries
-          # carry the -arch flags its two targets need, so a map that only names Windows silently
-          # leaves clang building for the host and produces an archive named for one architecture
-          # containing the other. `true` means "my entries win, yours fill the rest".
+          # darwin and linux only *add* the flag: those tables are cc_precompiler's own, and it is the
+          # darwin entries that carry the -arch flags both its targets need. A map that names only
+          # Windows leaves them out, and clang then builds for the host — an archive named for one
+          # architecture containing the other.
+          #
+          # Windows is a replacement with no flag, and that asymmetry is deliberate: on a collision
+          # `include_default_ones` keeps the *defaults* — its callback returns the second argument,
+          # whatever that parameter is named — so asking for it here would throw this override away
+          # and hand the driver `cl`, which the MSYS2 job does not have. That is how the first tagged
+          # run failed, after the rehearsal before it had passed.
           {:unix, :darwin} => %{include_default_ones: true},
           {:unix, :linux} => %{include_default_ones: true},
-          {:win32, :nt} => %{
-            "x86_64-windows-msvc" => {"gcc", "g++"},
-            include_default_ones: true
-          }
+          {:win32, :nt} => %{"x86_64-windows-msvc" => {"gcc", "g++"}}
         }
       ],
       aliases: aliases(),
