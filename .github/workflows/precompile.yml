@@ -218,11 +218,19 @@ jobs:
       - run: mix deps.get --check-locked
       - run: mix hex.build
       - name: The tarball has the pinned parser and builds without the submodule
+        # A Hex package is a tar of metadata plus contents.tar.gz, so this unpacks twice. The first
+        # version stopped at the outer layer — where nothing is named gumbo-*.tar.gz at all — and
+        # read as a packaging failure when it was this check that was wrong. Run verbatim below, in
+        # the order a consumer without a matching archive would: take the package's own sources and
+        # build the NIF from them, with no submodule in sight.
         run: |
           set -euo pipefail
-          tar -tzf gumbo-*.tar.gz | grep -q 'c_src/gumbo-parser/src/parser.c'
-          tar -tzf gumbo-*.tar.gz | grep -q 'checksum.exs'
-          mkdir -p unpacked && tar -xzf gumbo-*.tar.gz -C unpacked
+          mkdir -p outer unpacked
+          tar -xf gumbo-*.tar -C outer
+          tar -xzf outer/contents.tar.gz -C unpacked
+          test -f unpacked/c_src/gumbo-parser/src/parser.c
+          test -f unpacked/checksum.exs
+          test -d unpacked/c_src/patches
           cd unpacked
           make
           test -f priv/gumbo_nif.so
