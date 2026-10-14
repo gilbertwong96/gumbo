@@ -41,25 +41,19 @@ PRIV_DIR := priv
 # elixir_make archives the precompiled NIF out of the app priv — $(MIX_APP_PATH)/priv — while this
 # Makefile builds into the source priv, which is where every check-* target, the fault-paths harness
 # and the tests expect to find it. So the library is built in the source tree and copied into the app
-# priv when Mix is driving the build, which is the only thing the archive step needs. The copy is
-# best effort on purpose, and two details of it are load-bearing — the first attempt at this got
-# them wrong in a way that passed locally and segfaulted CI:
+# priv, which is the only thing the archive step needs.
 #
-#   * Mix symlinks priv into _build — "mix links its build's priv to this one", as c_src/test/fault-paths.sh
-#     puts it — so in :dev and :test the two paths are one file. `-ef` asks exactly that question, and
-#     the copy is skipped for a reason: `cp` truncates its destination, and truncating the file a live
-#     VM has mapped is corruption wearing a copy's clothes.
-#   * Where they really are different files — :prod, where archiving happens — the library lands
-#     through a temporary name and a rename. A rename leaves the old inode alone; a truncate rewrites
-#     it, and a VM still holding the old library would die on the pages it had already read.
+# The copy happens only in the pass that `elixir_make.precompile` runs, and that is not a detail of
+# style. Doing it on every build — which is what the first version of this did — made `mix ci`
+# segfault on Linux at VM shutdown, reproducibly, while passing on macOS: `mix ci` invokes make
+# several times inside one VM, and each of those invocations rewrote a file a live VM had mapped.
+# Gating it on CC_PRECOMPILER_CURRENT_TARGET — which cc_precompiler sets for the precompile pass and
+# for nothing else — takes it out of every ordinary build's path, so `mix ci`, the check-* targets
+# and a developer's `mix compile` never touch the app priv at all. A scratch branch and two bisect
+# runs are how that was pinned down, after the precompiler's own configuration had been ruled out.
 #
-# A copy that cannot happen hides nothing either: the archive step fails loudly on its own when the
-# library is missing.
-#
-# Pointing the build itself at the app priv looks tidier and is wrong: c_src/test/fault-paths.sh
-# proves a failure path by swapping the library a live VM has already mapped, and rewriting a mapped
-# file in place is a SIGSEGV — which is exactly how the first attempt at this failed in CI while
-# passing locally.
+# The copy is best effort on purpose: the archive step fails loudly on its own when the library is
+# missing, so nothing is hidden here.
 APP_PRIV_DIR := $(if $(MIX_APP_PATH),$(MIX_APP_PATH)/priv,$(PRIV_DIR))
 # elixir_make.precompile builds one target after another in this same source tree, so the C objects
 # and the patched-source copy have to be told apart by target. Without this, the aarch64 pass would
@@ -180,12 +174,10 @@ $(OBJ_DIR)/%.o: c_src/%.c
 $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
 	@mkdir -p $(PRIV_DIR)
 	$(CC) $(LDSHARED_FLAGS) -pthread -o $@ $(OBJS)
-	@if [ -n "$(MIX_APP_PATH)" ]; then \
-		dest="$(APP_PRIV_DIR)/$(notdir $@)"; \
-		if [ ! "$$dest" -ef "$@" ] 2>/dev/null; then \
-			mkdir -p "$(APP_PRIV_DIR)" 2>/dev/null; \
-			cp -f "$@" "$$dest.tmp" 2>/dev/null && mv -f "$$dest.tmp" "$$dest" 2>/dev/null || true; \
-		fi; \
+	@if [ -n "$(CC_PRECOMPILER_CURRENT_TARGET)" ]; then \
+		mkdir -p "$(APP_PRIV_DIR)" 2>/dev/null; \
+		cp -f "$@" "$(APP_PRIV_DIR)/.$(notdir $@).tmp" 2>/dev/null && \
+			mv -f "$(APP_PRIV_DIR)/.$(notdir $@).tmp" "$(APP_PRIV_DIR)/$(notdir $@)" 2>/dev/null || true; \
 	fi
 
 # Teardown-contract probe, in two modes, and both are hard gates now that the walk
