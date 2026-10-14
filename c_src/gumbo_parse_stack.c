@@ -55,7 +55,16 @@
 #include "gumbo_parse_stack.h"
 
 #include <pthread.h>
+#if defined(_WIN32)
+/* mingw has pthreads through winpthreads, but no unistd.h and no sysconf: the
+   page size comes from the same place the thread API does, and round_up_to_page
+   asks for it below. GetCurrentThreadStackLimits needs Windows 8, so the floor
+   is named before windows.h is read. */
+#define _WIN32_WINNT 0x0602
+#include <windows.h>
+#else
 #include <unistd.h> /* sysconf(_SC_PAGESIZE) */
+#endif
 
 #include "gumbo_faults.h"
 
@@ -117,8 +126,14 @@ static size_t required_stack(size_t length) {
    by accident: unaligned here means the thread is refused and the parse fails.
    Ask the platform for the boundary instead of naming a number. */
 static size_t round_up_to_page(size_t size) {
+#if defined(_WIN32)
+  SYSTEM_INFO info;
+  GetSystemInfo(&info);
+  size_t boundary = info.dwPageSize ? (size_t)info.dwPageSize : 4096u;
+#else
   long page = sysconf(_SC_PAGESIZE);
   size_t boundary = (page > 0) ? (size_t)page : 4096u;
+#endif
   return (size + boundary - 1) / boundary * boundary;
 }
 
@@ -164,6 +179,18 @@ static size_t stack_remaining(void) {
     return 0;
   }
   return (size_t)(sp - (const char*)low);
+#elif defined(_WIN32)
+  /* The Windows answer to the same question the branches above ask. Without it
+     this returns 0, 0 means unknown, and unknown sends every parse in the
+     process down the thread path — a fallback that is correct and would have
+     quietly become the only path this platform ever took. */
+  ULONG_PTR low = 0;
+  ULONG_PTR high = 0;
+  GetCurrentThreadStackLimits(&low, &high);
+  if (low == 0 || high == 0 || (ULONG_PTR)sp < low || (ULONG_PTR)sp >= high) {
+    return 0;
+  }
+  return (size_t)((ULONG_PTR)sp - low);
 #else
   (void)sp;
   return 0;
