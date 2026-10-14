@@ -120,6 +120,9 @@ jobs:
         with:
           msystem: MINGW64
           update: false
+          # MSYS2's profile rebuilds PATH from its mount table and drops the Windows PATH setup-beam
+          # put Elixir on — without this the shell reports `mix: command not found`.
+          path-type: inherit
           install: >-
             make
             mingw-w64-x86_64-gcc

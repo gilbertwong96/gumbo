@@ -42,10 +42,19 @@ PRIV_DIR := priv
 # Makefile builds into the source priv, which is where every check-* target, the fault-paths harness
 # and the tests expect to find it. So the library is built in the source tree and copied into the app
 # priv when Mix is driving the build, which is the only thing the archive step needs. The copy is
-# best effort on purpose: in :dev and :test Mix symlinks priv into _build, so the two paths are the
-# same file and `cp` says so — and in :prod, which is where archiving happens, it is a real directory
-# and the copy is what puts the library where the archive looks for it. The archive step fails loudly
-# on its own if the library is not there, so nothing is hidden by tolerating cp's complaint here.
+# best effort on purpose, and two details of it are load-bearing — the first attempt at this got
+# them wrong in a way that passed locally and segfaulted CI:
+#
+#   * Mix symlinks priv into _build — "mix links its build's priv to this one", as c_src/test/fault-paths.sh
+#     puts it — so in :dev and :test the two paths are one file. `-ef` asks exactly that question, and
+#     the copy is skipped for a reason: `cp` truncates its destination, and truncating the file a live
+#     VM has mapped is corruption wearing a copy's clothes.
+#   * Where they really are different files — :prod, where archiving happens — the library lands
+#     through a temporary name and a rename. A rename leaves the old inode alone; a truncate rewrites
+#     it, and a VM still holding the old library would die on the pages it had already read.
+#
+# A copy that cannot happen hides nothing either: the archive step fails loudly on its own when the
+# library is missing.
 #
 # Pointing the build itself at the app priv looks tidier and is wrong: c_src/test/fault-paths.sh
 # proves a failure path by swapping the library a live VM has already mapped, and rewriting a mapped
@@ -171,7 +180,13 @@ $(OBJ_DIR)/%.o: c_src/%.c
 $(NIF_SO): $(OBJS) c_src/gumbo_nif.c
 	@mkdir -p $(PRIV_DIR)
 	$(CC) $(LDSHARED_FLAGS) -pthread -o $@ $(OBJS)
-	@if [ -n "$(MIX_APP_PATH)" ]; then mkdir -p "$(APP_PRIV_DIR)" 2>/dev/null; cp -f "$@" "$(APP_PRIV_DIR)/" 2>/dev/null || true; fi
+	@if [ -n "$(MIX_APP_PATH)" ]; then \
+		dest="$(APP_PRIV_DIR)/$(notdir $@)"; \
+		if [ ! "$$dest" -ef "$@" ] 2>/dev/null; then \
+			mkdir -p "$(APP_PRIV_DIR)" 2>/dev/null; \
+			cp -f "$@" "$$dest.tmp" 2>/dev/null && mv -f "$$dest.tmp" "$$dest" 2>/dev/null || true; \
+		fi; \
+	fi
 
 # Teardown-contract probe, in two modes, and both are hard gates now that the walk
 # it exercises is our patch rather than upstream's code.
