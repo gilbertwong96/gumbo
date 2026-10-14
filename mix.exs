@@ -31,6 +31,17 @@ defmodule Gumbo.MixProject do
       # `make_force_build`, not `force_build` — elixir_make reads the former, and the latter is
       # silently ignored, which is how a build can end up doing neither: no download, no compile.
       make_force_build: Mix.env() != :prod,
+      # The Windows target key is what a consumer's elixir_make matches against what their OTP
+      # reports, and the official Windows Erlang builds are MSVC — so the key says msvc. The
+      # toolchain here is mingw, because this project's C needs pthreads and MSVC has none; an
+      # MSVC-built VM loads a mingw-built DLL, which the Windows job in ci.yml proves on every push.
+      # Without this override cc_precompiler hands the driver `cl`, which does not exist in the MSYS2
+      # environment that job builds in — that is how the first release rehearsal failed.
+      cc_precompiler: [
+        compilers: %{
+          {:win32, :nt} => %{"x86_64-windows-msvc" => {"gcc", "g++"}}
+        }
+      ],
       aliases: aliases(),
       deps: deps(),
       dialyzer: dialyzer(),

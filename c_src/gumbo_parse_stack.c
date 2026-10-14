@@ -52,15 +52,23 @@
 // NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #define _GNU_SOURCE 1
 
+#if defined(_WIN32)
+/* Before every include on purpose: mingw's headers define _WIN32_WINNT
+   themselves behind an #ifndef, so naming the floor first is what makes it the
+   value that survives — and it has to be Windows 8 or
+   GetCurrentThreadStackLimits is not declared. Defining it later, as this first
+   did, is a redefinition warning and leaves the floor to whatever pthread.h
+   chose. */
+#define _WIN32_WINNT 0x0602
+#endif
+
 #include "gumbo_parse_stack.h"
 
 #include <pthread.h>
 #if defined(_WIN32)
 /* mingw has pthreads through winpthreads, but no unistd.h and no sysconf: the
    page size comes from the same place the thread API does, and round_up_to_page
-   asks for it below. GetCurrentThreadStackLimits needs Windows 8, so the floor
-   is named before windows.h is read. */
-#define _WIN32_WINNT 0x0602
+   asks for it below. */
 #include <windows.h>
 #else
 #include <unistd.h> /* sysconf(_SC_PAGESIZE) */
