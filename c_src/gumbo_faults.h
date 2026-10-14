@@ -17,21 +17,21 @@
 /* The path is compiled in unquoted and stringified here, so that no shell has
    to keep a pair of quotes alive across three layers: that is how a fault build
    once failed to compile in silence while a sweep reported that it had found
-   nothing. A fault build can only read the file its own build named. */
+   nothing. A fault build can only read the file its own build named, so being
+   told the path is not optional — without it this refuses to build, which is
+   the only way a fault build can be wrong loudly instead of reading a path
+   nobody wrote. There is deliberately no fallback: an earlier version defaulted
+   to /tmp, which is a POSIX path in a header that has no business naming one
+   and had to be taught about Windows for it. */
 #define GUMBO_FAULT_STRINGIZE_(x) #x
 #define GUMBO_FAULT_STRINGIZE(x) GUMBO_FAULT_STRINGIZE_(x)
 
-#ifdef GUMBO_FAULT_FILE_PATH_RAW
-#define GUMBO_FAULT_FILE_PATH GUMBO_FAULT_STRINGIZE(GUMBO_FAULT_FILE_PATH_RAW)
-#elif defined(_WIN32)
-/* A fallback, not the path that matters: the sweep compiles a fault build with
-   its own path injected above, so the library and the harness agree by
-   construction. This is what a fault build compiled by hand gets, and Windows
-   has no /tmp to name — the tests write to System.tmp_dir!/0 instead. */
-#define GUMBO_FAULT_FILE_PATH "gumbo-fault-at"
-#else
-#define GUMBO_FAULT_FILE_PATH "/tmp/gumbo-fault-at"
+#ifndef GUMBO_FAULT_FILE_PATH_RAW
+#error \
+    "a fault build must be told where its index file is: -DGUMBO_FAULT_FILE_PATH_RAW=<path>"
 #endif
+
+#define GUMBO_FAULT_FILE_PATH GUMBO_FAULT_STRINGIZE(GUMBO_FAULT_FILE_PATH_RAW)
 
 /* What a failed extraction answers, in the convention every extractor now uses:
    a 0 the caller must turn into a badarg. In the canary build it answers 1
