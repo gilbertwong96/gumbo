@@ -83,22 +83,23 @@ CFLAGS ?= -O2
 ALL_CFLAGS := $(CFLAGS) -std=c99 -fPIC -pthread -Wall -Wextra -MMD -MP \
 	-Ic_src -I$(GUMBO_SRC_DIR)/src -I$(ERTS_INCLUDE_DIR)
 
-# The vendored sources are third-party code patched in a copy rather than fixed in place, so
-# their warnings are not ours to remove. What is silenced is named one at a time, and only for
-# the vendored objects: -Wunused-parameter and -Wsign-compare are tripped throughout, while
-# -Wtype-limits and -Wold-style-declaration are gcc's under -Wextra where clang stays quiet, so
-# a Linux runner was reporting the vendored vector.c and utf8.c on every build. Our own
-# c_src/*.c keeps the full $(ALL_CFLAGS) set: do not replace this list with a wider switch, or
-# a warning in our code stops standing out.
+# The vendored sources are third-party code, pinned byte for byte to the upstream tag and patched in
+# a copy rather than fixed in place: their warnings are not ours to remove, and not ours to read
+# either. What they get is -w, and only they get it — the compiles below hand the vendored objects
+# this variable while our own c_src/*.c keeps the full $(ALL_CFLAGS) set, which is the property that
+# matters: a warning in our code still stands out.
 #
-# The last of the four belongs to gcc alone, and clang answers a flag it does not know with
-# "unknown warning option" on every compile — which is why it is asked for rather than assumed:
-# the configured compiler is handed the flag together with -Werror, and it is kept only if the
-# compiler does not complain about it. The Linux test jobs compile with gcc; everything else
-# compiles with clang.
-OLD_STYLE_QUIET := $(shell echo 'int gumbo_probe;' | $(CC) -Wno-old-style-declaration -Werror -x c -c - -o /dev/null 2>/dev/null && echo -Wno-old-style-declaration)
-GUMBO_CFLAGS := $(ALL_CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-type-limits \
-	$(OLD_STYLE_QUIET)
+# This replaces a list of named suppressions (-Wno-unused-parameter, -Wno-sign-compare,
+# -Wno-type-limits, -Wno-old-style-declaration) and a seven-line probe that asked the compiler whether
+# it knew the gcc-only one. The list only ever grew, one compiler release at a time, about code nobody
+# here can edit; the probe existed so clang would not be handed a flag it rejects. -w ends both, and
+# if a future compiler finds something real in the vendored parser, the parity and sanitizer gates
+# are where its behaviour is judged anyway.
+#
+# The two harness builds below compile c_src/test/parity_dump.c in the same command as vendored
+# sources, so they get -w too — and lose nothing by it: the same file is compiled with the full set by
+# $(PARITY_DUMP_BUILD), so its warnings are reported on every run of check-parity regardless.
+GUMBO_CFLAGS := $(ALL_CFLAGS) -w
 
 UNAME_S := $(shell uname -s)
 # MINGW and MSYS both mean a Windows toolchain under a POSIX shell — the shape a Windows runner and
