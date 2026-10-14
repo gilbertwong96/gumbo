@@ -1,0 +1,14 @@
+# Line endings are a repository decision, not a per-clone accident.
+#
+# This project's artifacts are compared and committed byte for byte: c_src/patches/gumbo-parser
+# holds the patch series whose content the generator reproduces exactly, the .exs files beside them
+# are read back as text, and the checksum file the precompiled archives are verified against is
+# computed over those bytes. On a machine whose git converts line endings on checkout — GitHub's
+# Windows runners do, and so does a default Windows install — every one of those files arrives as
+# CRLF, the generator produces a patch that differs from the committed one by one byte per line, and
+# the test suite fails somewhere far away from the cause. That is how this file came to be written:
+# the Windows job found it.
+#
+# So: everything is LF, in the repository and in the working tree, on every platform. `text=auto`
+# keeps git's own detection for files that are not text at all.
+* text=auto eol=lf
