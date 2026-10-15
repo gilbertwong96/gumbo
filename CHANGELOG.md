@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through `Gumbo.Node.target/1` and `Gumbo.Node.data/1`. `text` still carries the one string the
   C library stores.
 
+### Changed
+
+- `</p>` inside a `<select>` closes the empty `p` the parser inserts there, not the `p` around the
+  `select`, so the text after it stays where it was written. This follows the spec, which removed
+  the "in select" insertion mode and lists `select` among the types that bound a scope query
+  (whatwg/html#10548); a `<source>` inside a `<select>` was already kept, which that change makes
+  correct rather than a divergence.
+
 ## [0.2.0] - 2026-10-15
 
 ### Changed

@@ -407,7 +407,7 @@ defmodule Gumbo.MixProject do
       main: "readme",
       source_url: "https://github.com/gilbertwong96/gumbo",
       # Every page's "View Source" link points at the sources this version was built from,
-      # which for this library means the six patches as released, not as main has them now.
+      # which for this library means the seven patches as released, not as main has them now.
       source_ref: "v#{@version}",
       extras: ["README.md", "CHANGELOG.md"]
     ]
