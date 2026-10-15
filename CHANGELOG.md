@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.2.0] - 2026-10-15
+
+### Changed
+
+- `detail: :content` carries `:tag_name` for the elements whose tag cannot name them: a custom
+  element (`<my-tag>`) and an SVG tag gumbo's enum does not carry (`clipPath`) both arrive as
+  `tag: :unknown`, and the name as written now survives in that shape too. Every other element is
+  still named by its atom — which is that same name — and still carries no `:tag_name`.
+- The published documentation opens on the README, and every "View Source" link points at the
+  sources of the version being read.
+
 ## [0.1.0] - 2026-10-14
 
 First release. `gumbo` is a faithful binding to the C library of the same name, and the surface is
@@ -210,5 +223,6 @@ properties that matter — the allocator balance is exactly zero, and a 20 000-l
 tree survives a 320 KB stack — and `make check-clean-build` builds from an empty
 object directory, which is what a fresh clone or a hex consumer does.
 
-[Unreleased]: https://github.com/gilbertwong96/gumbo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/gilbertwong96/gumbo/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gilbertwong96/gumbo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gilbertwong96/gumbo/releases/tag/v0.1.0

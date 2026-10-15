@@ -24,7 +24,7 @@ Add `gumbo` to your `mix.exs` dependencies:
 ```elixir
 def deps do
   [
-    {:gumbo, "~> 0.1.0"}
+    {:gumbo, "~> 0.2.0"}
   ]
 end
 ```
