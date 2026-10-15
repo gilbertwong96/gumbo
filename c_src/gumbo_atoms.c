@@ -411,6 +411,8 @@ int gumbo_atoms_init(ErlNifEnv* env, gumbo_atoms_t* atoms) {
   atoms->node.end_position = enif_make_atom(env, "end_position");
   atoms->node.text = enif_make_atom(env, "text");
   atoms->node.original_text = enif_make_atom(env, "original_text");
+  atoms->node.target = enif_make_atom(env, "target");
+  atoms->node.data = enif_make_atom(env, "data");
   /* Materialize's renames of :position and :doctype_name, plus the two keys
      only the materialized maps carry. The values are still the shared
      extractors' output, so the renames change names, never data. */

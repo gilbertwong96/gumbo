@@ -88,6 +88,10 @@ int gumbo_node_end_position_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                  const GumboNode* node, ERL_NIF_TERM* out);
 int gumbo_node_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                          const GumboNode* node, ERL_NIF_TERM* out);
+int gumbo_node_pi_target_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                              const GumboNode* node, ERL_NIF_TERM* out);
+int gumbo_node_pi_data_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                            const GumboNode* node, ERL_NIF_TERM* out);
 int gumbo_node_original_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                   const GumboNode* node, ERL_NIF_TERM* out);
 

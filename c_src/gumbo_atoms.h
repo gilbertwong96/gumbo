@@ -110,6 +110,10 @@ typedef struct {
     ERL_NIF_TERM end_position;
     ERL_NIF_TERM text;
     ERL_NIF_TERM original_text;
+    /* The processing instruction's two halves, which gumbo keeps in one
+       string: see gumbo_node_pi_halves. */
+    ERL_NIF_TERM target;
+    ERL_NIF_TERM data;
     ERL_NIF_TERM start_position;
     ERL_NIF_TERM name;
     ERL_NIF_TERM attributes;

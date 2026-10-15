@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A processing instruction carries `target` and `data` — the two parts the spec gives that
+  payload, and the pair a browser reports — in both the `:full` and `:content` shapes and
+  through `Gumbo.Node.target/1` and `Gumbo.Node.data/1`. `text` still carries the one string the
+  C library stores.
+
 ## [0.2.0] - 2026-10-15
 
 ### Changed

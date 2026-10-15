@@ -11,7 +11,7 @@ defmodule Gumbo.NodeTest do
 
   defp descendants(output), do: output |> Output.root() |> Node.descendants()
 
-  @details_keys ~w(type index_within_parent parse_flags position has_doctype doctype_name public_identifier system_identifier quirks_mode tag tag_name namespace original_tag original_end_tag end_position text original_text)a
+  @details_keys ~w(type index_within_parent parse_flags position has_doctype doctype_name public_identifier system_identifier quirks_mode tag tag_name namespace original_tag original_end_tag end_position text original_text target data)a
 
   test "an out-of-range index is an error, never a dereference" do
     {:ok, output} = Gumbo.parse("<p>x</p>")

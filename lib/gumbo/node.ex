@@ -441,6 +441,40 @@ defmodule Gumbo.Node do
   def original_text(%__MODULE__{} = node), do: fetch!(node, :original_text)
 
   @doc """
+  A processing instruction's target; `nil` off processing instructions.
+
+  The spec names a processing instruction's payload in two parts, and a
+  browser reports them apart: `<?pi?>` has the target `"pi"` and the data
+  `""`. The C library keeps them in one string, which is what `text/1`
+  returns.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse_fragment("<?pi x?>", :body)
+      iex> [pi] = Gumbo.Output.fragment_nodes(output)
+      iex> Gumbo.Node.target(pi)
+      "pi"
+  """
+  @spec target(t()) :: binary() | nil
+  def target(%__MODULE__{} = node), do: fetch!(node, :target)
+
+  @doc """
+  A processing instruction's data; `nil` off processing instructions.
+
+  The data is everything after the target, with its own spacing intact —
+  `<?php echo 1; ?>` has the data `"echo 1; "`.
+
+  ## Examples
+
+      iex> {:ok, output} = Gumbo.parse_fragment("<?php echo 1; ?>", :body)
+      iex> [pi] = Gumbo.Output.fragment_nodes(output)
+      iex> Gumbo.Node.data(pi)
+      "echo 1; "
+  """
+  @spec data(t()) :: binary() | nil
+  def data(%__MODULE__{} = node), do: fetch!(node, :data)
+
+  @doc """
   Every field at once, in one NIF crossing.
 
   The map keys are the accessor names above, with `nil` for fields the node
