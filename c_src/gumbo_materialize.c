@@ -108,8 +108,10 @@ static int gumbo_materialize_attributes(ErlNifEnv* env,
 
 /* The :content shape: a usable tree with no source bookkeeping. Elements
    and templates carry %{type, tag, namespace, attributes, children},
-   text-like nodes %{type, text}, and the document node %{type, children} —
-   it owns the walk's entry points and nothing else. */
+   text-like nodes %{type, text}, a processing instruction %{type, text,
+   target, data} — the spec names that payload in two parts — and the
+   document node %{type, children}: it owns the walk's entry points and
+   nothing else. */
 static int gumbo_materialize_node_content(ErlNifEnv* env,
                                           const gumbo_atoms_t* atoms,
                                           GumboNode* node,
@@ -162,6 +164,24 @@ static int gumbo_materialize_node_content(ErlNifEnv* env,
       *out = map;
       return 1;
     }
+    case GUMBO_NODE_PROCESSING_INSTRUCTION: {
+      ERL_NIF_TERM text, target, data;
+      if (!gumbo_node_text_term(env, atoms, node, &text) ||
+          !gumbo_node_pi_target_term(env, atoms, node, &target) ||
+          !gumbo_node_pi_data_term(env, atoms, node, &data)) {
+        return 0;
+      }
+      ERL_NIF_TERM keys[] = {atoms->node.type, atoms->node.text,
+                             atoms->node.target, atoms->node.data};
+      ERL_NIF_TERM values[] = {atoms->node_types[node->type], text, target,
+                               data};
+      ERL_NIF_TERM map;
+      if (!enif_make_map_from_arrays(env, keys, values, 4, &map)) {
+        return 0;
+      }
+      *out = map;
+      return 1;
+    }
     default: {
       ERL_NIF_TERM text;
       if (!gumbo_node_text_term(env, atoms, node, &text)) {
@@ -181,7 +201,7 @@ static int gumbo_materialize_node_content(ErlNifEnv* env,
   return 0; /* unreachable: every node type is one of the cases above */
 }
 
-#define GUMBO_MATERIALIZE_FULL_COUNT 19
+#define GUMBO_MATERIALIZE_FULL_COUNT 21
 
 /* The :full shape: every gumbo field, with nil where the node type carries
    none — the extractors answer nil off their types, exactly as the lazy
@@ -218,6 +238,8 @@ static int gumbo_materialize_node_full(ErlNifEnv* env,
       atoms->node.end_position,
       atoms->node.text,
       atoms->node.original_text,
+      atoms->node.target,
+      atoms->node.data,
       atoms->node.attributes,
       atoms->node.children,
   };
@@ -242,11 +264,13 @@ static int gumbo_materialize_node_full(ErlNifEnv* env,
       !gumbo_node_original_end_tag_term(env, atoms, node, &values[13]) ||
       !gumbo_node_end_position_term(env, atoms, node, &values[14]) ||
       !gumbo_node_text_term(env, atoms, node, &values[15]) ||
-      !gumbo_node_original_text_term(env, atoms, node, &values[16])) {
+      !gumbo_node_original_text_term(env, atoms, node, &values[16]) ||
+      !gumbo_node_pi_target_term(env, atoms, node, &values[17]) ||
+      !gumbo_node_pi_data_term(env, atoms, node, &values[18])) {
     return 0;
   }
-  values[17] = attributes;
-  values[18] = children;
+  values[19] = attributes;
+  values[20] = children;
   ERL_NIF_TERM map;
   if (!enif_make_map_from_arrays(env, keys, values,
                                  GUMBO_MATERIALIZE_FULL_COUNT, &map)) {

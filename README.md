@@ -212,6 +212,17 @@ prefix, lowercase ASCII, keep underscores.
 | `GUMBO_NODE_TEMPLATE` | `:template` |
 | `GUMBO_NODE_PROCESSING_INSTRUCTION` | `:processing_instruction` |
 
+A `<?…?>` run is a processing instruction on the current spec, which
+[whatwg/html#12118](https://github.com/whatwg/html/pull/12118) added and
+0.14.0 implements: `<?pi?>` and `<?php echo 1; ?>` carry
+`:processing_instruction`, whose `target` and `data` are the spec's two parts
+(`"pi"` with `""`, `"php"` with `"echo 1; "`), while `text` keeps the pair
+in the one string the C library stores. A target the spec disallows or cannot
+read — `<?xml …?>`, `<?1?>` — is a `:comment` whose text is the whole run,
+question mark included, and an unterminated `<?…` produces no node at all.
+Browsers do not render a processing instruction, so a renderer that drops
+comments must drop these too rather than write their text out.
+
 **Namespaces** (`t:Gumbo.Types.namespace/0`): `GUMBO_NAMESPACE_HTML` → `:html`,
 `GUMBO_NAMESPACE_SVG` → `:svg`, `GUMBO_NAMESPACE_MATHML` → `:mathml`.
 

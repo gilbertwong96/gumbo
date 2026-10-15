@@ -354,6 +354,63 @@ int gumbo_node_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
   return gumbo_node_stringz(env, atoms, node->v.text.text, out);
 }
 
+/* gumbo keeps a processing instruction's target and data in one string,
+   "target<space>data": the parser writes a single space between the two,
+   whatever whitespace the source had there, and leaves the data's own
+   spacing alone. The split is therefore the first space — `<?pi?>` is
+   ("pi", ""), `<?php echo 1; ?>` is ("php", "echo 1; ") — which is the pair
+   a browser reports for the spec's processing instruction. */
+static int gumbo_node_pi_halves(const GumboNode* node, const char** target,
+                                size_t* target_len, const char** data,
+                                size_t* data_len) {
+  if (node->type != GUMBO_NODE_PROCESSING_INSTRUCTION) {
+    return 0;
+  }
+  const char* text = node->v.text.text;
+  size_t len = strlen(text);
+  const char* space = memchr(text, ' ', len);
+  if (space == NULL) {
+    /* A parse always writes the separator; answering the whole string as the
+       target is the honest reading of one that did not. */
+    *target = text;
+    *target_len = len;
+    *data = text + len;
+    *data_len = 0;
+    return 1;
+  }
+  *target = text;
+  *target_len = (size_t)(space - text);
+  *data = space + 1;
+  *data_len = len - *target_len - 1;
+  return 1;
+}
+
+int gumbo_node_pi_target_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                              const GumboNode* node, ERL_NIF_TERM* out) {
+  const char* target;
+  const char* data;
+  size_t target_len;
+  size_t data_len;
+  if (!gumbo_node_pi_halves(node, &target, &target_len, &data, &data_len)) {
+    *out = atoms->nil;
+    return 1;
+  }
+  return gumbo_make_binary(env, target, target_len, out);
+}
+
+int gumbo_node_pi_data_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
+                            const GumboNode* node, ERL_NIF_TERM* out) {
+  const char* target;
+  const char* data;
+  size_t target_len;
+  size_t data_len;
+  if (!gumbo_node_pi_halves(node, &target, &target_len, &data, &data_len)) {
+    *out = atoms->nil;
+    return 1;
+  }
+  return gumbo_make_binary(env, data, data_len, out);
+}
+
 int gumbo_node_original_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                   const GumboNode* node, ERL_NIF_TERM* out) {
 #ifdef GUMBO_TEST_FAULTS
@@ -372,7 +429,7 @@ int gumbo_node_original_text_term(ErlNifEnv* env, const gumbo_atoms_t* atoms,
 
 /* ---- the NIF entry points ---- */
 
-#define GUMBO_NODE_DETAILS_COUNT 17
+#define GUMBO_NODE_DETAILS_COUNT 19
 
 ERL_NIF_TERM gumbo_nif_node_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
                                     int argc, const ERL_NIF_TERM argv[]) {
@@ -403,6 +460,8 @@ ERL_NIF_TERM gumbo_nif_node_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       atoms->node.end_position,
       atoms->node.text,
       atoms->node.original_text,
+      atoms->node.target,
+      atoms->node.data,
   };
   ERL_NIF_TERM values[GUMBO_NODE_DETAILS_COUNT];
 
@@ -425,7 +484,9 @@ ERL_NIF_TERM gumbo_nif_node_details(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       !gumbo_node_original_end_tag_term(env, atoms, node, &values[13]) ||
       !gumbo_node_end_position_term(env, atoms, node, &values[14]) ||
       !gumbo_node_text_term(env, atoms, node, &values[15]) ||
-      !gumbo_node_original_text_term(env, atoms, node, &values[16])) {
+      !gumbo_node_original_text_term(env, atoms, node, &values[16]) ||
+      !gumbo_node_pi_target_term(env, atoms, node, &values[17]) ||
+      !gumbo_node_pi_data_term(env, atoms, node, &values[18])) {
     return enif_make_badarg(env);
   }
   ERL_NIF_TERM map;
