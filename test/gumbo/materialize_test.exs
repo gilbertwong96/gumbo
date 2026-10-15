@@ -128,6 +128,107 @@ defmodule Gumbo.MaterializeTest do
     assert clip.tag_name == "clipPath"
   end
 
+  test "detail: :tree is the tree with ordered attributes and a name on every element" do
+    {:ok, output} = Gumbo.parse(~s(<p class="intro">Hi <em>there</em></p>))
+    tree = Gumbo.materialize(output, detail: :tree)
+
+    assert find_name(tree.root, "p") == %{
+             type: :element,
+             tag_name: "p",
+             attributes: [{"class", "intro"}],
+             children: [
+               %{type: :text, text: "Hi "},
+               %{
+                 type: :element,
+                 tag_name: "em",
+                 attributes: [],
+                 children: [%{type: :text, text: "there"}]
+               }
+             ]
+           }
+  end
+
+  test "detail: :tree names an element the tag atom cannot name" do
+    {:ok, output} = Gumbo.parse(~s(<my-tag data-a="1">x</my-tag>))
+    tree = Gumbo.materialize(output, detail: :tree)
+
+    assert find_name(tree.root, "my-tag") == %{
+             type: :element,
+             tag_name: "my-tag",
+             attributes: [{"data-a", "1"}],
+             children: [%{type: :text, text: "x"}]
+           }
+  end
+
+  test "detail: :tree composes the prefix of an adjusted attribute, as gumbo reports it" do
+    html = ~s(<svg xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="#a"/></svg>)
+    {:ok, output} = Gumbo.parse(html)
+    tree = Gumbo.materialize(output, detail: :tree)
+
+    # The parser adjusts a foreign attribute into a local name plus a namespace,
+    # so the tree has to put the prefix back for the caller.
+    assert find_name(tree.root, "svg").attributes == [
+             {"xmlns:xlink", "http://www.w3.org/1999/xlink"}
+           ]
+
+    assert find_name(tree.root, "use").attributes == [{"xlink:href", "#a"}]
+  end
+
+  test "detail: :tree keeps attributes in source order, with the repeats gumbo drops" do
+    {:ok, output} = Gumbo.parse(~s(<div b="1" a="2" a="3" B="4">x</div>))
+    tree = Gumbo.materialize(output, detail: :tree)
+
+    # gumbo records the repeated names as errors and keeps the first, so the list
+    # differs from a map by being ordered, not by holding more.
+    assert find_name(tree.root, "div").attributes == [{"b", "1"}, {"a", "2"}]
+  end
+
+  test "detail: :tree leaves text, comment and instruction nodes as :content has them" do
+    {:ok, output} = Gumbo.parse(~s(<?php echo "hi"; ?><div>x<!--c--></div>))
+    tree = Gumbo.materialize(output, detail: :tree)
+    content = Gumbo.materialize(output, detail: :content)
+
+    # The instruction sits on the document, not under the root element.
+    assert non_elements(tree.document) == non_elements(content.document)
+    assert Enum.any?(non_elements(tree.document), &(&1.type == :processing_instruction))
+    assert Enum.any?(non_elements(tree.document), &(&1.type == :comment))
+  end
+
+  test "detail: :tree agrees with :full about every name it reports" do
+    documents = [
+      ~s(<!doctype html><p class="a" id="b">x &amp; y<!--c--></p>),
+      ~s(<my-tag data-a="1"><other-tag>t</other-tag></my-tag>),
+      ~s(<svg xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="#a"/><rect viewBox="0 0 1 1"/></svg>),
+      ~s(<math><annotation-xml encoding="text/html"><my-el>x</my-el></annotation-xml></math>),
+      ~s(<p xml:lang="en" xlink:href="x" xmlns:b="u">t</p>)
+    ]
+
+    for document <- documents do
+      {:ok, output} = Gumbo.parse(document)
+      full = Gumbo.materialize(output)
+      tree = Gumbo.materialize(output, detail: :tree)
+
+      for {full_node, tree_node} <- Enum.zip(walk_nodes(full.root), walk_nodes(tree.root)) do
+        assert tree_node.type == full_node.type
+
+        if full_node.type == :element do
+          assert tree_node.tag_name == full_node.tag_name
+          # The tree's attribute is the one :full carries, with the prefix the
+          # parser split off composed back on.
+          assert tree_node.attributes == Enum.map(full_node.attributes, &attribute_pair/1)
+        end
+      end
+    end
+  end
+
+  test "detail: :tree keeps the envelope the other levels return" do
+    {:ok, output} = Gumbo.parse("<!doctype html><!--c--><p>x</p>")
+    tree = Gumbo.materialize(output, detail: :tree)
+
+    assert %{document: %{type: :document}, root: %{type: :element, tag_name: "html"}} = tree
+    assert is_list(tree.errors)
+  end
+
   test "materializing a single node returns that node" do
     {:ok, output} = Gumbo.parse("<p>hi</p>")
     node = Output.root(output)
@@ -201,6 +302,37 @@ defmodule Gumbo.MaterializeTest do
       walk(Map.get(node, :children, []) ++ rest, tag)
     end
   end
+
+  # The :tree shape carries no tag atom, so its tests find elements by the name
+  # the element is actually called.
+  defp find_name(node, name), do: walk_name([node], name)
+  defp walk_name([], _name), do: nil
+
+  defp walk_name([node | rest], name) do
+    if node[:tag_name] == name do
+      node
+    else
+      walk_name(Map.get(node, :children, []) ++ rest, name)
+    end
+  end
+
+  defp walk_nodes(node), do: walk_all([node])
+  defp walk_all([]), do: []
+
+  defp walk_all([node | rest]) do
+    [node | walk_all(Map.get(node, :children, []) ++ rest)]
+  end
+
+  # The document node carries the whole tree in its children, so it is left out:
+  # what is compared is the nodes :tree is supposed to share with :content.
+  defp non_elements(node) do
+    node |> walk_nodes() |> Enum.reject(&(&1.type in [:element, :document]))
+  end
+
+  defp attribute_pair(%{namespace: :none, name: name, value: value}), do: {name, value}
+
+  defp attribute_pair(%{namespace: namespace, name: name, value: value}),
+    do: {"#{namespace}:#{name}", value}
 
   defp tree_depth(root), do: do_depth([{root, 0}], 0)
 

@@ -5,8 +5,9 @@
 
 #include "gumbo_atoms.h"
 
-/* The two materialize NIFs. detail is 0 for :full (the default) and 1 for
-   :content; the Elixir side validates the atom and passes the code.
+/* The two materialize NIFs. detail is 0 for :full (the default), 1 for
+   :content and 2 for :tree; the Elixir side validates the atom and passes the
+   code.
    materialize_output answers %{document:, root:, errors:} — root: nil when
    the parse stopped before any element was built — (or {:error,
    :invalid_handle} for a non-handle) and materialize_node answers {:ok,

@@ -1,5 +1,7 @@
 #include "gumbo_materialize.h"
 
+#include <string.h>
+
 #include "gumbo.h"
 #include "gumbo_atoms.h"
 #include "gumbo_attr.h"
@@ -26,10 +28,20 @@
    Every term is built in the caller's environment per call; atoms are
    immediates and the only terms that outlive a call. Allocation failure
    surfaces as an exception, the same contract the extractors already
-   keep. */
+   keep.
+
+   The three shapes differ only in which fields they keep. :full keeps every
+   gumbo field; :content drops the source bookkeeping; :tree drops the tag
+   atom and the namespace too, and adds the name as written on every element
+   and the attributes in source order with their prefixes composed back on -
+   the parser adjusts a foreign attribute into a local name plus a namespace,
+   which is what a caller processing a tree would otherwise have to rebuild.
+   Text-like, comment and instruction nodes are the :content ones in :tree,
+   built by the same function, so the two shapes cannot drift apart. */
 
 #define GUMBO_DETAIL_FULL 0
 #define GUMBO_DETAIL_CONTENT 1
+#define GUMBO_DETAIL_TREE 2
 
 /* The children list of the node at table index i, whose subtree is the
    range [i, i + subtree_sizes[i]). Preorder makes siblings contiguous:
@@ -68,7 +80,9 @@ static int gumbo_materialize_children(ErlNifEnv* env, const gumbo_handle_t* h,
    attr_details uses. :content — %{name => value} built with
    enif_make_map_put, whose overwrite-on-repeated-key semantics match
    Gumbo.Node.attribute_map/1's Map.new; gumbo itself records duplicate
-   names as errors and keeps only the first, so the two surfaces agree. */
+   names as errors and keeps only the first, so the two surfaces agree.
+   :tree has its own builder below, because its names are composed from a
+   namespace the map drops. */
 static int gumbo_materialize_attributes(ErlNifEnv* env,
                                         const gumbo_atoms_t* atoms,
                                         GumboNode* node, int detail,
@@ -201,6 +215,100 @@ static int gumbo_materialize_node_content(ErlNifEnv* env,
   return 0; /* unreachable: every node type is one of the cases above */
 }
 
+/* The prefix a namespaced attribute is reported under, the way Nokogiri's
+   gumbo reports it. */
+static const char* gumbo_materialize_attribute_prefix(
+    GumboAttributeNamespaceEnum attr_namespace) {
+  switch (attr_namespace) {
+    case GUMBO_ATTR_NAMESPACE_XLINK:
+      return "xlink:";
+    case GUMBO_ATTR_NAMESPACE_XML:
+      return "xml:";
+    case GUMBO_ATTR_NAMESPACE_XMLNS:
+      return "xmlns:";
+    default:
+      return "";
+  }
+}
+
+/* An attribute's name for the :tree shape: the local name the parser kept,
+   with the prefix its namespace stands for composed back on. An unadjusted
+   attribute answers its name as written, which is where a prefix written by
+   hand in HTML content already lives. */
+static int gumbo_materialize_attribute_name(ErlNifEnv* env,
+                                            const gumbo_atoms_t* atoms,
+                                            const GumboAttribute* attr,
+                                            ERL_NIF_TERM* out) {
+  const char* prefix = gumbo_materialize_attribute_prefix(attr->attr_namespace);
+  if (prefix[0] == '\0') {
+    return gumbo_node_stringz(env, atoms, attr->name, out);
+  }
+
+  size_t prefix_len = strlen(prefix);
+  size_t name_len = strlen(attr->name);
+  unsigned char* buf = enif_make_new_binary(env, prefix_len + name_len, out);
+  if (buf == NULL) {
+    return 0;
+  }
+  memcpy(buf, prefix, prefix_len);
+  memcpy(buf + prefix_len, attr->name, name_len);
+  return 1;
+}
+
+/* The :tree attribute list: {name, value} in source order, so a caller that
+   processes attributes in order has what a map cannot give it. The repeated
+   names are the ones gumbo already dropped. */
+static int gumbo_materialize_attributes_tree(ErlNifEnv* env,
+                                             const gumbo_atoms_t* atoms,
+                                             GumboNode* node,
+                                             ERL_NIF_TERM* out) {
+  GumboVector* attributes = &node->v.element.attributes;
+  ERL_NIF_TERM list = enif_make_list(env, 0);
+  unsigned int i;
+  for (i = attributes->length; i-- > 0;) {
+    GumboAttribute* attr = attributes->data[i];
+    ERL_NIF_TERM name;
+    ERL_NIF_TERM value;
+    if (!gumbo_materialize_attribute_name(env, atoms, attr, &name) ||
+        !gumbo_node_stringz(env, atoms, attr->value, &value)) {
+      return 0;
+    }
+    list = enif_make_list_cell(env, enif_make_tuple2(env, name, value), list);
+  }
+  *out = list;
+  return 1;
+}
+
+/* The :tree shape: the tree a caller processes rather than queries. Elements
+   and templates carry %{type, tag_name, attributes, children} - the name as
+   written is always there, so an element the tag enum cannot name is not left
+   nameless - and every other node is the :content one. */
+static int gumbo_materialize_node_tree(ErlNifEnv* env,
+                                       const gumbo_atoms_t* atoms,
+                                       GumboNode* node, ERL_NIF_TERM children,
+                                       ERL_NIF_TERM* out) {
+  switch (node->type) {
+    case GUMBO_NODE_ELEMENT:
+    case GUMBO_NODE_TEMPLATE: {
+      ERL_NIF_TERM attributes;
+      if (!gumbo_materialize_attributes_tree(env, atoms, node, &attributes)) {
+        return 0;
+      }
+      ERL_NIF_TERM tag_name;
+      if (!gumbo_node_tag_name_term(env, atoms, node, &tag_name)) {
+        return 0;
+      }
+      ERL_NIF_TERM keys[] = {atoms->node.type, atoms->node.tag_name,
+                             atoms->node.attributes, atoms->node.children};
+      ERL_NIF_TERM values[] = {atoms->node_types[node->type], tag_name,
+                               attributes, children};
+      return enif_make_map_from_arrays(env, keys, values, 4, out);
+    }
+    default:
+      return gumbo_materialize_node_content(env, atoms, node, children, out);
+  }
+}
+
 #define GUMBO_MATERIALIZE_FULL_COUNT 21
 
 /* The :full shape: every gumbo field, with nil where the node type carries
@@ -298,11 +406,19 @@ static int gumbo_materialize_range(ErlNifEnv* env, const gumbo_atoms_t* atoms,
       return 0;
     }
 
-    int ok = (detail == GUMBO_DETAIL_CONTENT)
-                 ? gumbo_materialize_node_content(env, atoms, node, children,
-                                                  &terms[i])
-                 : gumbo_materialize_node_full(env, atoms, node, children,
-                                               &terms[i]);
+    int ok;
+    switch (detail) {
+      case GUMBO_DETAIL_CONTENT:
+        ok = gumbo_materialize_node_content(env, atoms, node, children,
+                                            &terms[i]);
+        break;
+      case GUMBO_DETAIL_TREE:
+        ok = gumbo_materialize_node_tree(env, atoms, node, children, &terms[i]);
+        break;
+      default:
+        ok = gumbo_materialize_node_full(env, atoms, node, children, &terms[i]);
+        break;
+    }
     if (!ok) {
       return 0;
     }
@@ -340,7 +456,8 @@ ERL_NIF_TERM gumbo_nif_materialize_output(ErlNifEnv* env,
   }
   int detail;
   if (!enif_get_int(env, argv[1], &detail) ||
-      (detail != GUMBO_DETAIL_FULL && detail != GUMBO_DETAIL_CONTENT)) {
+      (detail != GUMBO_DETAIL_FULL && detail != GUMBO_DETAIL_CONTENT &&
+       detail != GUMBO_DETAIL_TREE)) {
     return enif_make_badarg(env);
   }
 
@@ -410,7 +527,8 @@ ERL_NIF_TERM gumbo_nif_materialize_node(ErlNifEnv* env,
 
   int detail;
   if (!enif_get_int(env, argv[2], &detail) ||
-      (detail != GUMBO_DETAIL_FULL && detail != GUMBO_DETAIL_CONTENT)) {
+      (detail != GUMBO_DETAIL_FULL && detail != GUMBO_DETAIL_CONTENT &&
+       detail != GUMBO_DETAIL_TREE)) {
     return enif_make_badarg(env);
   }
   unsigned long index;

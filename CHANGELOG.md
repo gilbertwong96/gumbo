@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Gumbo.materialize/2` takes `detail: :tree`: the tree without source bookkeeping, with the tag
+  name on every element — the name as written, so a custom element is never left nameless — and
+  attributes as an ordered list of `{name, value}` whose prefix the parser split off is composed
+  back on (`xlink:href`, `xmlns:xlink`). Text-like, comment and processing-instruction nodes are
+  the ones `detail: :content` returns. For a caller that processes a tree rather than queries it,
+  this is the shape without the fields such a caller would discard.
 - A processing instruction carries `target` and `data` — the two parts the spec gives that
   payload, and the pair a browser reports — in both the `:full` and `:content` shapes and
   through `Gumbo.Node.target/1` and `Gumbo.Node.data/1`. `text` still carries the one string the

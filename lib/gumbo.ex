@@ -150,18 +150,22 @@ defmodule Gumbo do
   that handle has no root, only errors.
 
   `detail: :full` (the default) carries every gumbo field, with `nil` where
-  the node type has none; `detail: :content` returns a usable tree without
-  the source bookkeeping (positions, originals, flags and index) — except that
-  an element whose tag is `:unknown` also carries `tag_name`, because its atom
-  is the one thing that cannot name it, and a processing instruction also
-  carries `target` and `data`,
+  the node type has none; `detail: :tree` returns the tree a caller processes
+  rather than queries — each element as `%{type:, tag_name:, attributes:,
+  children:}`, with the name as written and the attributes in source order as
+  `{name, value}` pairs whose prefix the parser split off is composed back on —
+  and every other node as `:content` has it; `detail: :content` returns a usable
+  tree without the source bookkeeping (positions, originals, flags and index) —
+  except that an element whose tag is `:unknown` also carries `tag_name`,
+  because its atom is the one thing that cannot name it, and a processing
+  instruction also carries `target` and `data`,
   the two parts the spec gives that payload. The
   materialized `:full` values agree with the lazy accessors — they come
   from the same extractors — under the materialized shape's own key names
   (`start_position`, `name`).
 
   `detail:` is validated here and raises `ArgumentError` for anything but
-  `:full | :content`.
+  `:full | :tree | :content`.
 
   Like `parse/2`, materializations of 20 480 nodes or more run on a dirty
   CPU scheduler — the size proxy is the handle's cached node count, so the
@@ -177,6 +181,11 @@ defmodule Gumbo do
       iex> {:ok, output} = Gumbo.parse("<!doctype html><p>x</p>")
       iex> Gumbo.materialize(output, detail: :content)[:root][:tag]
       :html
+
+      iex> {:ok, output} = Gumbo.parse_fragment(~s(<p class="a" id="b">x</p>), :body)
+      iex> [p] = Gumbo.Output.fragment_nodes(output)
+      iex> Gumbo.materialize(p, detail: :tree)[:attributes]
+      [{"class", "a"}, {"id", "b"}]
   """
   @spec materialize(
           Gumbo.Output.t() | Gumbo.Node.t() | [Gumbo.Node.t()] | nil,
@@ -224,6 +233,7 @@ defmodule Gumbo do
     case Keyword.get(options, :detail, :full) do
       :full -> 0
       :content -> 1
+      :tree -> 2
       other -> raise ArgumentError, "invalid detail: #{inspect(other)}"
     end
   end

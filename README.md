@@ -91,12 +91,34 @@ Gumbo.materialize(output, detail: :content)[:root][:children]
 #     %{type: :element, tag: :head, attributes: %{}, children: [], namespace: :html},
 #     %{type: :element, tag: :body, ...}
 #   ]
+
+Gumbo.materialize(output, detail: :tree)[:root][:children]
+#=> [
+#     %{type: :element, tag_name: "head", attributes: [], children: []},
+#     %{type: :element, tag_name: "body", ...}
+#   ]
 ```
+
+The three levels differ only in what they keep:
+
+- `detail: :full` (the default) — every gumbo field.
+- `detail: :tree` — the tree a caller *processes* rather than queries: the name
+  as written on every element, and attributes as an ordered list of
+  `{name, value}`, with the prefix the parser split off composed back on
+  (`xlink:href`, not `href` plus a namespace). Text-like, comment and
+  processing-instruction nodes are the `:content` ones.
+- `detail: :content` — a usable tree without the source bookkeeping, with
+  attributes as a map.
 
 An element whose tag gumbo cannot name — `tag: :unknown`, which is a custom
 element and also an SVG tag like `clipPath` — carries `tag_name` as well, so
 the name as written survives in this shape. Every other element is named by
 its atom, which is that same name, and does not repeat it.
+
+`tag` is the enum gumbo resolved, `:unknown` where it resolved none (the one
+value `gumbo_normalized_tagname/1` has no name for), and `tag_name` is the name
+as written. `:tree` carries that name on every element, so a caller processing
+a tree never has to tell the two apart.
 
 `materialize/2`'s `:full` values agree with the lazy accessors — they are
 built by the same C extractors — under the materialized shape's own key
