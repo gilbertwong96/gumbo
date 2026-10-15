@@ -399,13 +399,16 @@ defmodule Gumbo.MixProject do
     ]
   end
 
-  # PLACEHOLDER: the repo has no git remote yet, so the URLs below are
-  # guesses. The owner must substitute the real repository URL before a
-  # public Hex release.
   defp docs do
     [
-      main: "Gumbo",
-      source_url: "https://github.com/elixir-gumbo/gumbo",
+      # The landing page is the README, not the Gumbo module: it carries the install
+      # instructions and the table of precompiled targets, and it is the page a reader
+      # arrives on from Hex or from the repository itself.
+      main: "readme",
+      source_url: "https://github.com/gilbertwong96/gumbo",
+      # Every page's "View Source" link points at the sources this version was built from,
+      # which for this library means the six patches as released, not as main has them now.
+      source_ref: "v#{@version}",
       extras: ["README.md", "CHANGELOG.md"]
     ]
   end
