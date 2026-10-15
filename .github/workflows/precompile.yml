@@ -91,8 +91,10 @@ jobs:
       - uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          # No generated notes here on purpose: this job runs once per target, so each pass would
+          # append its own "Full Changelog" line — the first v0.1.0 release carried four of them. The
+          # release body is the changelog's own section for the version, set once by the job below.
           files: upload/*.tar.gz
-          generate_release_notes: true
 
   # Windows is a job of its own because its steps must run inside MSYS2's shell — `shell:` cannot be
   # templated or made conditional, and elixir_make needs the POSIX toolchain a Windows runner keeps in
@@ -185,9 +187,25 @@ jobs:
       - run: mix deps.get --check-locked
       - run: MIX_ENV=prod mix elixir_make.checksum --all --ignore-unavailable
       - run: cat checksum.exs
+
+      # The release notes are the changelog, extracted rather than retyped: one source of truth, and
+      # the only place a version's changes are described. The extraction stops at the next version
+      # heading or at the link-reference footer.
+      - name: Take the body from the changelog
+        run: |
+          set -euo pipefail
+          awk -v v="${GITHUB_REF_NAME#v}" '
+            index($0, "## [" v "]") == 1 {found=1; next}
+            found && (/^## / || /^\[[^]]+\]: /) {exit}
+            found {print}
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
+          head -3 release-notes.md
+
       - uses: softprops/action-gh-release@v3
         with:
           files: checksum.exs
+          body_path: release-notes.md
       - uses: actions/upload-artifact@v7
         with:
           name: checksum
