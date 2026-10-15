@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-10-14
+
+First release. `gumbo` is a faithful binding to the C library of the same name, and the surface is
+deliberately the library's own: what gumbo can say about a document is reachable from Elixir, and
+nothing is layered on top of it.
+
+Add it with `{:gumbo, "~> 0.1.0"}`. Precompiled NIFs are published for `x86_64-linux-gnu`,
+`aarch64-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin` and `x86_64-windows`; any other
+platform compiles from the sources carried in the package. Each archive is built on the platform it
+is for and that platform's suite passes before it is packaged — the README has the table and how to
+read it. The vendored parser stays byte-identical to its 0.14.1 pin: the six patches below are
+applied to a copy.
 
 ### Added
 
@@ -198,3 +209,6 @@ being a reasonable reservation. `make check-teardown` holds the teardown to both
 properties that matter — the allocator balance is exactly zero, and a 20 000-level
 tree survives a 320 KB stack — and `make check-clean-build` builds from an empty
 object directory, which is what a fresh clone or a hex consumer does.
+
+[Unreleased]: https://github.com/gilbertwong96/gumbo/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/gilbertwong96/gumbo/releases/tag/v0.1.0
