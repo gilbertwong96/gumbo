@@ -75,6 +75,16 @@ silent-corruption bugs in 0002 while that patch was being written (a struct copy
 that carried the new flag onto a clone, and a tenth place where the stack is
 mutated, in adoption agency step 13.7).
 
+0007 is the first patch that changes tree construction on purpose, so the claim is
+made in two steps rather than one. A third binary — the pin with 0007 applied to it
+alone, and compiled against the pin's own headers — has to parse the whole corpus
+identically to the shipped build, which is what still catches any of the other
+patches moving a tree, and the pin alone may differ only in the documents whose tree
+holds a `select` element, which is what bounds 0007's blast radius. The corpus keeps
+the `<select>`, `<option>`, `<optgroup>` and `<selectedcontent>` shapes 0002's
+definitions were written for rather than dropping them to make the old one-step
+comparison hold.
+
 `make check-sanitizers` (wired in as `check.sanitizers`) builds the same harness
 against the patched sources with AddressSanitizer and UndefinedBehaviorSanitizer and
 runs the seeded corpus plus ten adversarial shapes through it. It is the only net
@@ -110,8 +120,9 @@ a 20 000-level tree survives a 320 KB stack. Both are hard gates now — after t
 | 0004 | the duplicate-attribute scan, i.e. one element's quadratic attribute cost, and the absence of any ceiling on that count | `check-parity` (whose corpus now generates attribute clusters), plus a cap test and a timing test |
 | 0005 | nothing that was measured: it is the backstop for a depth-proportional recursion nobody has found | `check-stack-guard`, which is the one gate that can only test the mechanism, because no document makes the C stack grow with its nesting depth any more |
 | 0006 | nothing either: a lever Nokogiri's gumbo has and this one did not, for applications pinned to that reference | `check-parity` (whose corpus now nests past the reference's default ceiling), plus a cap test, a boundary test and this library's own refusal |
+| 0007 | the scope queries not stopping at a `select`, i.e. `</p>` inside one closing the `p` outside it instead of the empty `p` it inserts there | the select shapes in `test/gumbo/select_scope_test.exs`, plus `check-parity` in its two-step form, which allows a difference against the pin only in documents that hold a select |
 
-Five of the six are generated. The definition next to a patch — `NNNN-name.exs` — lists the
+Six of the seven are generated. The definition next to a patch — `NNNN-name.exs` — lists the
 substitutions that make it, each with the count it must find, and `mix gumbo.patches` applies the
 earlier patches to a copy of the pin, runs the substitutions, and writes the patch back out as the
 diff against the pinned tree. That is also how they are rebased after a submodule bump:
@@ -123,7 +134,7 @@ mix gumbo.patches --check    # assert the committed patches are what the definit
 
 Whether a patch is cumulative is part of its definition. 0005 and 0006 edit text that earlier
 patches introduced, so their `priors: true` has the tool apply 0001-0004 and 0001-0005 first, while
-0002, 0003 and 0004 were written against the pinned tree and say `priors: false`.
+0002, 0003, 0004 and 0007 were written against the pinned tree and say `priors: false`.
 
 Each substitution asserts how many occurrences it must find, so a submodule bump that moves any of
 the text fails there — naming the file and the snippet — rather than producing a patch that applies

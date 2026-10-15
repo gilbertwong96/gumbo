@@ -277,19 +277,77 @@ $(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 	@mkdir -p $(dir $@)
 	$(CC) $(ALL_CFLAGS) -o $@ $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 
-check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BUILD)
-	@docs=$$(mktemp); pinned=$$(mktemp); build=$$(mktemp); \
-	trap 'rm -f "$$docs" "$$pinned" "$$build"' EXIT INT TERM; \
+# 0007 is the first patch that changes tree construction on purpose, so the parity claim
+# is made in two steps rather than one: the pin plus that one patch has to parse the whole
+# corpus identically to the shipped build — which is what still catches any of the other
+# patches moving a tree — and the pin alone may differ only in the documents whose tree
+# holds a select element, which is what bounds 0007's blast radius. The corpus keeps the
+# select shapes f57a7e9 added for the scope queries.
+#
+# The baseline copies the pin and applies that one patch to it, the way the build's copy
+# applies the whole series in file-name order, and it compiles against the pin's own
+# headers because that is the tree the patch is written against.
+BEHAVIOUR_PATCH := $(GUMBO_PATCH_DIR)/0007-select-in-scope.patch
+GUMBO_BASELINE_SRC_DIR := $(OBJ_DIR)/gumbo-src-baseline
+GUMBO_BASELINE_STAMP := $(GUMBO_BASELINE_SRC_DIR)/.patched
+GUMBO_BASELINE_OBJ_DIR := $(OBJ_DIR)/gumbo-parser-baseline
+GUMBO_BASELINE_OBJS := $(patsubst $(GUMBO_DIR)/src/%.c,$(GUMBO_BASELINE_OBJ_DIR)/%.o,$(GUMBO_SRCS))
+PARITY_DUMP_BASELINE := $(OBJ_DIR)/parity_dump_baseline
+
+$(GUMBO_BASELINE_STAMP): $(GUMBO_VENDORED) $(BEHAVIOUR_PATCH) | $(GUMBO_HEADER)
+	@echo "  vendored: copying $(GUMBO_DIR)/src and applying $(notdir $(BEHAVIOUR_PATCH))"
+	@rm -rf $(GUMBO_BASELINE_SRC_DIR)
+	@mkdir -p $(GUMBO_BASELINE_SRC_DIR)
+	@cp -R $(GUMBO_DIR)/src $(GUMBO_BASELINE_SRC_DIR)/src
+	@git apply -p1 --directory=$(GUMBO_BASELINE_SRC_DIR) "$(BEHAVIOUR_PATCH)" || { \
+		echo "error: $(notdir $(BEHAVIOUR_PATCH)) does not apply to the pin on its own"; \
+		echo "       it is written against the pinned tree: c_src/patches/README.md"; \
+		exit 1; \
+	}
+	@touch $@
+
+$(GUMBO_BASELINE_OBJ_DIR)/%.o: $(GUMBO_BASELINE_STAMP)
+	@mkdir -p $(dir $@)
+	$(CC) $(ALL_CFLAGS) -w -I$(GUMBO_BASELINE_SRC_DIR)/src -c -o $@ $(GUMBO_BASELINE_SRC_DIR)/src/$*.c
+
+$(PARITY_DUMP_BASELINE): $(PARITY_DUMP_SRC) $(GUMBO_BASELINE_OBJS) | $(GUMBO_HEADER)
+	@mkdir -p $(dir $@)
+	$(CC) -I$(GUMBO_BASELINE_SRC_DIR)/src -I$(GUMBO_DIR)/src $(GUMBO_CFLAGS) -o $@ $(PARITY_DUMP_SRC) $(GUMBO_BASELINE_OBJS)
+
+check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BASELINE) $(PARITY_DUMP_BUILD)
+	@docs=$$(mktemp); pinned=$$(mktemp); baseline=$$(mktemp); build=$$(mktemp); \
+	split=$$(mktemp -d); \
+	trap 'rm -f "$$docs" "$$pinned" "$$baseline" "$$build"; rm -rf "$$split"' EXIT INT TERM; \
 	$(PARITY_DUMP_BUILD) corpus $(PARITY_COUNT) > "$$docs" || exit 1; \
 	$(PARITY_DUMP_PINNED) dump < "$$docs" > "$$pinned" || exit 1; \
+	$(PARITY_DUMP_BASELINE) dump < "$$docs" > "$$baseline" || exit 1; \
 	$(PARITY_DUMP_BUILD) dump < "$$docs" > "$$build" || exit 1; \
-	if cmp -s "$$pinned" "$$build"; then \
-		echo "PASS: $(PARITY_COUNT) documents parse to identical trees, pinned and patched"; \
-	else \
-		echo "FAIL: the patches change tree construction; first divergence:"; \
-		diff "$$pinned" "$$build" | head -20; \
+	if ! cmp -s "$$baseline" "$$build"; then \
+		echo "FAIL: a patch other than $(notdir $(BEHAVIOUR_PATCH)) changes tree construction; first divergence:"; \
+		diff "$$baseline" "$$build" | head -20; \
 		exit 1; \
-	fi
+	fi; \
+	if cmp -s "$$pinned" "$$baseline"; then \
+		echo "FAIL: $(notdir $(BEHAVIOUR_PATCH)) changed no tree, so nothing here covers it"; \
+		exit 1; \
+	fi; \
+	mkdir -p "$$split/pin" "$$split/base"; \
+	for side in pin base; do \
+		src="$$pinned"; [ "$$side" = base ] && src="$$baseline"; \
+		awk -v out="$$split/$$side" '/^=== document /{ n = $$3 + 0; next } { print > (out "/" n) }' "$$src" || exit 1; \
+	done; \
+	changed=0; failed=0; \
+	for f in "$$split/pin"/*; do \
+		i=$$(basename "$$f"); \
+		cmp -s "$$f" "$$split/base/$$i" && continue; \
+		changed=$$((changed + 1)); \
+		grep -q 'tag=112,' "$$f" && continue; \
+		failed=1; \
+		echo "FAIL: document $$i differs but holds no select element, so $(notdir $(BEHAVIOUR_PATCH)) is not what moved it:"; \
+		diff "$$split/base/$$i" "$$f" | head -20; \
+	done; \
+	[ $$failed -eq 0 ] || exit 1; \
+	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCH)) and with the shipped build, and the pin alone differs only in the $$changed that hold a select"
 
 # The sanitizer gate. It is the only net there is for a memory-safety bug inside
 # gumbo itself — residual 2 of the list this project keeps of what could still take
