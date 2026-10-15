@@ -133,15 +133,30 @@ static int gumbo_materialize_node_content(ErlNifEnv* env,
                                         &attributes)) {
         return 0;
       }
-      ERL_NIF_TERM keys[] = {atoms->node.type, atoms->node.tag,
+      /* Five keys name every element gumbo's tag enum can name, because the
+         atom already is that name. An :unknown tag is the one exception — a
+         custom element, or an SVG tag the enum does not carry, whose tag_name
+         is where the name as written survives (resolved by the same extractor
+         :full uses, so the two shapes cannot disagree about a name). Six keys
+         for those, five for every other element. */
+      ERL_NIF_TERM keys[] = {atoms->node.type,      atoms->node.tag,
                              atoms->node.namespace, atoms->node.attributes,
-                             atoms->node.children};
+                             atoms->node.children,  atoms->node.tag_name};
       ERL_NIF_TERM values[] = {atoms->node_types[node->type],
                                atoms->tags[node->v.element.tag],
                                atoms->namespaces[node->v.element.tag_namespace],
-                               attributes, children};
+                               attributes,
+                               children,
+                               atoms->nil};
+      size_t count = 5;
+      if (node->v.element.tag == GUMBO_TAG_UNKNOWN) {
+        if (!gumbo_node_tag_name_term(env, atoms, node, &values[5])) {
+          return 0;
+        }
+        count = 6;
+      }
       ERL_NIF_TERM map;
-      if (!enif_make_map_from_arrays(env, keys, values, 5, &map)) {
+      if (!enif_make_map_from_arrays(env, keys, values, count, &map)) {
         return 0;
       }
       *out = map;
