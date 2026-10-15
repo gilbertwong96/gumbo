@@ -11,12 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `detail: :content` carries `:tag_name` for the elements whose tag cannot name them: a custom
-  element (`<my-tag>`) and an SVG tag gumbo's enum does not carry (`clipPath`) both arrive as
-  `tag: :unknown`, and the name as written now survives in that shape too. Every other element is
-  still named by its atom — which is that same name — and still carries no `:tag_name`.
-- The published documentation opens on the README, and every "View Source" link points at the
-  sources of the version being read.
+- `detail: :content` carries `:tag_name` for an element whose `tag` is `:unknown` — a custom
+  element such as `<my-tag>`, or an SVG tag the enum does not carry such as `clipPath` — so the name
+  as written survives in that shape. Elements gumbo can name are unchanged: their tag atom is that
+  same name, and they carry no `:tag_name`.
 
 ## [0.1.0] - 2026-10-14
 
