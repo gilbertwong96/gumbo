@@ -103,6 +103,31 @@ defmodule Gumbo.MaterializeTest do
     assert %{type: :text, text: "x"} = List.last(div.children)
   end
 
+  test "detail: :content names an element the tag atom cannot name" do
+    {:ok, output} = Gumbo.parse(~s(<my-tag data-a="1">x</my-tag>))
+    content = Gumbo.materialize(output, detail: :content)
+
+    custom = find_tag(content.root, :unknown)
+    assert custom.tag_name == "my-tag"
+    assert custom.attributes == %{"data-a" => "1"}
+  end
+
+  test "detail: :content leaves tag_name off an element the tag atom already names" do
+    {:ok, output} = Gumbo.parse(~s(<div class="a">x</div>))
+    content = Gumbo.materialize(output, detail: :content)
+
+    refute Map.has_key?(find_tag(content.root, :div), :tag_name)
+  end
+
+  test "detail: :content keeps an SVG element's name as written" do
+    {:ok, output} = Gumbo.parse(~s(<svg><clipPath id="a"></clipPath></svg>))
+    content = Gumbo.materialize(output, detail: :content)
+
+    clip = find_tag(content.root, :unknown)
+    assert clip.namespace == :svg
+    assert clip.tag_name == "clipPath"
+  end
+
   test "materializing a single node returns that node" do
     {:ok, output} = Gumbo.parse("<p>hi</p>")
     node = Output.root(output)

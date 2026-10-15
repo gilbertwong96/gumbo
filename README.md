@@ -93,6 +93,11 @@ Gumbo.materialize(output, detail: :content)[:root][:children]
 #   ]
 ```
 
+An element whose tag gumbo cannot name — `tag: :unknown`, which is a custom
+element and also an SVG tag like `clipPath` — carries `tag_name` as well, so
+the name as written survives in this shape. Every other element is named by
+its atom, which is that same name, and does not repeat it.
+
 `materialize/2`'s `:full` values agree with the lazy accessors — they are
 built by the same C extractors — under the materialized shape's own key
 names (`:start_position` for `position/1`, `:name` for `doctype_name/1`).
@@ -146,7 +151,9 @@ Behaviours a caller will hit, and none is obvious:
 - `Gumbo.Tag.name(:unknown) == ""` is gumbo's own behaviour —
   `GUMBO_TAG_UNKNOWN` normalizes to the empty string. `Gumbo.Node.tag_name/1`
   is the accessor that resolves a real name for an unknown tag (from the
-  source text, with SVG case-correction).
+  source text, with SVG case-correction). `detail: :content` carries that
+  `:tag_name` for exactly those elements and leaves it off every other one,
+  since those are the elements whose atom does not already say the name.
 - `Gumbo.Node.attribute_map/1` is **lossy**: it keys by name, so it folds
   namespaces away (`xlink:href` and `href` collide) and cannot represent
   duplicate names. `attributes/1` is the lossless path.

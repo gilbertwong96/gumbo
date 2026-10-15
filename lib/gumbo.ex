@@ -151,7 +151,9 @@ defmodule Gumbo do
 
   `detail: :full` (the default) carries every gumbo field, with `nil` where
   the node type has none; `detail: :content` returns a usable tree without
-  the source bookkeeping (positions, originals, flags and index). The
+  the source bookkeeping (positions, originals, flags and index) — except that
+  an element whose tag is `:unknown` also carries `tag_name`, because its atom
+  is the one thing that cannot name it. The
   materialized `:full` values agree with the lazy accessors — they come
   from the same extractors — under the materialized shape's own key names
   (`start_position`, `name`).
