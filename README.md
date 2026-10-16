@@ -338,7 +338,7 @@ Known and measured, with the reference's own sources read for its side of the ta
 | a control character in text (`\x07`, `\x1b`, `\x7f`, U+0085) | kept, with `:control_character_in_input_stream` | kept — the same, since patch 0009, which stopped writing U+FFFD for these |
 | a noncharacter in text (U+FDD0) | kept, with `:noncharacter_in_input_stream` | kept — the same, since patch 0009 |
 | `:max_tree_depth` | no ceiling unless one is asked for | 400 by default |
-| `:max_attributes` | 1024 by default, counting the names read for one element | 400 by default, counting the same way |
+| `:max_attributes` | 1024 by default, counting the names read for one element — a name counts as the tokenizer reaches it, so a tag that never closes is refused too | 400 by default, counting the same way |
 | a `<form>` inside template contents, and a `<frameset>` after an implied `<body>` (the cases in the pinned base's own `tests/tree_construction/template.dat`) | the 2026 template rules: the nested form is not ignored when the parser is parsing template contents, and leaving an implied `<body>` behind keeps `frameset-ok` ok | the rules before them — Nokogiri's sources have neither `is_parsing_template_contents` nor that `frameset_ok` assignment |
 
 The processing-instruction rows are the ones to decide on before a port. The spec gained

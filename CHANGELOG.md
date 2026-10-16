@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{:error, :too_many_attributes}`, the way the reference refuses it. Counting the names that
   survived the duplicate check accepted that element — and could not bound a repeat in the middle of
   a tag at all, since a surviving count never sees it.
+- `:max_attributes` is enforced while a start tag is still being read: a name counts as the
+  tokenizer reaches it, so the 401st name of a tag that end of input abandons — the one whose value
+  never arrived — is counted, and its document is refused. Counting where a name reached the
+  attribute list could not see that name at all, and the tag was dropped either way, so the parse
+  answered with a tree for a document past the bound it was given. Reported as #8, on the
+  `limits attributes on an unfinished tag` shapes in the rich-text corpus.
 
 ## [0.2.0] - 2026-10-15
 

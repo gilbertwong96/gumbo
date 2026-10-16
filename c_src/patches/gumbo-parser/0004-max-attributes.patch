@@ -21,7 +21,12 @@ Two things about attributes, both measured on a 16 MiB input:
     the same lever Nokogiri's gumbo exposes under the same name; the count is the one
     that lever counts, of the names read for the tag with a repeated name included,
     not of the attributes kept — counting the kept ones let an element at the limit
-    with one repeated name through, where the reference refuses it.
+    with one repeated name through, where the reference refuses it. A name counts as
+    it starts rather than where it is added, because end of input inside a name
+    abandons the tag without ever finishing that name: counting at the add site left
+    the 401st name of an unfinished tag invisible, and the tag was dropped either way,
+    so the parse answered with a tree for a document past the bound it was given
+    (gilbertwong96/gumbo#8).
 
 The hash is what makes the cost linear whether or not the cap is set; the cap is
 what tells a caller their document was too much for the parse they asked for. Neither
@@ -223,24 +228,43 @@ tree difference rather than as a hang nobody tests.
    tag_state->_drop_next_attr_value = false;
    tag_state->_is_start_tag = is_start_tag;
    tag_state->_is_self_closing = false;
-@@ -789,7 +879,26 @@
-   assert(tag_state->_attributes.capacity);
- 
-   GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
--  for (unsigned int i = 0; i < attributes->length; ++i) {
+@@ -780,16 +870,45 @@
+ // overwritten on finish_attribute_value().  If the attribute has already been
+ // specified, the new attribute is dropped, a parse error is added, and the
+ // function returns false.  Otherwise, this returns true.
++// Counts an attribute name as it starts, whether or not it ever finishes: end of
++// input inside a name abandons the tag without calling finish_attribute_name, and
++// the reference trips its limit when the offending name starts rather than when it
++// ends, so a name that never ends still counts and its element is still refused.
++static void start_attribute_name(GumboParser* parser) {
++  GumboTagState* tag_state = &parser->_tokenizer_state->_tag_state;
 +  if (++tag_state->_attribute_count > parser->_options->max_attributes) {
-+    // Refused, and reported through the output rather than through an error: the
-+    // names were not wrong, there were simply more of them than the caller
-+    // allowed. This is checked before the duplicate scan, so the count is of the
-+    // names read for the tag and a repeated name counts — the count the reference
-+    // keeps. The value that follows belongs to an attribute that was never added,
-+    // so drop it the way a duplicate does.
 +    parser->_output->too_many_attributes = true;
 +    tag_state->_drop_next_attr_value = true;
++  }
++}
++
+ static bool finish_attribute_name(GumboParser* parser) {
+   GumboTokenizerState* tokenizer = parser->_tokenizer_state;
+   GumboTagState* tag_state = &tokenizer->_tag_state;
++  if (tag_state->_attribute_count > parser->_options->max_attributes) {
++    // Over the limit, and this is the name that put it there: it was counted when
++    // it started and is never added. _drop_next_attr_value still stands from
++    // there, so the value that follows is dropped too, which is why this comes
++    // before the reset below — that reset would clear the flag.
 +    reinitialize_tag_buffer(parser);
 +    return false;
 +  }
-+
+   // May've been set by a previous attribute without a value; reset it here.
+   tag_state->_drop_next_attr_value = false;
+   assert(tag_state->_attributes.data);
+   assert(tag_state->_attributes.capacity);
+ 
++  // The count was taken as this name started and the cap checked there, so an
++  // attribute past it is never added here. hash_attribute_name also hashes an
++  // attribute that the cap refuses, but the vector never sees it.
+   GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
+-  for (unsigned int i = 0; i < attributes->length; ++i) {
 +  unsigned int hash = hash_attribute_name(tag_state->_attribute_hash_seed,
 +      tag_state->_buffer.data, tag_state->_buffer.length);
 +  unsigned int bucket = attribute_bucket_index(tag_state, hash);
@@ -251,7 +275,7 @@ tree difference rather than as a hang nobody tests.
      GumboAttribute* attr = attributes->data[i];
      if (strlen(attr->name) == tag_state->_buffer.length &&
          memcmp(attr->name, tag_state->_buffer.data,
-@@ -799,6 +908,7 @@
+@@ -799,6 +918,7 @@
        tag_state->_drop_next_attr_value = true;
        return false;
      }
@@ -259,7 +283,7 @@ tree difference rather than as a hang nobody tests.
    }
  
    GumboAttribute* attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));
-@@ -810,6 +920,13 @@
+@@ -810,6 +930,13 @@
    copy_over_original_tag_text(
        parser, &attr->original_value, &attr->name_start, &attr->name_end);
    gumbo_vector_add(parser, attr, attributes);
@@ -273,7 +297,7 @@ tree difference rather than as a hang nobody tests.
    reinitialize_tag_buffer(parser);
    return true;
  }
-@@ -854,6 +971,13 @@
+@@ -854,6 +981,13 @@
    tokenizer->_is_current_node_foreign = false;
    tokenizer->_is_in_cdata = false;
    tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;
@@ -287,3 +311,35 @@ tree difference rather than as a hang nobody tests.
  
    tokenizer->_buffered_emit_char = kGumboNoChar;
    gumbo_string_buffer_init(parser, &tokenizer->_temporary_buffer);
+@@ -1696,6 +1830,7 @@
+       return emit_current_tag(parser, output);
+     case '\0':
+       tokenizer_add_parse_error(parser, GUMBO_ERR_UTF8_NULL);
++      start_attribute_name(parser);
+       gumbo_tokenizer_set_state(parser, GUMBO_LEX_ATTR_NAME);
+       append_char_to_temporary_buffer(parser, 0xfffd);
+       return NEXT_CHAR;
+@@ -1711,6 +1846,7 @@
+       tokenizer_add_parse_error(parser, GUMBO_ERR_ATTR_NAME_INVALID);
+     // Fall through.
+     default:
++      start_attribute_name(parser);
+       gumbo_tokenizer_set_state(parser, GUMBO_LEX_ATTR_NAME);
+       append_char_to_tag_buffer(parser, ensure_lowercase(c), true);
+       return NEXT_CHAR;
+@@ -1780,6 +1916,7 @@
+       return emit_current_tag(parser, output);
+     case '\0':
+       tokenizer_add_parse_error(parser, GUMBO_ERR_UTF8_NULL);
++      start_attribute_name(parser);
+       gumbo_tokenizer_set_state(parser, GUMBO_LEX_ATTR_NAME);
+       append_char_to_temporary_buffer(parser, 0xfffd);
+       return NEXT_CHAR;
+@@ -1794,6 +1931,7 @@
+       tokenizer_add_parse_error(parser, GUMBO_ERR_ATTR_NAME_INVALID);
+     // Fall through.
+     default:
++      start_attribute_name(parser);
+       gumbo_tokenizer_set_state(parser, GUMBO_LEX_ATTR_NAME);
+       append_char_to_tag_buffer(parser, ensure_lowercase(c), true);
+       return NEXT_CHAR;

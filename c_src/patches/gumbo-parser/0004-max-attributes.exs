@@ -43,7 +43,12 @@ t = &String.replace_suffix(&1, "\n", "")
       the same lever Nokogiri's gumbo exposes under the same name; the count is the one
       that lever counts, of the names read for the tag with a repeated name included,
       not of the attributes kept — counting the kept ones let an element at the limit
-      with one repeated name through, where the reference refuses it.
+      with one repeated name through, where the reference refuses it. A name counts as
+      it starts rather than where it is added, because end of input inside a name
+      abandons the tag without ever finishing that name: counting at the add site left
+      the 401st name of an unfinished tag invisible, and the tag was dropped either way,
+      so the parse answered with a tree for a document past the bound it was given
+      (gilbertwong96/gumbo#8).
 
   The hash is what makes the cost linear whether or not the cap is set; the cap is
   what tells a caller their document was too much for the parse they asked for. Neither
@@ -344,6 +349,85 @@ t = &String.replace_suffix(&1, "\n", "")
         """)
     },
     %{
+      # The count is kept where a name starts and read where it is added. Both sites
+      # are in the tokenizer's state handlers, and both are needed: a name that end of
+      # input abandons is never added, so a count kept at the add site cannot see it.
+      file: "tokenizer.c",
+      count: 1,
+      from:
+        t.(~S"""
+        static bool finish_attribute_name(GumboParser* parser) {
+          GumboTokenizerState* tokenizer = parser->_tokenizer_state;
+          GumboTagState* tag_state = &tokenizer->_tag_state;
+          // May've been set by a previous attribute without a value; reset it here.
+          tag_state->_drop_next_attr_value = false;
+        """),
+      to:
+        t.(~S"""
+        // Counts an attribute name as it starts, whether or not it ever finishes: end of
+        // input inside a name abandons the tag without calling finish_attribute_name, and
+        // the reference trips its limit when the offending name starts rather than when it
+        // ends, so a name that never ends still counts and its element is still refused.
+        static void start_attribute_name(GumboParser* parser) {
+          GumboTagState* tag_state = &parser->_tokenizer_state->_tag_state;
+          if (++tag_state->_attribute_count > parser->_options->max_attributes) {
+            parser->_output->too_many_attributes = true;
+            tag_state->_drop_next_attr_value = true;
+          }
+        }
+
+        static bool finish_attribute_name(GumboParser* parser) {
+          GumboTokenizerState* tokenizer = parser->_tokenizer_state;
+          GumboTagState* tag_state = &tokenizer->_tag_state;
+          if (tag_state->_attribute_count > parser->_options->max_attributes) {
+            // Over the limit, and this is the name that put it there: it was counted when
+            // it started and is never added. _drop_next_attr_value still stands from
+            // there, so the value that follows is dropped too, which is why this comes
+            // before the reset below — that reset would clear the flag.
+            reinitialize_tag_buffer(parser);
+            return false;
+          }
+          // May've been set by a previous attribute without a value; reset it here.
+          tag_state->_drop_next_attr_value = false;
+        """)
+    },
+    %{
+      file: "tokenizer.c",
+      count: 2,
+      from:
+        t.(~S"""
+            case '\0':
+              tokenizer_add_parse_error(parser, GUMBO_ERR_UTF8_NULL);
+              gumbo_tokenizer_set_state(parser, GUMBO_LEX_ATTR_NAME);
+              append_char_to_temporary_buffer(parser, 0xfffd);
+        """),
+      to:
+        t.(~S"""
+            case '\0':
+              tokenizer_add_parse_error(parser, GUMBO_ERR_UTF8_NULL);
+              start_attribute_name(parser);
+              gumbo_tokenizer_set_state(parser, GUMBO_LEX_ATTR_NAME);
+              append_char_to_temporary_buffer(parser, 0xfffd);
+        """)
+    },
+    %{
+      file: "tokenizer.c",
+      count: 2,
+      from:
+        t.(~S"""
+            default:
+              gumbo_tokenizer_set_state(parser, GUMBO_LEX_ATTR_NAME);
+              append_char_to_tag_buffer(parser, ensure_lowercase(c), true);
+        """),
+      to:
+        t.(~S"""
+            default:
+              start_attribute_name(parser);
+              gumbo_tokenizer_set_state(parser, GUMBO_LEX_ATTR_NAME);
+              append_char_to_tag_buffer(parser, ensure_lowercase(c), true);
+        """)
+    },
+    %{
       file: "tokenizer.c",
       count: 1,
       from:
@@ -365,20 +449,10 @@ t = &String.replace_suffix(&1, "\n", "")
         """),
       to:
         t.(~S"""
+          // The count was taken as this name started and the cap checked there, so an
+          // attribute past it is never added here. hash_attribute_name also hashes an
+          // attribute that the cap refuses, but the vector never sees it.
           GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
-          if (++tag_state->_attribute_count > parser->_options->max_attributes) {
-            // Refused, and reported through the output rather than through an error: the
-            // names were not wrong, there were simply more of them than the caller
-            // allowed. This is checked before the duplicate scan, so the count is of the
-            // names read for the tag and a repeated name counts — the count the reference
-            // keeps. The value that follows belongs to an attribute that was never added,
-            // so drop it the way a duplicate does.
-            parser->_output->too_many_attributes = true;
-            tag_state->_drop_next_attr_value = true;
-            reinitialize_tag_buffer(parser);
-            return false;
-          }
-
           unsigned int hash = hash_attribute_name(tag_state->_attribute_hash_seed,
               tag_state->_buffer.data, tag_state->_buffer.length);
           unsigned int bucket = attribute_bucket_index(tag_state, hash);

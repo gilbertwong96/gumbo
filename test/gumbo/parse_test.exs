@@ -171,6 +171,35 @@ defmodule Gumbo.ParseTest do
              Gumbo.parse_fragment("<div #{names.(400)}>", :body, max_attributes: 400)
   end
 
+  test "a name an unfinished start tag started still counts toward max_attributes" do
+    names = fn count -> Enum.map_join(1..count, " ", &"a#{&1}=1") end
+
+    # The 401st name, and the tag never closes: the count is of the names read,
+    # and one was read even though no ">" arrived to finish it. The reference
+    # trips the limit as the offending name starts, so it refuses this document
+    # — the tag is dropped either way, but the parse is not "ok" for a document
+    # that was over the bound it was given.
+    assert {:error, :too_many_attributes} =
+             Gumbo.parse_fragment("<div #{names.(400)} a401", :body, max_attributes: 400)
+
+    # The same shape at the cap, and the same shape at the smallest scale there
+    # is: one name is the cap, a second one is over it. The 400th name is a399 in
+    # the count below, so this is 400 names with the last one unfinished.
+    assert {:ok, _} =
+             Gumbo.parse_fragment("<div #{names.(399)} a400", :body, max_attributes: 400)
+
+    assert {:error, :too_many_attributes} =
+             Gumbo.parse_fragment("<div a b", :body, max_attributes: 1)
+
+    assert {:ok, _} = Gumbo.parse_fragment("<div a", :body, max_attributes: 1)
+
+    # The reference raises rather than returning a tree, which is what the
+    # raising form does with the reason this one returns.
+    assert_raise ArgumentError, ~r/:too_many_attributes/, fn ->
+      Gumbo.parse_fragment!("<div a b", :body, max_attributes: 1)
+    end
+  end
+
   test "a fragment deeper than max_tree_depth is refused, not silently truncated" do
     deep = fn levels -> Enum.map_join(1..levels, "", fn _ -> "<div>" end) end
 

@@ -48,7 +48,10 @@ defmodule Gumbo.Options do
   # there). It is also the same lever Nokogiri's gumbo exposes as max_attributes,
   # though not with the same default: Nokogiri's own is 400, this one is 1024.
   # Exceeding it is refused rather than truncated, so a caller
-  # never gets a tree that differs from what the pinned parser builds.
+  # never gets a tree that differs from what the pinned parser builds. A name counts as the
+  # tokenizer reaches it rather than where it reaches the attribute list: end of input inside a
+  # name abandons the tag without finishing that name, and the tag is dropped either way, so a
+  # count kept at the list left the tag's last name uncounted and answered with a tree.
   @max_attributes_default 1024
 
   # GumboOptions.max_tree_depth, and the same convention: -1 for no cap. Nokogiri's
