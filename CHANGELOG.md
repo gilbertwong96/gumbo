@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Control characters and noncharacters in the input stream are kept in the tree, as the spec and
+  the reference keep them, instead of coming back as U+FFFD. They are reported for what they are —
+  `:control_character_in_input_stream` and `:noncharacter_in_input_stream` — and their `codepoint/1`
+  is the code point the decoder read, not the bytes under the cursor. A byte sequence that is not
+  valid UTF-8 is still replaced.
 - An unknown end tag that names no open element no longer closes the first element with an unknown
   name it meets. The walk the spec describes compares tag names, and `GumboTag` cannot carry one —
   every unknown tag is `GUMBO_TAG_UNKNOWN` — so `</fidiv>` closed an open `<f&#igure>` and moved the

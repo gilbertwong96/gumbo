@@ -141,6 +141,8 @@ static int gumbo_error_codepoint_term(ErlNifEnv* env,
   switch (error->type) {
     case GUMBO_ERR_UTF8_INVALID:
     case GUMBO_ERR_UTF8_TRUNCATED:
+    case GUMBO_ERR_CONTROL_CHARACTER_IN_INPUT_STREAM:
+    case GUMBO_ERR_NONCHARACTER_IN_INPUT_STREAM:
     case GUMBO_ERR_NUMERIC_CHAR_REF_WITHOUT_SEMICOLON:
     case GUMBO_ERR_NUMERIC_CHAR_REF_INVALID:
       *out = enif_make_uint64(env, error->v.codepoint);

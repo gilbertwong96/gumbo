@@ -16,7 +16,7 @@ defmodule Gumbo.Error do
 
   | Accessor | Error types |
   |---|---|
-  | `codepoint/1` | `:utf8_invalid`, `:utf8_truncated`, `:numeric_char_ref_without_semicolon`, `:numeric_char_ref_invalid` |
+  | `codepoint/1` | `:utf8_invalid`, `:utf8_truncated`, `:control_character_in_input_stream`, `:noncharacter_in_input_stream`, `:numeric_char_ref_without_semicolon`, `:numeric_char_ref_invalid` |
   | `tokenizer/1` | the tokenizer-state errors (e.g. `:tag_eof`, `:attr_name_invalid`, `:comment_eof`, `:doctype_invalid`) |
   | `text/1` | `:named_char_ref_without_semicolon`, `:named_char_ref_invalid` |
   | `duplicate_attr/1` | `:duplicate_attr` |

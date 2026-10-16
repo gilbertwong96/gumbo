@@ -277,20 +277,22 @@ $(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 	@mkdir -p $(dir $@)
 	$(CC) $(ALL_CFLAGS) -o $@ $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 
-# 0007 and 0008 are the two patches that change tree construction on purpose, so the parity
-# claim is made in two steps rather than one: the pin plus those two has to parse the whole
-# corpus identically to the shipped build — which is what still catches any of the other
+# 0007, 0008 and 0009 are the patches that change what the parser builds on purpose, so the
+# parity claim is made in two steps rather than one: the pin plus those three has to parse the
+# whole corpus identically to the shipped build — which is what still catches any of the other
 # patches moving a tree — and the pin alone may differ only in the documents whose tree holds
 # a select element, which is what bounds 0007's blast radius. The corpus keeps the select
-# shapes f57a7e9 added for the scope queries, and it holds no document 0008 moves: of the 1019
-# tree-construction documents in html5lib's corpus, the four that carry two distinct unknown
-# names at all are SVG or MathML, which is the handler that already compares names.
+# shapes f57a7e9 added for the scope queries, and it holds no document 0008 or 0009 moves: of
+# the 1019 tree-construction documents in html5lib's corpus, the four that carry two distinct
+# unknown names at all are SVG or MathML, which is the handler that already compares names, and
+# none of them writes a control character into text.
 #
 # The baseline copies the pin and applies those patches to it in file-name order, the way the
 # build's copy applies the whole series, and it compiles against the pin's own headers because
 # that is the tree each of them is written against.
 BEHAVIOUR_PATCHES := $(GUMBO_PATCH_DIR)/0007-select-in-scope.patch \
-                     $(GUMBO_PATCH_DIR)/0008-unknown-end-tag-by-name.patch
+                     $(GUMBO_PATCH_DIR)/0008-unknown-end-tag-by-name.patch \
+                     $(GUMBO_PATCH_DIR)/0009-keep-control-characters.patch
 GUMBO_BASELINE_SRC_DIR := $(OBJ_DIR)/gumbo-src-baseline
 GUMBO_BASELINE_STAMP := $(GUMBO_BASELINE_SRC_DIR)/.patched
 GUMBO_BASELINE_OBJ_DIR := $(OBJ_DIR)/gumbo-parser-baseline
