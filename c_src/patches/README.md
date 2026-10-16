@@ -78,12 +78,12 @@ silent-corruption bugs in 0002 while that patch was being written (a struct copy
 that carried the new flag onto a clone, and a tenth place where the stack is
 mutated, in adoption agency step 13.7).
 
-0007, 0008 and 0009 are the patches that change what the parser builds on purpose, so the
-claim is made in two steps rather than one. A third binary — the pin with those three applied
+0007, 0008, 0009 and 0010 are the patches that change what the parser builds on purpose, so the
+claim is made in two steps rather than one. A third binary — the pin with those four applied
 to it alone, and compiled against the pin's own headers — has to parse the whole corpus
 identically to the shipped build, which is what still catches any of the other patches
 moving a tree, and the pin alone may differ only in the documents whose tree holds a
-`select` element, which is what bounds 0007's blast radius. The corpus keeps the
+`select` element, which is what bounds 0007's and 0010's blast radius. The corpus keeps the
 `<select>`, `<option>`, `<optgroup>` and `<selectedcontent>` shapes 0002's definitions
 were written for rather than dropping them to make the old one-step comparison hold, and
 it holds no document 0008 or 0009 moves: of the 1019 tree-construction documents in
@@ -131,8 +131,9 @@ a 20 000-level tree survives a 320 KB stack. Both are hard gates now — after t
 | 0007 | the scope queries not stopping at a `select`, i.e. `</p>` inside one closing the `p` outside it instead of the empty `p` it inserts there | the select shapes in `test/gumbo/select_scope_test.exs`, plus `check-parity` in its two-step form, which allows a difference against the pin only in documents that hold a select |
 | 0008 | an end tag that names no open element closing the first element with an unknown name it meets, i.e. a name compared as `GumboTag` where every unknown name is `GUMBO_TAG_UNKNOWN`, so `<f&#igure>` is closed by `</fidiv>` | the shapes in `test/gumbo/unknown_end_tag_test.exs`, plus `check-parity` in its two-step form, which is also where the corpus is measured to hold no document this patch moves |
 | 0009 | the input stream's decoder replacing the characters the spec only calls parse errors — controls and noncharacters — with U+FFFD, and reporting all of them as `UTF8_INVALID`, so a pasted control byte comes back as U+FFFD and a multi-byte one reported its bytes as its code point | the shapes in `test/gumbo/control_characters_test.exs`, plus `check-parity` in its two-step form, which is also where the corpus is measured to hold no document this patch moves |
+| 0010 | the "special" category not naming a `select`, so an end tag with no matching open element walked past an open select, reached whatever sat above it, and took both with it — `</option>` inside a `<select>` is the reported shape, and it moved everything the document wrote after the end tag out of the select | the shapes in `test/gumbo/special_category_test.exs`, plus `check-parity` in its two-step form, which is what bounds it to documents that hold a select |
 
-Eight of the nine are generated. The definition next to a patch — `NNNN-name.exs` — lists the
+Nine of the ten are generated. The definition next to a patch — `NNNN-name.exs` — lists the
 substitutions that make it, each with the count it must find, and `mix gumbo.patches` applies the
 earlier patches to a copy of the pin, runs the substitutions, and writes the patch back out as the
 diff against the pinned tree. That is also how they are rebased after a submodule bump:
