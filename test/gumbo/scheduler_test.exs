@@ -57,8 +57,12 @@ defmodule Gumbo.SchedulerTest do
     # first release rehearsal measured 11.9 ms on an Intel macOS runner, past the
     # 10 ms bound the earlier form used, while a missing dirty dispatch produced the
     # same 28-50 ms there that it produces here. The ratio is what the dispatch
-    # decides, and it does not move with the runner: measured here at up to 0.2 ms
-    # against 28-50 ms, a factor of well over 100.
+    # decides, and it does not move with the runner: well over 100 where this was
+    # written, and 1489 us against 11981 us — a factor of 8 — on an aarch64 macOS
+    # runner. A dispatch that sends the large parse to a normal scheduler collapses it:
+    # forcing the dispatch off measured 14478 us against 33031 us (2.3) on the machine
+    # this was written on, and 28585 us against 31360 us (1.1) before that. Four is
+    # between the two bands, not ten: ten was the bound that made a shared runner fail.
     #
     # What still fails this test: a dispatch that sends the large parse to a normal
     # scheduler, however it is broken — the ratio then collapses to about 1.
@@ -93,7 +97,7 @@ defmodule Gumbo.SchedulerTest do
     forced_normal = Enum.min(Enum.map(1..3, fn _ -> storm.(dirty: false) end))
     dispatched = Enum.min(Enum.map(1..3, fn _ -> storm.([]) end))
 
-    assert dispatched * 10 < forced_normal,
+    assert dispatched * 4 < forced_normal,
            "a normal scheduler waited #{dispatched} us while the large parse was dispatched " <>
              "by size, and #{forced_normal} us when it was forced onto a normal one"
   end
