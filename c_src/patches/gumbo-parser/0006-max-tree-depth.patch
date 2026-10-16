@@ -19,7 +19,7 @@ inconsistent state. Nothing else changes: the default is no limit, so a parse th
 sets nothing is bit-identical to the pin, which is what `make check-parity` asserts.
 --- a/src/gumbo.h
 +++ b/src/gumbo.h
-@@ -656,6 +656,19 @@
+@@ -658,6 +658,19 @@
     * the number, because the caller is the one that chose the thread.
     */
    size_t stack_budget;
@@ -39,7 +39,7 @@ sets nothing is bit-identical to the pin, which is what `make check-parity` asse
  } GumboOptions;
  
  /**
-@@ -705,6 +718,14 @@
+@@ -707,6 +720,14 @@
     * rather than returning it.
     */
    bool too_deep;

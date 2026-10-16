@@ -35,8 +35,8 @@ a crash into a refusal.
 ---
 --- a/src/gumbo.h
 +++ b/src/gumbo.h
-@@ -646,7 +646,24 @@
-    * and an element well inside the limit is unaffected.
+@@ -648,7 +648,24 @@
+    * limit is unaffected.
     */
    unsigned int max_attributes;
 +
@@ -60,7 +60,7 @@ a crash into a refusal.
  
  /** Default options struct; use this with gumbo_parse_with_options. */
  extern const GumboOptions kGumboDefaultOptions;
-@@ -681,6 +698,13 @@
+@@ -683,6 +700,13 @@
     * to keep.
     */
    bool too_many_attributes;

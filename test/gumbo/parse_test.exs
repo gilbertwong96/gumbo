@@ -142,6 +142,35 @@ defmodule Gumbo.ParseTest do
     assert {:ok, _} = Gumbo.parse(over, max_attributes: -1)
   end
 
+  test "a repeated attribute name counts toward max_attributes" do
+    names = fn count -> Enum.map_join(1..count, " ", &"a#{&1}=1") end
+
+    # 401 names for a cap of 400: 400 distinct and one repeated. The repeated name
+    # returned before the cap was consulted, so counting survivors accepted it
+    # where the reference refuses.
+    assert {:error, :too_many_attributes} =
+             Gumbo.parse_fragment("<div #{names.(400)} a1=again>", :body, max_attributes: 400)
+
+    # The count is of the names read, so a repeat in the middle of a tag counts
+    # too — which a survivor count cannot express at all.
+    assert {:error, :too_many_attributes} =
+             Gumbo.parse_fragment("<div a b a c>", :body, max_attributes: 3)
+
+    # Inside the cap a repeated name is still just a dropped duplicate.
+    {:ok, output} = Gumbo.parse_fragment("<div a b a c>", :body, max_attributes: 4)
+
+    assert output
+           |> Gumbo.Output.fragment_nodes()
+           |> hd()
+           |> Gumbo.Node.attribute_map()
+           |> Map.keys()
+           |> Enum.sort() == ["a", "b", "c"]
+
+    # Exactly the cap is inside it, as before: the count is of names read.
+    assert {:ok, _} =
+             Gumbo.parse_fragment("<div #{names.(400)}>", :body, max_attributes: 400)
+  end
+
   test "a fragment deeper than max_tree_depth is refused, not silently truncated" do
     deep = fn levels -> Enum.map_join(1..levels, "", fn _ -> "<div>" end) end
 

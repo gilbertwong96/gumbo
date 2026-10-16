@@ -15,10 +15,13 @@ Two things about attributes, both measured on a 16 MiB input:
     cost time.
 
   * There was no ceiling at all on how many attributes one element could carry.
-    GumboOptions.max_attributes now sets one, 1024 by default, and attributes beyond
-    it are dropped and GumboOutput.too_many_attributes is set. The cap is what makes
-    the answer to "how bad can this get" a number rather than a limit, and it is the
-    same lever Nokogiri's gumbo exposes under the same name.
+    GumboOptions.max_attributes now sets one, 1024 by default, and attribute names
+    beyond it are dropped and GumboOutput.too_many_attributes is set. The cap is what
+    makes the answer to "how bad can this get" a number rather than a limit, and it is
+    the same lever Nokogiri's gumbo exposes under the same name; the count is the one
+    that lever counts, of the names read for the tag with a repeated name included,
+    not of the attributes kept — counting the kept ones let an element at the limit
+    with one repeated name through, where the reference refuses it.
 
 The hash is what makes the cost linear whether or not the cap is set; the cap is
 what tells a caller their document was too much for the parse they asked for. Neither
@@ -29,23 +32,25 @@ tree difference rather than as a hang nobody tests.
 ---
 --- a/src/gumbo.h
 +++ b/src/gumbo.h
-@@ -628,6 +628,15 @@
+@@ -628,6 +628,17 @@
     * Default: GUMBO_NAMESPACE_HTML
     */
    GumboNamespaceEnum fragment_namespace;
 +
 +  /**
-+   * The largest number of attributes one element may carry. Attributes beyond it
++   * The largest number of attribute names one element may carry. Names beyond it
 +   * are dropped rather than added, and GumboOutput.too_many_attributes is set so
-+   * that the caller can tell. UINT_MAX (or the -1 this library passes for it)
-+   * means no limit; the default is 1024. Nothing else about the parse changes,
-+   * and an element well inside the limit is unaffected.
++   * that the caller can tell. A repeated name counts: the count is of the names
++   * read for the tag, which is what the reference this lever comes from counts.
++   * UINT_MAX (or the -1 this library passes for it) means no limit; the default is
++   * 1024. Nothing else about the parse changes, and an element well inside the
++   * limit is unaffected.
 +   */
 +  unsigned int max_attributes;
  } GumboOptions;
  
  /** Default options struct; use this with gumbo_parse_with_options. */
-@@ -655,6 +664,14 @@
+@@ -655,6 +666,14 @@
     * reported so we can work out something appropriate for your use-case.
     */
    GumboVector /* GumboError */ errors;
@@ -81,7 +86,7 @@ tree difference rather than as a hang nobody tests.
    gumbo_init_errors(parser);
 --- a/src/tokenizer.c
 +++ b/src/tokenizer.c
-@@ -94,6 +94,18 @@
+@@ -94,6 +94,24 @@
    // attributes are added as soon as their attribute name state is complete, and
    // values are filled in by operating on _attributes.data[attributes.length-1].
    GumboVector /* GumboAttribute */ _attributes;
@@ -97,10 +102,16 @@ tree difference rather than as a hang nobody tests.
 +  GumboVector /* unsigned int */ _attribute_buckets;
 +  GumboVector /* unsigned int */ _attribute_next;
 +  unsigned int _attribute_hash_seed;
++
++  // Every attribute name this tag state has finished, a repeated name included.
++  // The cap is checked against this rather than against _attributes.length, which
++  // counts the names that survived the duplicate check and so cannot bound what
++  // the tag actually made the parser read.
++  unsigned int _attribute_count;
  
    // If true, the next attribute value to be finished should be dropped.  This
    // happens if a duplicate attribute name is encountered - we want to consume
-@@ -520,6 +532,63 @@
+@@ -520,6 +538,63 @@
  
  // Debug-only function that explicitly sets the attribute vector data to NULL so
  // it can be asserted on tag creation, verifying that there are no memory leaks.
@@ -164,7 +175,7 @@ tree difference rather than as a hang nobody tests.
  static void mark_tag_state_as_empty(GumboTagState* tag_state) {
  #ifndef NDEBUG
    tag_state->_attributes = kGumboEmptyVector;
-@@ -536,6 +605,7 @@
+@@ -536,6 +611,7 @@
      output->v.start_tag.attributes = tag_state->_attributes;
      output->v.start_tag.is_self_closing = tag_state->_is_self_closing;
      tag_state->_last_start_tag = tag_state->_tag;
@@ -172,7 +183,7 @@ tree difference rather than as a hang nobody tests.
      mark_tag_state_as_empty(tag_state);
      gumbo_debug(
          "Emitted start tag %s.\n", gumbo_normalized_tagname(tag_state->_tag));
-@@ -550,6 +620,7 @@
+@@ -550,6 +626,7 @@
        gumbo_destroy_attribute(parser, tag_state->_attributes.data[i]);
      }
      gumbo_parser_deallocate(parser, tag_state->_attributes.data);
@@ -180,7 +191,7 @@ tree difference rather than as a hang nobody tests.
      mark_tag_state_as_empty(tag_state);
      gumbo_debug(
          "Emitted end tag %s.\n", gumbo_normalized_tagname(tag_state->_tag));
-@@ -574,6 +645,7 @@
+@@ -574,6 +651,7 @@
      gumbo_destroy_attribute(parser, tag_state->_attributes.data[i]);
    }
    gumbo_parser_deallocate(parser, tag_state->_attributes.data);
@@ -188,7 +199,7 @@ tree difference rather than as a hang nobody tests.
    mark_tag_state_as_empty(tag_state);
    gumbo_string_buffer_destroy(parser, &tag_state->_buffer);
    gumbo_debug("Abandoning current tag.\n");
-@@ -694,11 +766,22 @@
+@@ -694,11 +772,23 @@
    gumbo_string_buffer_append_codepoint(parser, c, &tag_state->_buffer);
  
    assert(tag_state->_attributes.data == NULL);
@@ -208,14 +219,28 @@ tree difference rather than as a hang nobody tests.
 +  tag_state->_attribute_next.capacity = 0;
 +  tag_state->_attribute_hash_seed =
 +      (unsigned int) (uintptr_t) tag_state->_attribute_buckets.data;
++  tag_state->_attribute_count = 0;
    tag_state->_drop_next_attr_value = false;
    tag_state->_is_start_tag = is_start_tag;
    tag_state->_is_self_closing = false;
-@@ -789,7 +872,13 @@
+@@ -789,7 +879,26 @@
    assert(tag_state->_attributes.capacity);
  
    GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
 -  for (unsigned int i = 0; i < attributes->length; ++i) {
++  if (++tag_state->_attribute_count > parser->_options->max_attributes) {
++    // Refused, and reported through the output rather than through an error: the
++    // names were not wrong, there were simply more of them than the caller
++    // allowed. This is checked before the duplicate scan, so the count is of the
++    // names read for the tag and a repeated name counts — the count the reference
++    // keeps. The value that follows belongs to an attribute that was never added,
++    // so drop it the way a duplicate does.
++    parser->_output->too_many_attributes = true;
++    tag_state->_drop_next_attr_value = true;
++    reinitialize_tag_buffer(parser);
++    return false;
++  }
++
 +  unsigned int hash = hash_attribute_name(tag_state->_attribute_hash_seed,
 +      tag_state->_buffer.data, tag_state->_buffer.length);
 +  unsigned int bucket = attribute_bucket_index(tag_state, hash);
@@ -226,26 +251,15 @@ tree difference rather than as a hang nobody tests.
      GumboAttribute* attr = attributes->data[i];
      if (strlen(attr->name) == tag_state->_buffer.length &&
          memcmp(attr->name, tag_state->_buffer.data,
-@@ -799,6 +888,18 @@
+@@ -799,6 +908,7 @@
        tag_state->_drop_next_attr_value = true;
        return false;
      }
 +    link = (unsigned int) (uintptr_t) tag_state->_attribute_next.data[i];
-+  }
-+
-+  if (attributes->length >= parser->_options->max_attributes) {
-+    // Dropped, and reported through the output rather than through an error: the
-+    // attributes were not wrong, there were simply more than the caller allowed. The
-+    // value that follows belongs to an attribute that was never added, so drop it the
-+    // way a duplicate does.
-+    parser->_output->too_many_attributes = true;
-+    tag_state->_drop_next_attr_value = true;
-+    reinitialize_tag_buffer(parser);
-+    return false;
    }
  
    GumboAttribute* attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));
-@@ -810,6 +911,13 @@
+@@ -810,6 +920,13 @@
    copy_over_original_tag_text(
        parser, &attr->original_value, &attr->name_start, &attr->name_end);
    gumbo_vector_add(parser, attr, attributes);
@@ -259,7 +273,7 @@ tree difference rather than as a hang nobody tests.
    reinitialize_tag_buffer(parser);
    return true;
  }
-@@ -854,6 +962,13 @@
+@@ -854,6 +971,13 @@
    tokenizer->_is_current_node_foreign = false;
    tokenizer->_is_in_cdata = false;
    tokenizer->_tag_state._last_start_tag = GUMBO_TAG_LAST;
