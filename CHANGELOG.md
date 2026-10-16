@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An end tag inside a `<select>` that names no open element — `</option>` is the reported one — no
+  longer walks past the select and closes everything above it, which used to move everything the
+  document wrote after that end tag out of the select. The pinned base's special-category list is a
+  stale copy that never named `select`, so the walk had no reason to stop there; patch 0010 puts it
+  in, and those shapes now match Chrome's tree
+  ([#10](https://github.com/gilbertwong96/gumbo/issues/10), [#11](https://github.com/gilbertwong96/gumbo/issues/11)).
 - Control characters and noncharacters in the input stream are kept in the tree, as the spec and
   the reference keep them, instead of coming back as U+FFFD. They are reported for what they are —
   `:control_character_in_input_stream` and `:noncharacter_in_input_stream` — and their `codepoint/1`
