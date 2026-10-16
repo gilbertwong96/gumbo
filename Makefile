@@ -277,33 +277,38 @@ $(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 	@mkdir -p $(dir $@)
 	$(CC) $(ALL_CFLAGS) -o $@ $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 
-# 0007 is the first patch that changes tree construction on purpose, so the parity claim
-# is made in two steps rather than one: the pin plus that one patch has to parse the whole
+# 0007 and 0008 are the two patches that change tree construction on purpose, so the parity
+# claim is made in two steps rather than one: the pin plus those two has to parse the whole
 # corpus identically to the shipped build — which is what still catches any of the other
-# patches moving a tree — and the pin alone may differ only in the documents whose tree
-# holds a select element, which is what bounds 0007's blast radius. The corpus keeps the
-# select shapes f57a7e9 added for the scope queries.
+# patches moving a tree — and the pin alone may differ only in the documents whose tree holds
+# a select element, which is what bounds 0007's blast radius. The corpus keeps the select
+# shapes f57a7e9 added for the scope queries, and it holds no document 0008 moves: of the 1019
+# tree-construction documents upstream runs, the four that carry two distinct unknown names at
+# all are SVG or MathML, which is the handler that already compares names.
 #
-# The baseline copies the pin and applies that one patch to it, the way the build's copy
-# applies the whole series in file-name order, and it compiles against the pin's own
-# headers because that is the tree the patch is written against.
-BEHAVIOUR_PATCH := $(GUMBO_PATCH_DIR)/0007-select-in-scope.patch
+# The baseline copies the pin and applies those patches to it in file-name order, the way the
+# build's copy applies the whole series, and it compiles against the pin's own headers because
+# that is the tree each of them is written against.
+BEHAVIOUR_PATCHES := $(GUMBO_PATCH_DIR)/0007-select-in-scope.patch \
+                     $(GUMBO_PATCH_DIR)/0008-unknown-end-tag-by-name.patch
 GUMBO_BASELINE_SRC_DIR := $(OBJ_DIR)/gumbo-src-baseline
 GUMBO_BASELINE_STAMP := $(GUMBO_BASELINE_SRC_DIR)/.patched
 GUMBO_BASELINE_OBJ_DIR := $(OBJ_DIR)/gumbo-parser-baseline
 GUMBO_BASELINE_OBJS := $(patsubst $(GUMBO_DIR)/src/%.c,$(GUMBO_BASELINE_OBJ_DIR)/%.o,$(GUMBO_SRCS))
 PARITY_DUMP_BASELINE := $(OBJ_DIR)/parity_dump_baseline
 
-$(GUMBO_BASELINE_STAMP): $(GUMBO_VENDORED) $(BEHAVIOUR_PATCH) | $(GUMBO_HEADER)
-	@echo "  vendored: copying $(GUMBO_DIR)/src and applying $(notdir $(BEHAVIOUR_PATCH))"
+$(GUMBO_BASELINE_STAMP): $(GUMBO_VENDORED) $(BEHAVIOUR_PATCHES) | $(GUMBO_HEADER)
+	@echo "  vendored: copying $(GUMBO_DIR)/src and applying $(notdir $(BEHAVIOUR_PATCHES))"
 	@rm -rf $(GUMBO_BASELINE_SRC_DIR)
 	@mkdir -p $(GUMBO_BASELINE_SRC_DIR)
 	@cp -R $(GUMBO_DIR)/src $(GUMBO_BASELINE_SRC_DIR)/src
-	@git apply -p1 --directory=$(GUMBO_BASELINE_SRC_DIR) "$(BEHAVIOUR_PATCH)" || { \
-		echo "error: $(notdir $(BEHAVIOUR_PATCH)) does not apply to the pin on its own"; \
-		echo "       it is written against the pinned tree: c_src/patches/README.md"; \
-		exit 1; \
-	}
+	@for patch in $(BEHAVIOUR_PATCHES); do \
+		git apply -p1 --directory=$(GUMBO_BASELINE_SRC_DIR) "$$patch" || { \
+			echo "error: $$(basename $$patch) does not apply to the pin on its own"; \
+			echo "       it is written against the pinned tree: c_src/patches/README.md"; \
+			exit 1; \
+		}; \
+	done
 	@touch $@
 
 $(GUMBO_BASELINE_OBJ_DIR)/%.o: $(GUMBO_BASELINE_STAMP)
@@ -323,12 +328,12 @@ check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BASELINE) $(PARITY_DUMP_BUILD)
 	$(PARITY_DUMP_BASELINE) dump < "$$docs" > "$$baseline" || exit 1; \
 	$(PARITY_DUMP_BUILD) dump < "$$docs" > "$$build" || exit 1; \
 	if ! cmp -s "$$baseline" "$$build"; then \
-		echo "FAIL: a patch other than $(notdir $(BEHAVIOUR_PATCH)) changes tree construction; first divergence:"; \
+		echo "FAIL: a patch other than $(notdir $(BEHAVIOUR_PATCHES)) changes tree construction; first divergence:"; \
 		diff "$$baseline" "$$build" | head -20; \
 		exit 1; \
 	fi; \
 	if cmp -s "$$pinned" "$$baseline"; then \
-		echo "FAIL: $(notdir $(BEHAVIOUR_PATCH)) changed no tree, so nothing here covers it"; \
+		echo "FAIL: $(notdir $(BEHAVIOUR_PATCHES)) changed no tree, so nothing here covers it"; \
 		exit 1; \
 	fi; \
 	mkdir -p "$$split/pin" "$$split/base"; \
@@ -343,11 +348,11 @@ check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BASELINE) $(PARITY_DUMP_BUILD)
 		changed=$$((changed + 1)); \
 		grep -q 'tag=112,' "$$f" && continue; \
 		failed=1; \
-		echo "FAIL: document $$i differs but holds no select element, so $(notdir $(BEHAVIOUR_PATCH)) is not what moved it:"; \
+		echo "FAIL: document $$i differs but holds no select element, so neither $(notdir $(BEHAVIOUR_PATCHES)) is what moved it:"; \
 		diff "$$split/base/$$i" "$$f" | head -20; \
 	done; \
 	[ $$failed -eq 0 ] || exit 1; \
-	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCH)) and with the shipped build, and the pin alone differs only in the $$changed that hold a select"
+	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCHES)) and with the shipped build, and the pin alone differs only in the $$changed that hold a select"
 
 # The sanitizer gate. It is the only net there is for a memory-safety bug inside
 # gumbo itself — residual 2 of the list this project keeps of what could still take

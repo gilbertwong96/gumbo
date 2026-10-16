@@ -75,15 +75,19 @@ silent-corruption bugs in 0002 while that patch was being written (a struct copy
 that carried the new flag onto a clone, and a tenth place where the stack is
 mutated, in adoption agency step 13.7).
 
-0007 is the first patch that changes tree construction on purpose, so the claim is
-made in two steps rather than one. A third binary — the pin with 0007 applied to it
+0007 and 0008 are the patches that change tree construction on purpose, so the claim is
+made in two steps rather than one. A third binary — the pin with those two applied to it
 alone, and compiled against the pin's own headers — has to parse the whole corpus
-identically to the shipped build, which is what still catches any of the other
-patches moving a tree, and the pin alone may differ only in the documents whose tree
-holds a `select` element, which is what bounds 0007's blast radius. The corpus keeps
-the `<select>`, `<option>`, `<optgroup>` and `<selectedcontent>` shapes 0002's
-definitions were written for rather than dropping them to make the old one-step
-comparison hold.
+identically to the shipped build, which is what still catches any of the other patches
+moving a tree, and the pin alone may differ only in the documents whose tree holds a
+`select` element, which is what bounds 0007's blast radius. The corpus keeps the
+`<select>`, `<option>`, `<optgroup>` and `<selectedcontent>` shapes 0002's definitions
+were written for rather than dropping them to make the old one-step comparison hold, and
+it holds no document 0008 moves: of the 1019 tree-construction documents upstream runs,
+the four that carry two distinct unknown names at all are SVG or MathML, which is the
+handler that already compares names. 0008's own shapes are held by
+`test/gumbo/unknown_end_tag_test.exs`, and the corpus is where the fact that it moves
+none of them is measured.
 
 `make check-sanitizers` (wired in as `check.sanitizers`) builds the same harness
 against the patched sources with AddressSanitizer and UndefinedBehaviorSanitizer and
@@ -121,8 +125,9 @@ a 20 000-level tree survives a 320 KB stack. Both are hard gates now — after t
 | 0005 | nothing that was measured: it is the backstop for a depth-proportional recursion nobody has found | `check-stack-guard`, which is the one gate that can only test the mechanism, because no document makes the C stack grow with its nesting depth any more |
 | 0006 | nothing either: a lever Nokogiri's gumbo has and this one did not, for applications pinned to that reference | `check-parity` (whose corpus now nests past the reference's default ceiling), plus a cap test, a boundary test and this library's own refusal |
 | 0007 | the scope queries not stopping at a `select`, i.e. `</p>` inside one closing the `p` outside it instead of the empty `p` it inserts there | the select shapes in `test/gumbo/select_scope_test.exs`, plus `check-parity` in its two-step form, which allows a difference against the pin only in documents that hold a select |
+| 0008 | an end tag that names no open element closing the first element with an unknown name it meets, i.e. a name compared as `GumboTag` where every unknown name is `GUMBO_TAG_UNKNOWN`, so `<f&#igure>` is closed by `</fidiv>` | the shapes in `test/gumbo/unknown_end_tag_test.exs`, plus `check-parity` in its two-step form, which is also where the corpus is measured to hold no document this patch moves |
 
-Six of the seven are generated. The definition next to a patch — `NNNN-name.exs` — lists the
+Seven of the eight are generated. The definition next to a patch — `NNNN-name.exs` — lists the
 substitutions that make it, each with the count it must find, and `mix gumbo.patches` applies the
 earlier patches to a copy of the pin, runs the substitutions, and writes the patch back out as the
 diff against the pinned tree. That is also how they are rebased after a submodule bump:
@@ -134,7 +139,7 @@ mix gumbo.patches --check    # assert the committed patches are what the definit
 
 Whether a patch is cumulative is part of its definition. 0005 and 0006 edit text that earlier
 patches introduced, so their `priors: true` has the tool apply 0001-0004 and 0001-0005 first, while
-0002, 0003, 0004 and 0007 were written against the pinned tree and say `priors: false`.
+0002, 0003, 0004, 0007 and 0008 were written against the pinned tree and say `priors: false`.
 
 Each substitution asserts how many occurrences it must find, so a submodule bump that moves any of
 the text fails there — naming the file and the snippet — rather than producing a patch that applies

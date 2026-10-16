@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An unknown end tag that names no open element no longer closes the first element with an unknown
+  name it meets. The walk the spec describes compares tag names, and `GumboTag` cannot carry one —
+  every unknown tag is `GUMBO_TAG_UNKNOWN` — so `</fidiv>` closed an open `<f&#igure>` and moved the
+  text after it out of the element. Reported as #3, on the broken custom-element markup a chat
+  application receives when a user pastes it.
 - `:max_attributes` counts the attribute names read for one element, a repeated name included, so
   an element at the limit with one repeated name is refused with
   `{:error, :too_many_attributes}`, the way the reference refuses it. Counting the names that
