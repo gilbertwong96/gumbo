@@ -39,6 +39,9 @@ works the same way.
 - Do not hand-write a patch. Generate it, or the hunk counts will not match and
   `git apply` will say `corrupt patch` — which is what happened the first time
   here. The recipe for the current one is below.
+- Adding one at the end of the series: write `NNNN-name.exs` next to the others and run
+  `mix gumbo.patches`. That writes the `.patch` and says `wrote NNNN-name.patch`; creating
+  the file first, even empty, only gives the build something to apply.
 - Say *why* in the header file, since the patch cannot carry a commit message
   that survives `git apply`.
 
