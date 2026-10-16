@@ -283,8 +283,8 @@ $(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 # patches moving a tree — and the pin alone may differ only in the documents whose tree holds
 # a select element, which is what bounds 0007's blast radius. The corpus keeps the select
 # shapes f57a7e9 added for the scope queries, and it holds no document 0008 moves: of the 1019
-# tree-construction documents upstream runs, the four that carry two distinct unknown names at
-# all are SVG or MathML, which is the handler that already compares names.
+# tree-construction documents in html5lib's corpus, the four that carry two distinct unknown
+# names at all are SVG or MathML, which is the handler that already compares names.
 #
 # The baseline copies the pin and applies those patches to it in file-name order, the way the
 # build's copy applies the whole series, and it compiles against the pin's own headers because

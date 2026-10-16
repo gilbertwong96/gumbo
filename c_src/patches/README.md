@@ -83,9 +83,9 @@ moving a tree, and the pin alone may differ only in the documents whose tree hol
 `select` element, which is what bounds 0007's blast radius. The corpus keeps the
 `<select>`, `<option>`, `<optgroup>` and `<selectedcontent>` shapes 0002's definitions
 were written for rather than dropping them to make the old one-step comparison hold, and
-it holds no document 0008 moves: of the 1019 tree-construction documents upstream runs,
-the four that carry two distinct unknown names at all are SVG or MathML, which is the
-handler that already compares names. 0008's own shapes are held by
+it holds no document 0008 moves: of the 1019 tree-construction documents in html5lib's
+corpus, the four that carry two distinct unknown names at all are SVG or MathML, which is
+the handler that already compares names. 0008's own shapes are held by
 `test/gumbo/unknown_end_tag_test.exs`, and the corpus is where the fact that it moves
 none of them is measured.
 

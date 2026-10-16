@@ -51,8 +51,9 @@ t = &String.replace_suffix(&1, "\n", "")
 
   Upstream has never compared names in this path: 0.14.1 does not, and its master still
   does not. Nor could its own gate ask for the change: of the 1019 tree-construction
-  documents it runs, the four that carry two distinct unknown names at all are in SVG
-  or MathML, which is the foreign path, the one that already compares names. So this
+  documents in html5lib's corpus, the four that carry two distinct unknown names at all
+  are in SVG or MathML, which is the foreign path, the one that already compares names.
+  So this
   patch is held by `test/gumbo/unknown_end_tag_test.exs` rather than by that corpus, and
   like 0007 it changes tree construction on purpose, which puts it outside the "pinned
   and patched trees are identical" claim: `make check-parity` applies this patch to its
