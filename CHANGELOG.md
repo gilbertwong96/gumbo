@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   payload, and the pair a browser reports — in both the `:full` and `:content` shapes and
   through `Gumbo.Node.target/1` and `Gumbo.Node.data/1`. `text` still carries the one string the
   C library stores.
+- A "Differences from Nokogiri's gumbo" section in the README: what each side vendors, and the
+  shapes measured to differ — processing instructions, template handling, and the two levers whose
+  defaults differ.
 
 ### Changed
 
