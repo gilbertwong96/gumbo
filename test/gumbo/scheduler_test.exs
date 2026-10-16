@@ -50,28 +50,30 @@ defmodule Gumbo.SchedulerTest do
   test "large parses do not starve a normal scheduler" do
     html = HTML.nested("div", 2_000) <> String.duplicate("<p>text</p>", 5_000)
 
-    # The ticker spawns the parsers itself, so its scheduler's run queue
-    # holds parser tasks when it yields and the loop cannot finish before
-    # the storm starts. 2 x schedulers_online, each parsing twice, keeps
-    # every normal scheduler busy for ~2 parse durations when the dirty
-    # dispatch is missing. Measured over 10 runs on this machine:
-    # forced-normal max gaps are 28-50 ms (9/10 runs; the one miss is a
-    # normal scheduler that holds no parser task, which stays free either
-    # way), dirty-path gaps stay <= 0.2 ms — so a 10 ms bound fails without
-    # the dirty dispatch and passes with it. The brief's 50 ms bound never
-    # fails here: forced normal peaked at 41 ms in the brief's shape.
-    # Three storms, and the smallest max-gap is the result. A shared runner is not this machine: the
-    # first release rehearsal measured 11.9 ms on an Intel macOS runner — above the bound, and far
-    # below the 28-50 ms a missing dirty dispatch produces — so one sample of this measurement can be
-    # about the runner rather than about the dispatch. The minimum cannot be: a build without the
-    # dirty path is over the bound on every pass, which is the same 9-of-10 caveat the numbers above
-    # were measured with.
-    storm = fn ->
+    # This is a contrast measured inside one run, not an absolute bound: the same
+    # document is parsed twice, once forced onto a normal scheduler and once left to
+    # the dispatch, and what is compared is how long a normal scheduler waited for its
+    # turn under each. An absolute bound could only ever be about the runner — the
+    # first release rehearsal measured 11.9 ms on an Intel macOS runner, past the
+    # 10 ms bound the earlier form used, while a missing dirty dispatch produced the
+    # same 28-50 ms there that it produces here. The ratio is what the dispatch
+    # decides, and it does not move with the runner: measured here at up to 0.2 ms
+    # against 28-50 ms, a factor of well over 100.
+    #
+    # What still fails this test: a dispatch that sends the large parse to a normal
+    # scheduler, however it is broken — the ratio then collapses to about 1.
+    #
+    # The ticker spawns the parsers itself, so its scheduler's run queue holds parser
+    # tasks when it yields and the loop cannot finish before the storm starts.
+    # 2 x schedulers_online, each parsing twice, keeps every normal scheduler busy for
+    # ~2 parse durations when the dirty dispatch is missing. Three storms per side, and
+    # each side's smallest max-gap is its result.
+    storm = fn options ->
       ticker =
         Task.async(fn ->
           parsers =
             for _ <- 1..(System.schedulers_online() * 2) do
-              Task.async(fn -> for _ <- 1..2, do: Gumbo.parse(html) end)
+              Task.async(fn -> for _ <- 1..2, do: Gumbo.parse(html, options) end)
             end
 
           gaps =
@@ -88,7 +90,12 @@ defmodule Gumbo.SchedulerTest do
       Task.await(ticker)
     end
 
-    assert Enum.min(Enum.map(1..3, fn _ -> storm.() end)) < 10_000
+    forced_normal = Enum.min(Enum.map(1..3, fn _ -> storm.(dirty: false) end))
+    dispatched = Enum.min(Enum.map(1..3, fn _ -> storm.([]) end))
+
+    assert dispatched * 10 < forced_normal,
+           "a normal scheduler waited #{dispatched} us while the large parse was dispatched " <>
+             "by size, and #{forced_normal} us when it was forced onto a normal one"
   end
 
   # Deliberately no test for the no-dirty-schedulers fallback in run/4: the
