@@ -318,6 +318,45 @@ build. Surviving proves liveness, balancing proves reclamation, and
 neither alone is sufficient: this project once shipped a teardown that
 satisfied the first while violating the second.
 
+## Differences from Nokogiri's gumbo
+
+Rails parses with Nokogiri, and Nokogiri parses HTML5 with its own copy of gumbo.
+That copy is not the one this library vendors: Nokogiri carries an internal fork of
+lua-gumbo's gumbo — its own `gumbo-parser/src/README.md` says "This is an internal fork
+of the libgumbo library … See `lua-gumbo` commit `0a04728`", and lists what the fork
+changed — while this library vendors the 0.14.1 tag of the maintained continuation
+(see [Licence](#licence)) plus the patch series in `c_src/patches/README.md`. The two
+disagree where one side took a change the other did not, and a caller porting from
+Rails sees a different tree for those shapes.
+
+Known and measured, with the reference's own sources read for its side of the table:
+
+| shape | this library | Nokogiri's gumbo |
+|---|---|---|
+| `<?pi x?>`, `<?COMMENT?>` | a `:processing_instruction` node, split into `target` and `data` | a comment — the spec's bogus-comment path, so `<?COMMENT?>` is `<!-- ?COMMENT? -->` |
+| `<?` with nothing after it | nothing in the tree | a comment, `<!-- ? -->` |
+| a control character in text (`\x07`, `\x1b`, `\x7f`, U+0085) | kept, with `:control_character_in_input_stream` | kept — the same, since patch 0009, which stopped writing U+FFFD for these |
+| a noncharacter in text (U+FDD0) | kept, with `:noncharacter_in_input_stream` | kept — the same, since patch 0009 |
+| `:max_tree_depth` | no ceiling unless one is asked for | 400 by default |
+| `:max_attributes` | 1024 by default, counting the names read for one element | 400 by default, counting the same way |
+| a `<form>` inside template contents, and a `<frameset>` after an implied `<body>` (the cases in the pinned base's own `tests/tree_construction/template.dat`) | the 2026 template rules: the nested form is not ignored when the parser is parsing template contents, and leaving an implied `<body>` behind keeps `frameset-ok` ok | the rules before them — Nokogiri's sources have neither `is_parsing_template_contents` nor that `frameset_ok` assignment |
+
+The processing-instruction rows are the ones to decide on before a port. The spec gained
+processing instructions in 2026 — whatwg/html#12908 and #12911, which the pinned base
+follows: its own `tests/tree_construction/tests1.dat` expects `| <?COMMENT ?>` for
+`<?COMMENT?>`, where it used to expect `<!-- ?COMMENT? -->`. Nokogiri's gumbo has no
+processing-instruction path at all, so it still answers with the comment, and a document
+that relies on that answer will not get it here. The parser is asked for the processing
+instruction, and `target` and `data` are split the way the spec names them.
+
+Not promised: the table is what is known and measured, not a contract. The pinned base
+tracks the spec's newest text — that is what the continuation is maintained for — while
+Nokogiri's fork was imported from lua-gumbo earlier, so a difference here can mean either
+side moved, and a shape that is not listed may differ either way. What keeps the two-step
+claim in `make check-parity` honest is that it parses with the pinned sources and with the
+shipped build and permits only the differences the patches in `c_src/patches/README.md`
+exist for.
+
 ## Deliberate omissions
 
 Four gumbo symbols are deliberately not exposed, so nobody hunts for them:
