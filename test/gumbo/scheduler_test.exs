@@ -47,60 +47,30 @@ defmodule Gumbo.SchedulerTest do
     end
   end
 
-  test "large parses do not starve a normal scheduler" do
-    html = HTML.nested("div", 2_000) <> String.duplicate("<p>text</p>", 5_000)
-
-    # This is a contrast measured inside one run, not an absolute bound: the same
-    # document is parsed twice, once forced onto a normal scheduler and once left to
-    # the dispatch, and what is compared is how long a normal scheduler waited for its
-    # turn under each. An absolute bound could only ever be about the runner — the
-    # first release rehearsal measured 11.9 ms on an Intel macOS runner, past the
-    # 10 ms bound the earlier form used, while a missing dirty dispatch produced the
-    # same 28-50 ms there that it produces here. The ratio is what the dispatch
-    # decides, and it does not move with the runner: well over 100 where this was
-    # written, and 1489 us against 11981 us — a factor of 8 — on an aarch64 macOS
-    # runner. A dispatch that sends the large parse to a normal scheduler collapses it:
-    # forcing the dispatch off measured 14478 us against 33031 us (2.3) on the machine
-    # this was written on, and 28585 us against 31360 us (1.1) before that. Four is
-    # between the two bands, not ten: ten was the bound that made a shared runner fail.
-    #
-    # What still fails this test: a dispatch that sends the large parse to a normal
-    # scheduler, however it is broken — the ratio then collapses to about 1.
-    #
-    # The ticker spawns the parsers itself, so its scheduler's run queue holds parser
-    # tasks when it yields and the loop cannot finish before the storm starts.
-    # 2 x schedulers_online, each parsing twice, keeps every normal scheduler busy for
-    # ~2 parse durations when the dirty dispatch is missing. Three storms per side, and
-    # each side's smallest max-gap is its result.
-    storm = fn options ->
-      ticker =
-        Task.async(fn ->
-          parsers =
-            for _ <- 1..(System.schedulers_online() * 2) do
-              Task.async(fn -> for _ <- 1..2, do: Gumbo.parse(html, options) end)
-            end
-
-          gaps =
-            Enum.map(1..2000, fn _ ->
-              t0 = System.monotonic_time(:microsecond)
-              :erlang.yield()
-              System.monotonic_time(:microsecond) - t0
-            end)
-
-          Enum.each(parsers, &Task.await/1)
-          Enum.max(gaps)
-        end)
-
-      Task.await(ticker)
-    end
-
-    forced_normal = Enum.min(Enum.map(1..3, fn _ -> storm.(dirty: false) end))
-    dispatched = Enum.min(Enum.map(1..3, fn _ -> storm.([]) end))
-
-    assert dispatched * 4 < forced_normal,
-           "a normal scheduler waited #{dispatched} us while the large parse was dispatched " <>
-             "by size, and #{forced_normal} us when it was forced onto a normal one"
-  end
+  # Deliberately no test that a large parse does not starve a normal scheduler, though
+  # there were four of them. Each measured how long a process on a normal scheduler waited
+  # for its turn while schedulers_online() * 4 parsers of a 77 KB document ran four times
+  # each, and each turned out to compare the machine rather than the dispatch:
+  #
+  #   * an absolute bound (10 ms), which the first release rehearsal broke with 11.9 ms on
+  #     an Intel macOS runner, while a missing dirty dispatch produced 28-50 ms there;
+  #   * the ratio of a forced-normal storm to a dispatched one, which an aarch64 macOS
+  #     runner measured at 2.2 and 8 — overlapping the 1.1-2.3 that forcing the dispatch off
+  #     produces, so no threshold separates the two states;
+  #   * the same ratio with a ticker per scheduler, which is better and still failed one run
+  #     in five, and in CI twice;
+  #   * the same bounded by time instead of by yields, which is what showed why: 2000 yields
+  #     can finish in 0.2 ms when the parsers the ticker just spawned have not been scheduled
+  #     yet, so the probe misses the storm and reports a gap that says nothing. Bounded by
+  #     time it cannot miss it, and then the dispatched side measured 16-48 ms against 59-82 ms
+  #     forced — a factor of 1.2 to 3.4, against the 0.1-0.2 ms the yield-bounded shapes
+  #     reported. The apparent separation had been the measurement not happening.
+  #
+  # What is pinned instead: dispatch/2 by size and by override (the first test above), both
+  # paths producing the same tree, and both materialize paths producing the same term. Those
+  # pin the choice and the equivalence of the two paths — not that a parse the dispatch sent
+  # to a dirty scheduler really runs on one, which is the property this file has no gate for,
+  # because neither this machine nor a shared runner can tell the two states apart.
 
   # Deliberately no test for the no-dirty-schedulers fallback in run/4: the
   # fallback branch is unreachable on a dirty-scheduler VM and any assertion
