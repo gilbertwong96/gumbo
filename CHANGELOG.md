@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (whatwg/html#10548); a `<source>` inside a `<select>` was already kept, which that change makes
   correct rather than a divergence.
 
+### Fixed
+
+- `:max_attributes` counts the attribute names read for one element, a repeated name included, so
+  an element at the limit with one repeated name is refused with
+  `{:error, :too_many_attributes}`, the way the reference refuses it. Counting the names that
+  survived the duplicate check accepted that element — and could not bound a repeat in the middle of
+  a tag at all, since a surviving count never sees it.
+
 ## [0.2.0] - 2026-10-15
 
 ### Changed

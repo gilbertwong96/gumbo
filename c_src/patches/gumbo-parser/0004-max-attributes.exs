@@ -37,10 +37,13 @@ t = &String.replace_suffix(&1, "\n", "")
       cost time.
 
     * There was no ceiling at all on how many attributes one element could carry.
-      GumboOptions.max_attributes now sets one, 1024 by default, and attributes beyond
-      it are dropped and GumboOutput.too_many_attributes is set. The cap is what makes
-      the answer to "how bad can this get" a number rather than a limit, and it is the
-      same lever Nokogiri's gumbo exposes under the same name.
+      GumboOptions.max_attributes now sets one, 1024 by default, and attribute names
+      beyond it are dropped and GumboOutput.too_many_attributes is set. The cap is what
+      makes the answer to "how bad can this get" a number rather than a limit, and it is
+      the same lever Nokogiri's gumbo exposes under the same name; the count is the one
+      that lever counts, of the names read for the tag with a repeated name included,
+      not of the attributes kept — counting the kept ones let an element at the limit
+      with one repeated name through, where the reference refuses it.
 
   The hash is what makes the cost linear whether or not the cap is set; the cap is
   what tells a caller their document was too much for the parse they asked for. Neither
@@ -64,11 +67,13 @@ t = &String.replace_suffix(&1, "\n", "")
           GumboNamespaceEnum fragment_namespace;
 
           /**
-           * The largest number of attributes one element may carry. Attributes beyond it
+           * The largest number of attribute names one element may carry. Names beyond it
            * are dropped rather than added, and GumboOutput.too_many_attributes is set so
-           * that the caller can tell. UINT_MAX (or the -1 this library passes for it)
-           * means no limit; the default is 1024. Nothing else about the parse changes,
-           * and an element well inside the limit is unaffected.
+           * that the caller can tell. A repeated name counts: the count is of the names
+           * read for the tag, which is what the reference this lever comes from counts.
+           * UINT_MAX (or the -1 this library passes for it) means no limit; the default is
+           * 1024. Nothing else about the parse changes, and an element well inside the
+           * limit is unaffected.
            */
           unsigned int max_attributes;
         } GumboOptions;
@@ -149,6 +154,12 @@ t = &String.replace_suffix(&1, "\n", "")
           GumboVector /* unsigned int */ _attribute_buckets;
           GumboVector /* unsigned int */ _attribute_next;
           unsigned int _attribute_hash_seed;
+
+          // Every attribute name this tag state has finished, a repeated name included.
+          // The cap is checked against this rather than against _attributes.length, which
+          // counts the names that survived the duplicate check and so cannot bound what
+          // the tag actually made the parser read.
+          unsigned int _attribute_count;
         """)
     },
     %{
@@ -328,6 +339,7 @@ t = &String.replace_suffix(&1, "\n", "")
           tag_state->_attribute_next.capacity = 0;
           tag_state->_attribute_hash_seed =
               (unsigned int) (uintptr_t) tag_state->_attribute_buckets.data;
+          tag_state->_attribute_count = 0;
           tag_state->_drop_next_attr_value = false;
         """)
     },
@@ -354,6 +366,19 @@ t = &String.replace_suffix(&1, "\n", "")
       to:
         t.(~S"""
           GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
+          if (++tag_state->_attribute_count > parser->_options->max_attributes) {
+            // Refused, and reported through the output rather than through an error: the
+            // names were not wrong, there were simply more of them than the caller
+            // allowed. This is checked before the duplicate scan, so the count is of the
+            // names read for the tag and a repeated name counts — the count the reference
+            // keeps. The value that follows belongs to an attribute that was never added,
+            // so drop it the way a duplicate does.
+            parser->_output->too_many_attributes = true;
+            tag_state->_drop_next_attr_value = true;
+            reinitialize_tag_buffer(parser);
+            return false;
+          }
+
           unsigned int hash = hash_attribute_name(tag_state->_attribute_hash_seed,
               tag_state->_buffer.data, tag_state->_buffer.length);
           unsigned int bucket = attribute_bucket_index(tag_state, hash);
@@ -371,17 +396,6 @@ t = &String.replace_suffix(&1, "\n", "")
               return false;
             }
             link = (unsigned int) (uintptr_t) tag_state->_attribute_next.data[i];
-          }
-
-          if (attributes->length >= parser->_options->max_attributes) {
-            // Dropped, and reported through the output rather than through an error: the
-            // attributes were not wrong, there were simply more than the caller allowed. The
-            // value that follows belongs to an attribute that was never added, so drop it the
-            // way a duplicate does.
-            parser->_output->too_many_attributes = true;
-            tag_state->_drop_next_attr_value = true;
-            reinitialize_tag_buffer(parser);
-            return false;
           }
 
           GumboAttribute* attr = gumbo_parser_allocate(parser, sizeof(GumboAttribute));
