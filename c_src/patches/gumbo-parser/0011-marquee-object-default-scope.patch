@@ -1,0 +1,42 @@
+From: patched for this project, not from upstream
+Subject: [PATCH 11/11] Ask for applet, marquee and object in scope, not in table scope
+
+"In body", an end tag whose tag name is one of `applet`, `marquee`, `object` asks
+whether the stack of open elements has an element *in scope* with that tag name, and
+ignores the token if it does not. The pinned base asks `has_an_element_in_table_scope`,
+whose boundary set is only `html`, `table` and `template`.
+
+Table scope is a wider reach in a browser's stack than a select's: since `select` bounds
+a scope query (whatwg/html#10548, and 0007 here), an end tag written inside a select can
+no longer see an `applet`, `marquee` or `object` above it, and the spec ignores it. Asked
+in table scope, the select is no boundary at all, the element above is found, and the
+token pops the select and everything under it — which is the shape 439 `fuzz 181`
+reported: at `marquee > center > select` this library had child count 2 where Chrome had
+4, with the following `action-text-attachment` and text left outside the marquee.
+
+Chrome 155, on four witnesses, keeps the content where the spec does:
+
+    <marquee><select></marquee><b>x              marquee(select(b("x")))
+    <center><marquee><select></marquee><b>x      center(marquee(select(b("x"))))
+    <marquee><select></center></marquee><b>x      marquee(select(b("x")))
+    <marquee><textarea></textarea><center><select></center></marquee><b>x
+                                                 marquee(textarea()center(select(b("x"))))
+
+and with the pin alone each of them ends the select at the end tag instead.
+
+This changes tree construction on purpose, so it sits outside the "pinned and patched
+trees are identical" claim `make check-parity` makes: the shapes it changes are held by
+`test/gumbo/select_scope_test.exs`, and the two-step form of that gate is what bounds it
+to documents whose tree holds a select.
+---
+--- a/src/parser.c
++++ b/src/parser.c
+@@ -3179,7 +3179,7 @@
+   } else if (tag_in(token, kEndTag,
+                  (gumbo_tagset){TAG(APPLET), TAG(MARQUEE), TAG(OBJECT)})) {
+     GumboTag token_tag = token->v.end_tag;
+-    if (!has_an_element_in_table_scope(parser, token_tag)) {
++    if (!has_an_element_in_scope(parser, token_tag)) {
+       parser_add_parse_error(parser, token);
+       ignore_token(parser);
+       return false;

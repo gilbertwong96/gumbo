@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An end tag inside a `<select>` that names `applet`, `marquee` or `object` no longer reaches past
+  the select: the spec asks for that element *in scope*, and the pinned base asked in *table* scope,
+  whose boundaries are only `html`, `table` and `template`, so the select stopped nothing and the
+  end tag took the select and everything under it. Patch 0011, and those shapes now match Chrome's
+  tree ([#9](https://github.com/gilbertwong96/gumbo/issues/9)).
 - An end tag inside a `<select>` that names no open element — `</option>` is the reported one — no
   longer walks past the select and closes everything above it, which used to move everything the
   document wrote after that end tag out of the select. The pinned base's special-category list is a

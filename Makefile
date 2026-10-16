@@ -289,11 +289,13 @@ $(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 	@mkdir -p $(dir $@)
 	$(CC) $(ALL_CFLAGS) -o $@ $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 
-# The three patches that change what the parser builds on purpose, plus 0010, are what the
-# parity claim is made against in two steps rather than one: the pin plus those has to parse the
+# The patches that change what the parser builds on purpose are what the parity claim is
+# made against in two steps rather than one: the pin plus those has to parse the
 # whole corpus identically to the shipped build — which is what still catches any of the other
 # patches moving a tree — and the pin alone may differ only in the documents whose tree holds
-# a select element, which is what bounds those patches' blast radius. The corpus keeps the select
+# a select, an applet, a marquee or an object: the first because a select bounds the scope
+# queries 0007 and 0010 changed, the rest because 0011 is the end tag rule for those three
+# asking in scope rather than in table scope. The corpus keeps the select
 # shapes f57a7e9 added for the scope queries, and it holds no document 0008 or 0009 moves: of
 # the 1019 tree-construction documents in html5lib's corpus, the four that carry two distinct
 # unknown names at all are SVG or MathML, which is the handler that already compares names, and
@@ -305,7 +307,8 @@ $(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 BEHAVIOUR_PATCHES := $(GUMBO_PATCH_DIR)/0007-select-in-scope.patch \
                      $(GUMBO_PATCH_DIR)/0008-unknown-end-tag-by-name.patch \
                      $(GUMBO_PATCH_DIR)/0009-keep-control-characters.patch \
-                     $(GUMBO_PATCH_DIR)/0010-select-is-special.patch
+                     $(GUMBO_PATCH_DIR)/0010-select-is-special.patch \
+                     $(GUMBO_PATCH_DIR)/0011-marquee-object-default-scope.patch
 GUMBO_BASELINE_SRC_DIR := $(OBJ_DIR)/gumbo-src-baseline
 GUMBO_BASELINE_STAMP := $(GUMBO_BASELINE_SRC_DIR)/.patched
 GUMBO_BASELINE_OBJ_DIR := $(OBJ_DIR)/gumbo-parser-baseline
@@ -365,13 +368,13 @@ check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BASELINE) $(PARITY_DUMP_BUILD)
 		i=$$(basename "$$f"); \
 		cmp -s "$$f" "$$split/base/$$i" && continue; \
 		changed=$$((changed + 1)); \
-		grep -q 'tag=112,' "$$f" && continue; \
+		grep -Eq 'tag=(112|126|146|75),' "$$f" && continue; \
 		failed=1; \
-		echo "FAIL: document $$i differs but holds no select element, so neither $(notdir $(BEHAVIOUR_PATCHES)) is what moved it:"; \
+		echo "FAIL: document $$i differs but holds no select, applet, marquee or object, so no patch in $(notdir $(BEHAVIOUR_PATCHES)) is what moved it:"; \
 		diff "$$split/base/$$i" "$$f" | head -20; \
 	done; \
 	[ $$failed -eq 0 ] || exit 1; \
-	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCHES)) and with the shipped build, and the pin alone differs only in the $$changed that hold a select"
+	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCHES)) and with the shipped build, and the pin alone differs only in the $$changed that hold a select, an applet, a marquee or an object"
 
 # The sanitizer gate. It is the only net there is for a memory-safety bug inside
 # gumbo itself — residual 2 of the list this project keeps of what could still take
