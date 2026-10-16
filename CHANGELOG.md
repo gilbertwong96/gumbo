@@ -7,42 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-16
+
 ### Added
 
 - `Gumbo.materialize/2` takes `detail: :tree`: the tree without source bookkeeping, with the tag
   name on every element — the name as written, so a custom element is never left nameless — and
-  attributes as an ordered list of `{name, value}` whose prefix the parser split off is composed
+  attributes as an ordered list of `{name, value}`, with any prefix the parser split off composed
   back on (`xlink:href`, `xmlns:xlink`). Text-like, comment and processing-instruction nodes are
-  the ones `detail: :content` returns. For a caller that processes a tree rather than queries it,
-  this is the shape without the fields such a caller would discard.
-- A processing instruction carries `target` and `data` — the two parts the spec gives that
-  payload, and the pair a browser reports — in both the `:full` and `:content` shapes and
-  through `Gumbo.Node.target/1` and `Gumbo.Node.data/1`. `text` still carries the one string the
-  C library stores.
-- A "Differences from Nokogiri's gumbo" section in the README: what each side vendors, and the
-  shapes measured to differ — processing instructions, template handling, and the two levers whose
-  defaults differ.
+  the ones `detail: :content` returns.
+- A processing instruction carries `target` and `data` — the two parts the spec gives that payload,
+  and the pair a browser reports — in both the `:full` and `:content` shapes, through
+  `Gumbo.Node.target/1` and `Gumbo.Node.data/1`. `text` still carries the one string the C library
+  stores.
+- The README's "Differences from Nokogiri's gumbo" section: what each side vendors, and the shapes
+  measured to differ — processing instructions, template handling, and the two option defaults that
+  differ.
 
 ### Changed
 
 - `</p>` inside a `<select>` closes the empty `p` the parser inserts there, not the `p` around the
-  `select`, so the text after it stays where it was written. This follows the spec, which removed
-  the "in select" insertion mode and lists `select` among the types that bound a scope query
-  (whatwg/html#10548); a `<source>` inside a `<select>` was already kept, which that change makes
-  correct rather than a divergence.
+  `select`, so the text after it stays where it was written. The spec removed the "in select"
+  insertion mode and lists `select` among the types that bound a scope query (whatwg/html#10548); a
+  `<source>` inside a `<select>` was already kept, which that change makes correct rather than a
+  divergence.
 
 ### Fixed
 
 - An end tag inside a `<select>` that names `applet`, `marquee` or `object` no longer reaches past
-  the select: the spec asks for that element *in scope*, and the pinned base asked in *table* scope,
-  whose boundaries are only `html`, `table` and `template`, so the select stopped nothing and the
-  end tag took the select and everything under it. Patch 0011, and those shapes now match Chrome's
-  tree ([#9](https://github.com/gilbertwong96/gumbo/issues/9)).
-- An end tag inside a `<select>` that names no open element — `</option>` is the reported one — no
-  longer walks past the select and closes everything above it, which used to move everything the
-  document wrote after that end tag out of the select. The pinned base's special-category list is a
-  stale copy that never named `select`, so the walk had no reason to stop there; patch 0010 puts it
-  in, and those shapes now match Chrome's tree
+  the select and takes it and everything under it: those end tags ask for the element in scope, and
+  the parser asked in table scope, whose boundaries are only `html`, `table` and `template`
+  ([#9](https://github.com/gilbertwong96/gumbo/issues/9)).
+- An end tag inside a `<select>` that names no open element — `</option>` is the common one — no
+  longer walks past the select and closes what sits above it, which moved everything written after
+  that end tag out of the select
   ([#10](https://github.com/gilbertwong96/gumbo/issues/10), [#11](https://github.com/gilbertwong96/gumbo/issues/11)).
 - Control characters and noncharacters in the input stream are kept in the tree, as the spec and
   the reference keep them, instead of coming back as U+FFFD. They are reported for what they are —
@@ -50,21 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is the code point the decoder read, not the bytes under the cursor. A byte sequence that is not
   valid UTF-8 is still replaced.
 - An unknown end tag that names no open element no longer closes the first element with an unknown
-  name it meets. The walk the spec describes compares tag names, and `GumboTag` cannot carry one —
-  every unknown tag is `GUMBO_TAG_UNKNOWN` — so `</fidiv>` closed an open `<f&#igure>` and moved the
-  text after it out of the element. Reported as #3, on the broken custom-element markup a chat
-  application receives when a user pastes it.
-- `:max_attributes` counts the attribute names read for one element, a repeated name included, so
-  an element at the limit with one repeated name is refused with
-  `{:error, :too_many_attributes}`, the way the reference refuses it. Counting the names that
-  survived the duplicate check accepted that element — and could not bound a repeat in the middle of
-  a tag at all, since a surviving count never sees it.
-- `:max_attributes` is enforced while a start tag is still being read: a name counts as the
-  tokenizer reaches it, so the 401st name of a tag that end of input abandons — the one whose value
-  never arrived — is counted, and its document is refused. Counting where a name reached the
-  attribute list could not see that name at all, and the tag was dropped either way, so the parse
-  answered with a tree for a document past the bound it was given. Reported as #8, on the
-  `limits attributes on an unfinished tag` shapes in the rich-text corpus.
+  name it meets, which moved the text after it out of that element: `</fidiv>` no longer closes an
+  open `<f&#igure>`. Reported as #3, on the pasted custom-element markup a chat application receives.
+- `:max_attributes` counts the attribute names read for one element, a repeated name included, so an
+  element at the limit with one repeated name is refused with `{:error, :too_many_attributes}`, the
+  way the reference refuses it; and it is enforced while a start tag is still being read, so the name
+  the tokenizer has reached counts even when end of input abandons the tag. Either way a document
+  past the bound is refused instead of answered with a tree. Reported as #8.
 
 ## [0.2.0] - 2026-10-15
 
@@ -280,6 +270,7 @@ properties that matter — the allocator balance is exactly zero, and a 20 000-l
 tree survives a 320 KB stack — and `make check-clean-build` builds from an empty
 object directory, which is what a fresh clone or a hex consumer does.
 
-[Unreleased]: https://github.com/gilbertwong96/gumbo/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/gilbertwong96/gumbo/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gilbertwong96/gumbo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/gilbertwong96/gumbo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gilbertwong96/gumbo/releases/tag/v0.1.0
