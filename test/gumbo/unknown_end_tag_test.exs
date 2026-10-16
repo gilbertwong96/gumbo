@@ -9,7 +9,7 @@ defmodule Gumbo.UnknownEndTagTest do
   # the text that follows then leaves that element. Reported as
   # gilbertwong96/gumbo#3.
   #
-  # This gate cannot come from upstream's tree-construction corpus, and that is
+  # This gate cannot come from html5lib's tree-construction corpus, and that is
   # measured rather than assumed: of its 1019 documents, four carry two distinct
   # unknown names and an unknown end tag at all, and all four are SVG/MathML,
   # which the foreign-content handler answers rather than this one. The cases
