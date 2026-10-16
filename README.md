@@ -339,7 +339,7 @@ Known and measured, with the reference's own sources read for its side of the ta
 | a noncharacter in text (U+FDD0) | kept, with `:noncharacter_in_input_stream` | kept — the same, since patch 0009 |
 | `:max_tree_depth` | no ceiling unless one is asked for | 400 by default |
 | `:max_attributes` | 1024 by default, counting the names read for one element — a name counts as the tokenizer reaches it, so a tag that never closes is refused too | 400 by default, counting the same way |
-| a `<form>` inside template contents, and a `<frameset>` after an implied `<body>` (the cases in the pinned base's own `tests/tree_construction/template.dat`) | the 2026 template rules: the nested form is not ignored when the parser is parsing template contents, and leaving an implied `<body>` behind keeps `frameset-ok` ok | the rules before them — Nokogiri's sources have neither `is_parsing_template_contents` nor that `frameset_ok` assignment |
+| a `<form>` inside template contents, and a `<frameset>` after an implied `<body>` (the cases in the pinned base's own `tests/tree_construction/template.dat`, four of them fragments whose context is a `template`) | the 2026 template rules: the nested form is not ignored when the parser is parsing template contents, and leaving an implied `<body>` behind keeps `frameset-ok` ok | the rules before them — Nokogiri's fork has the half of "parsing template contents" that is `has_open_element(template)` and not the fragment-context half, and no `frameset_ok` assignment after leaving an implied `<body>` behind |
 | an element inside `<select>` (`<select><source id="i">tail</select>`) | kept: the "in select" insertion modes were removed by [whatwg/html#10548](https://github.com/whatwg/html/pull/10548), so a select's content is parsed as body content, and a void element such as `source` is inserted and immediately popped. The pinned base already keeps these; no patch here is what does it | ignored — Nokogiri's fork still has the mode (`GUMBO_INSERTION_MODE_IN_SELECT`, in its `insertion_mode.h`), and `handle_in_select` ends in a parse error and `ignore_token`, so the element is not in the tree |
 | an end tag inside `<select>` (`<p><select>https://example.com/&lt;b</p>/p>`) | the same removal puts the end tag in body, where `</p>` with no `p` open for it inserts an empty `p` inside the select and closes that one — patch 0007, which is what makes `select` bound a scope query (whatwg/html#10548) | ignored — by the same catch-all, so the text on either side stays one text node |
 
@@ -358,6 +358,18 @@ side moved, and a shape that is not listed may differ either way. What keeps the
 claim in `make check-parity` honest is that it parses with the pinned sources and with the
 shipped build and permits only the differences the patches in `c_src/patches/README.md`
 exist for.
+
+A second axis is a browser rather than Nokogiri, and there the pinned base can be the side
+that has moved. The spec's `</form>` rule has two branches: the first works through the
+`form` element pointer, and the second — taken whenever the parser is parsing template
+contents — ends *Pop elements from the stack of open elements until a `form` element has
+been popped from the stack*. With `body` as the fragment context,
+`<template><em><center></center><form><tbody></tbody><table>x</table><summary>y</form></em>`
+keeps the `form` inside the `em` here, which is the second branch. Chrome 155 puts the
+`form` beside the `em` in the `template` instead, which is the first branch — the one taken
+when the parser is not parsing template contents. [#12](https://github.com/gilbertwong96/gumbo/issues/12)
+reported it from a reader's corpus: `make check-parity` compares this library against the
+pin, so a browser is the one side that has to be asked rather than compiled.
 
 ## Deliberate omissions
 
