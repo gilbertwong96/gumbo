@@ -79,17 +79,31 @@ defmodule Gumbo.Patches do
     end
   end
 
-  @doc "Regenerates `name` and writes it, returning `:written` or `:unchanged`."
-  @spec write(binary(), binary()) :: :written | :unchanged
+  @doc """
+  Regenerates `name` and writes it, returning `:created` when there was no file to
+  compare against, `:written` when there was one and it differed, and `:unchanged`
+  when it already says what the definition produces.
+
+  `:created` is what makes a new patch a one-step thing: a definition with no committed
+  `.patch` next to it used to have no way through here, and the placeholder that stood in
+  for one was a file the build tried to apply.
+  """
+  @spec write(binary(), binary()) :: :created | :written | :unchanged
   def write(name, root \\ File.cwd!()) do
     generated = generate(name, root)
     path = Path.join([root, @patch_dir, name <> ".patch"])
 
-    if File.read!(path) == generated do
-      :unchanged
-    else
-      File.write!(path, generated)
-      :written
+    case File.read(path) do
+      {:error, :enoent} ->
+        File.write!(path, generated)
+        :created
+
+      {:ok, ^generated} ->
+        :unchanged
+
+      _ ->
+        File.write!(path, generated)
+        :written
     end
   end
 

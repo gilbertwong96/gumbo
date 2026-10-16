@@ -13,6 +13,22 @@ defmodule Mix.Tasks.Gumbo.PatchesTest do
     assert output =~ "hand-written patch(es) are not generated and not checked"
   end
 
+  test "no --check writes a patch that has no committed file yet" do
+    # What the definition used to have no way through: a new patch needed a
+    # placeholder, and a placeholder is a `.patch` the build tried to apply.
+    root = Fixtures.fake_root(%{patch: nil})
+
+    output =
+      capture_io(fn ->
+        in_dir(root, fn -> Mix.Task.rerun("gumbo.patches", []) end)
+      end)
+
+    assert output == "wrote 0001-fixture.patch\n"
+
+    assert File.read!(Path.join(root, "c_src/patches/gumbo-parser/0001-fixture.patch")) ==
+             Patches.generate("0001-fixture", root)
+  end
+
   test "no --check rewrites a stale patch and says which" do
     root = Fixtures.fake_root(%{patch: "stale\n"})
 

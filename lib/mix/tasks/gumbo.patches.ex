@@ -102,10 +102,12 @@ defmodule Mix.Tasks.Gumbo.Patches do
     results = for name <- defined, do: {name, Gumbo.Patches.write(name, root)}
 
     written = for {name, :written} <- results, do: name
+    created = for {name, :created} <- results, do: name
 
-    if written == [] do
+    if written == [] and created == [] do
       Mix.shell().info("#{length(defined)} patch(es) already match their definitions")
     else
+      for name <- created, do: Mix.shell().info("wrote #{name}.patch")
       for name <- written, do: Mix.shell().info("rewrote #{name}.patch")
     end
 

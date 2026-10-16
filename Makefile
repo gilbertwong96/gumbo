@@ -145,6 +145,12 @@ $(GUMBO_SRC_STAMP): $(GUMBO_VENDORED) $(GUMBO_PATCHES) | $(GUMBO_HEADER)
 	@mkdir -p $(GUMBO_SRC_DIR)
 	@cp -R $(GUMBO_DIR)/src $(GUMBO_SRC_DIR)/src
 	@for p in $(GUMBO_PATCHES); do \
+		if [ ! -s "$$p" ]; then \
+			echo "error: $$p is empty"; \
+			echo "       a new patch comes from mix gumbo.patches, not from a file created by hand:"; \
+			echo "       c_src/patches/README.md"; \
+			exit 1; \
+		fi; \
 		git apply -p1 --directory=$(GUMBO_SRC_DIR) "$$p" || { \
 			echo "error: $$p does not apply to $(GUMBO_DIR)"; \
 			echo "       the pin moved, or the patch needs a rebase: c_src/patches/README.md"; \
@@ -212,6 +218,12 @@ check-patch: | $(GUMBO_HEADER)
 	@mkdir -p $(OBJ_DIR)/patch-check
 	@cp -R $(GUMBO_DIR)/src $(OBJ_DIR)/patch-check/src
 	@for p in $(GUMBO_PATCHES); do \
+		if [ ! -s "$$p" ]; then \
+			echo "FAIL: $$p is empty"; \
+			echo "       a new patch comes from mix gumbo.patches, not from a file created by hand:"; \
+			echo "       c_src/patches/README.md"; \
+			exit 1; \
+		fi; \
 		if ! git apply -p1 --directory=$(OBJ_DIR)/patch-check "$$p"; then \
 			echo "FAIL: $$p does not apply to the pinned $(GUMBO_DIR)"; \
 			exit 1; \
@@ -305,6 +317,10 @@ $(GUMBO_BASELINE_STAMP): $(GUMBO_VENDORED) $(BEHAVIOUR_PATCHES) | $(GUMBO_HEADER
 	@mkdir -p $(GUMBO_BASELINE_SRC_DIR)
 	@cp -R $(GUMBO_DIR)/src $(GUMBO_BASELINE_SRC_DIR)/src
 	@for patch in $(BEHAVIOUR_PATCHES); do \
+		if [ ! -s "$$patch" ]; then \
+			echo "error: $$patch is empty"; \
+			exit 1; \
+		fi; \
 		git apply -p1 --directory=$(GUMBO_BASELINE_SRC_DIR) "$$patch" || { \
 			echo "error: $$(basename $$patch) does not apply to the pin on its own"; \
 			echo "       it is written against the pinned tree: c_src/patches/README.md"; \
