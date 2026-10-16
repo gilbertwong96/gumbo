@@ -21,7 +21,7 @@
    was removed upstream and leaves a hole in the bit values. */
 #define GUMBO_PARSE_FLAG_COUNT 11
 #define GUMBO_ERROR_TYPE_COUNT \
-  (GUMBO_ERR_UNACKNOWLEDGED_SELF_CLOSING_TAG + 1)                   /* 42 */
+  (GUMBO_ERR_NONCHARACTER_IN_INPUT_STREAM + 1)                      /* 44 */
 #define GUMBO_TOKENIZER_STATE_COUNT (GUMBO_ERR_TOKENIZER_CDATA + 1) /* 14 */
 #define GUMBO_TOKEN_TYPE_COUNT                   \
   (GUMBO_TOKEN_PROCESSING_INSTRUCTION + 1) /* 10 \
