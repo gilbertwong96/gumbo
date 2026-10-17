@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comparison against the reference's own parser read 0 divergences on a scope path with it and 1
   without, and the fix is the spec's rather than the fork's, so it can move to `main` unchanged.
 
+### Fixed
+
+- A duplicate attribute name is reset out of the tag buffer where it is dropped, not inside the
+  error it records: `add_duplicate_attr_error` returned before that reset when no error could be
+  recorded, which is what a capped error list — `max_errors: 0` — produces, and the dropped name
+  then stayed in the buffer for the next attribute name to be appended to (`<p a=1 a b=2>` read
+  `{"ab", "2"}` instead of `{"b", "2"}`). Patch 0015 moves the reset to the call site, where
+  Nokogiri's fork has it. Five of a Rails port's 1,058 stored bodies read differently before it,
+  and its reference parser agrees with the trees after it.
+
 ### Changed
 
 - On the `nokogiri-compat` branch only: what the 0.3.0 entry above moved — an element written

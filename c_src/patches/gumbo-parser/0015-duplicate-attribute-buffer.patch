@@ -1,0 +1,49 @@
+From: patched for this project, not from upstream
+Subject: [PATCH 15/15] Reset the tag buffer where the duplicate attribute is dropped
+
+A duplicate attribute name is detected when its name state ends, and the name is dropped with a
+parse error. The pinned base resets the tag buffer inside `add_duplicate_attr_error`, after the
+copy that records the name in the error — but that function returns early when
+`gumbo_add_error` returns NULL, which is what a capped error list does
+(`max_errors: 0` is the case a caller reaches by asking for no errors at all). The name then
+stays in the tag buffer, and the next attribute name is appended to it: `<p a=1 a b=2>` reads
+`[{"a", "1"}, {"ab", "2"}]` with the cap and `[{"a", "1"}, {"b", "2"}]` without it.
+
+Nokogiri's fork has the same duplicate check and resets at the call site, after
+`add_duplicate_attr_error` returns, so it is unaffected by whether an error was recorded. This
+patch moves the reset there: the caller drops the name, the error still carries it, and the
+buffer is empty either way.
+
+The caller is the one place `add_duplicate_attr_error` is called from, so the reset happens
+exactly once. Measured on a Rails port's stored corpus, which parses with no errors recorded,
+five of its 1,058 bodies read differently before this patch and hold a duplicate attribute name
+followed by another name; the port's own reference parser agrees with them after it.
+
+Nothing here is visible with gumbo's default error handling (no cap), which is why
+`make check-parity` cannot see this patch and why its evidence is a test rather than the corpus.
+---
+--- a/src/tokenizer.c
++++ b/src/tokenizer.c
+@@ -861,7 +861,6 @@
+   error->v.duplicate_attr.original_index = original_index;
+   error->v.duplicate_attr.new_index = new_index;
+   copy_over_tag_buffer(parser, &error->v.duplicate_attr.name);
+-  reinitialize_tag_buffer(parser);
+ }
+ 
+ // Creates a new attribute in the current tag, copying the current tag buffer to
+@@ -913,8 +912,13 @@
+     if (strlen(attr->name) == tag_state->_buffer.length &&
+         memcmp(attr->name, tag_state->_buffer.data,
+             tag_state->_buffer.length) == 0) {
+-      // Identical attribute; bail.
++      // Identical attribute; bail. The name is dropped here rather than inside
++      // add_duplicate_attr_error, which returns before its own reset when no error
++      // can be recorded — a capped error list, `max_errors: 0` — and the name would
++      // then stay in the tag buffer for the next attribute name to be appended to.
++      // Nokogiri's fork resets here for the same reason.
+       add_duplicate_attr_error(parser, attr->name, i, attributes->length);
++      reinitialize_tag_buffer(parser);
+       tag_state->_drop_next_attr_value = true;
+       return false;
+     }
