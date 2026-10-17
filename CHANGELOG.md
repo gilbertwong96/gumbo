@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recorded, which is what a capped error list — `max_errors: 0` — produces, and the dropped name
   then stayed in the buffer for the next attribute name to be appended to (`<p a=1 a b=2>` read
   `{"ab", "2"}` instead of `{"b", "2"}`). Patch 0015 moves the reset to the call site, where
-  Nokogiri's fork has it. Five of a Rails port's 1,058 stored bodies read differently before it,
+  Nokogiri's fork has it. Six of a Rails port's 1,058 stored bodies read differently before it,
   and its reference parser agrees with the trees after it.
 
 ### Changed

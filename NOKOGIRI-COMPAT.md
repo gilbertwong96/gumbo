@@ -149,17 +149,18 @@ documents the pin alone may differ in from 167 to 232 of the 1,000.
    port's own classifier (`var/classify_diffs.exs`), by category (bodies whose first divergence is
    of that kind):
 
-   | category | `main` | 0013 | + 0014 | + 0012 |
-   |---|---|---|---|---|
-   | no surviving divergence | 938 | 992 | 1012 | **1013** |
-   | `scope` (a table, `li`, `ul`, `dl`, the select family) | 52 | 2 | 1 | **0** |
-   | `other` (the tag-name and attribute shapes) | 39 | 39 | 27 | 27 |
-   | `limit` (a parser limit on either side) | 16 | 16 | 16 | 16 |
-   | `unicode` | 5 | 5 | 0 | 0 |
-   | `bogus_comment` (the processing-instruction shapes) | 5 | 2 | 2 | 2 |
-   | `template` | 3 | 2 | 0 | 0 |
+   | category | `main` | 0013 | + 0014 | + 0012 | + 0015 |
+   |---|---|---|---|---|---|
+   | no surviving divergence | 938 | 992 | 1012 | 1013 | **1019** |
+   | `scope` (a table, `li`, `ul`, `dl`, the select family) | 52 | 2 | 1 | 0 | 0 |
+   | `other` (the tag-name and attribute shapes) | 39 | 39 | 27 | 27 | **21** |
+   | `limit` (a parser limit on either side) | 16 | 16 | 16 | 16 | 16 |
+   | `unicode` | 5 | 5 | 0 | 0 | 0 |
+   | `bogus_comment` (the processing-instruction shapes) | 5 | 2 | 2 | 2 | 2 |
+   | `template` | 3 | 2 | 0 | 0 | 0 |
 
-   Each column adds one patch: 0013 is the mode, 0014 the text split, 0012 the "in table" rule. The
+   Each column adds one patch: 0013 is the mode, 0014 the text split, 0012 the "in table" rule,
+   0015 the duplicate-attribute buffer. The
    two `scope` cases 0013 leaves are `fuzz 275` and `fuzz 343`, and they are foster-parented runs,
    which is why merging text nodes on both sides in that same comparison made them — and `unicode`
    and `template` with them — read as no divergence at all. The last one, `fuzz 33`, is the in-table
@@ -167,13 +168,14 @@ documents the pin alone may differ in from 167 to 232 of the 1,000.
    Nothing here is visible to the rendered corpus, which reads 0 either way — that is what
    `:rendered_only` above means.
 
-   What the 45 that remain are: 27 `other`, the names this binding reports as written where the
-   reference reports the name its tokenizer built (lowercased, and cut at a control character), plus
-   six malformed-tag shapes where an attribute name keeps characters the reference drops and whose
-   mechanism is not read yet; 16 `limit`, documents both parsers refuse with the same message, so it
-   is the classifier's coarse bucket that lists them; and 2 `bogus_comment`, the
-   processing-instruction shapes the port's own adapter drops. None of them is a select shape, a
-   table rule or a text split.
+   The 39 that remain split into two families. 16 are `limit`: documents both parsers refuse with
+   the same message, so it is the classifier's coarse bucket that lists them and not a difference in
+   what they produce — measured by comparing the two failures, which are equal. The other 21 are
+   `other`, and the first of them that was read is the name a binding reports as written where the
+   reference reports the name its tokenizer built: lowercase, and cut at a control character. What
+   the remaining ones are has not been read yet, one body at a time, and none of the 39 is a select
+   shape, a table or text rule, or a processing instruction (the two `bogus_comment` bodies are
+   those, and they are the port's own adapter dropping processing-instruction nodes).
 
 ## Status
 
@@ -193,11 +195,10 @@ html5lib cases the mode moves away from upstream's expectations); 0014's by
 `test/gumbo/foster_text_test.exs`, whose first two shapes are upstream's own from before the
 merge it reverses.
 
-What gate 5 leaves is 45 bodies, and every one is a difference `main` has too: the names this
-binding reports as written, the parser limits both parsers refuse alike, the
-processing-instruction shapes, and six malformed-tag shapes where an attribute name keeps
-characters the reference drops. The last group is the only mechanism not read yet, and none of the
-45 is a select shape, a table rule or a text split.
+Gate 5 leaves 39 bodies: 21 `other`, whose first read one is the name-as-written family, and 16
+`limit`, documents both parsers refuse with the same message — the classifier's coarse bucket, not
+a difference in output. The two `bogus_comment` bodies are the port's own adapter dropping
+processing-instruction nodes. None of the 39 is a select shape, a table or text rule.
 
 Two things are not claimed. Two of these three patches restore what `main` deliberately left
 behind, so a consumer that wants one cannot use the other: the port depends on this branch. 0012
