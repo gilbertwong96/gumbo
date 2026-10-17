@@ -168,16 +168,16 @@ documents the pin alone may differ in from 167 to 232 of the 1,000.
    Nothing here is visible to the rendered corpus, which reads 0 either way — that is what
    `:rendered_only` above means.
 
-   Read again with the classifier's two non-divergence labels — documents both parsers refuse with
-   the same message, and trees that differ only in the names this binding reports as written where
-   the reference reports the name its tokenizer built (lowercase, a NUL for the U+FFFD the other
-   side wrote, cut at a control character) — those 39 rows are **21 names, 16 equal failures, and 2
-   that are neither**. Both of the two are the port's own adapter: `to_term/1` returns nil for a
-   processing-instruction node on purpose, because the reference records one as a comment and the
-   render pipeline discards comments either way. Nothing in the 39 is a select shape, a table or
-   text rule, or a difference in what either parser parses: no parse difference is left to read.
-   `parity/results/richtext-tree-differences.json` there records all 39 by name and category, with
-   the two divergences' bodies, and `var/classify_diffs.exs` is what produces it.
+   Read with the classifier's labels for what is *not* a parse difference, those 39 rows are **21
+   names, 16 equal failures, and 2 nodes**: the names are the ones this binding reports as written
+   where the reference reports the name its tokenizer built (lowercase, a NUL for the U+FFFD the
+   other side wrote, cut at a control character); the equal failures are documents both parsers
+   refuse with the same message; and the 2 nodes are a `<?…>`, which is a processing instruction to
+   this binding and a bogus comment to the reference's generation — the port's own adapter drops
+   that node on purpose (`to_term/1` returns nil for it, because the reference keeps the
+   delimiters it would need and the render pipeline discards comments and instructions alike).
+   **No parse difference is left.** `parity/results/richtext-tree-differences.json` there records
+   all 39 rows by name and category, and `var/classify_diffs.exs` is what produces it.
 
 ## Status
 
@@ -197,10 +197,11 @@ html5lib cases the mode moves away from upstream's expectations); 0014's by
 `test/gumbo/foster_text_test.exs`, whose first two shapes are upstream's own from before the
 merge it reverses.
 
-Gate 5 leaves 2 bodies that are neither the same failure from both parsers nor a difference in
-how a name is reported, and both of them are the port's own adapter dropping
-processing-instruction nodes; 21 more differ only in the names reported as written, and 16 are
-documents both parsers refuse with the same message. No parse difference is left.
+Gate 5 leaves no parse difference: of the 1,058 bodies, 1019 have none that survives the
+comparison's normalization, 21 differ only in the names reported as written, 16 are documents both
+parsers refuse with the same message, and 2 differ only in that a `<?…>` is a processing
+instruction here and a bogus comment there — a node the port's adapter drops on purpose. Those are
+labels the classifier applies, not divergences it hides; each is described above.
 
 Two things are not claimed. Two of these three patches restore what `main` deliberately left
 behind, so a consumer that wants one cannot use the other: the port depends on this branch. 0012
