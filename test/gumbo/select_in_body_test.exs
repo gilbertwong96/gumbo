@@ -14,6 +14,11 @@ defmodule Gumbo.SelectInBodyTest do
   # select keeps, and what closes to it. Chrome gives every tree below on the same bytes,
   # except the last one, which the spec asks for and Chrome does not do yet.
   #
+  # The branch `nokogiri-compat` puts the removed mode back (patch 0013) and follows a Rails
+  # reference instead, so two of these tests read the other way there: `textarea` and `keygen`
+  # take the select with them, and a fragment whose context is a select starts in the mode.
+  # Both say so where they are asserted.
+  #
   # The shapes the move also covers inside a `table` or a `td` are the ones
   # `select_tree_construction_test.exs` compares with upstream's own file.
 
@@ -27,16 +32,20 @@ defmodule Gumbo.SelectInBodyTest do
            ] = content!("<select><input></select>")
   end
 
-  test "a textarea and a keygen inside a select stay inside it" do
-    assert [%{type: :element, tag: :select, children: [textarea]}] =
-             content!("<select><textarea>x</textarea></select>")
+  # On this branch the removed mode is back (0013), so `textarea` and `keygen` are the two
+  # tokens it names alongside `input`: each of the three pops the select and is parsed again in
+  # body, which is where the element ends up. main keeps them inside the select, because the
+  # rule it follows names `input` alone.
+  test "a textarea and a keygen inside a select take the select with them" do
+    assert [
+             %{type: :element, tag: :select, children: []},
+             %{type: :element, tag: :textarea, children: [%{type: :text, text: "x"}]}
+           ] = content!("<select><textarea>x</textarea></select>")
 
-    assert %{type: :element, tag: :textarea, children: [%{type: :text, text: "x"}]} = textarea
-
-    assert [%{type: :element, tag: :select, children: [keygen]}] =
-             content!("<select><keygen></select>")
-
-    assert %{type: :element, tag: :keygen, children: []} = keygen
+    assert [
+             %{type: :element, tag: :select, children: []},
+             %{type: :element, tag: :keygen, children: []}
+           ] = content!("<select><keygen></select>")
   end
 
   # `hr`, `option` and `optgroup` are the three the rule inserts, and each closes what it
@@ -128,10 +137,14 @@ defmodule Gumbo.SelectInBodyTest do
   # parses its content with the in-body rules, so an element is inserted where the removed
   # mode dropped it — and an `input`, which the rule would otherwise pop the select for, is
   # ignored instead. The spec asks for both; Chrome inserts the input today.
-  test "a fragment whose context is a select parses its content in body" do
+  #
+  # On this branch the context element starts the parser in the mode 0013 restores, so the `i`
+  # is dropped and only its text remains; the `input` is ignored either way, because the select
+  # the mode pops to is the context element, which is not on the stack to be found.
+  test "a fragment whose context is a select starts in that mode here" do
     assert {:ok, output} = Gumbo.parse_fragment("<i>x", :select)
 
-    assert [%{type: :element, tag: :i, children: [%{type: :text, text: "x"}]}] =
+    assert [%{type: :text, text: "x"}] =
              output |> Output.fragment_nodes() |> Gumbo.materialize(detail: :content)
 
     assert {:ok, output} = Gumbo.parse_fragment("<input>", :select)
