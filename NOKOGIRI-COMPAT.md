@@ -52,6 +52,14 @@ predates it and inserts the run as it stands. Patch 0013 is the reverse of that 
 shapes it moves are upstream's own: `41a0f3e^`'s `MisnestedTable2` expected three children where
 the merged version expects two.
 
+What it puts back was never the spec's reading of that rule. "insert a character" appends to the text
+node before the adjusted insertion location when there is one, which is what a browser does, what
+`main` does, and what the corpus this build already compares against expects: `adoption01.dat` holds
+a table in which both runs land at the same place, and its tree is one text node, `"AC"`, where this
+branch splits it in two. Where 0012 restores what the spec asked for before #10548, 0013 restores
+only what Nokogiri's fork did before `41a0f3e` — a deviation from the spec, not a reading of an
+earlier one.
+
 Both are worth reading next to the reference's sources here rather than in the abstract: the port
 keeps them at `native/vendor/gumbo/`, unmodified, with the gem's SHA in `PROVENANCE.md`, and its
 `Campfire.HtmlParserReference` runs them.
