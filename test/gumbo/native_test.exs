@@ -40,7 +40,11 @@ defmodule Gumbo.NativeTest do
     materialize_output_dirty: [:output, 0],
     materialize_node: [:output, 0, 0],
     materialize_node_dirty: [:output, 0, 0],
-    dirty_schedulers?: []
+    dirty_schedulers?: [],
+    # Not a NIF function: Mix's staleness hook for the C build's inputs, which is why it is in
+    # this module at all (see the attribute above it). It is listed here because this test's
+    # invariant is that every function the module declares is one a caller can reach.
+    __mix_recompile__?: []
   ]
 
   test "the NIF loads and the vendored gumbo is linked" do

@@ -3,6 +3,36 @@ defmodule Gumbo.Native do
 
   @on_load :load_nif
 
+  # What the C build reads, so that a change to any of it reaches Mix's staleness check and
+  # elixir_make is asked to run make at all: elixir_make declares no inputs of its own, so
+  # without these a consumer that fetches a checkout whose only difference is the patch series
+  # (or the pinned submodule) keeps the library the previous one built. The Makefile's stamp
+  # does the rest — it re-copies and re-applies the series when a patch is newer than the copy
+  # — but only when make runs.
+  #
+  # Two halves, as Mix's own compile.elixir documentation puts it: `@external_resource` for the
+  # files that exist, which catches one being edited, and `__mix_recompile__?/0` over the
+  # wildcard result, which catches one being added or removed — a renumbered series is both.
+  @build_inputs ["Makefile"] ++
+                  Path.wildcard(Path.expand("../../c_src/patches/gumbo-parser/*.patch", __DIR__)) ++
+                  Path.wildcard(Path.expand("../../c_src/gumbo-parser/src/*", __DIR__))
+
+  @build_inputs_digest :erlang.md5(@build_inputs)
+
+  for input <- @build_inputs do
+    @external_resource input
+  end
+
+  @doc false
+  def __mix_recompile__? do
+    current =
+      ["Makefile"] ++
+        Path.wildcard(Path.expand("../../c_src/patches/gumbo-parser/*.patch", __DIR__)) ++
+        Path.wildcard(Path.expand("../../c_src/gumbo-parser/src/*", __DIR__))
+
+    :erlang.md5(current) != @build_inputs_digest
+  end
+
   @spec smoke() :: binary()
   def smoke, do: :erlang.nif_error(:nif_not_loaded)
 
