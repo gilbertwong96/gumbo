@@ -168,14 +168,16 @@ documents the pin alone may differ in from 167 to 232 of the 1,000.
    Nothing here is visible to the rendered corpus, which reads 0 either way — that is what
    `:rendered_only` above means.
 
-   The 39 that remain split into two families. 16 are `limit`: documents both parsers refuse with
-   the same message, so it is the classifier's coarse bucket that lists them and not a difference in
-   what they produce — measured by comparing the two failures, which are equal. The other 21 are
-   `other`, and the first of them that was read is the name a binding reports as written where the
-   reference reports the name its tokenizer built: lowercase, and cut at a control character. What
-   the remaining ones are has not been read yet, one body at a time, and none of the 39 is a select
-   shape, a table or text rule, or a processing instruction (the two `bogus_comment` bodies are
-   those, and they are the port's own adapter dropping processing-instruction nodes).
+   Read again with the classifier's two non-divergence labels — documents both parsers refuse with
+   the same message, and trees that differ only in the names this binding reports as written where
+   the reference reports the name its tokenizer built (lowercase, a NUL for the U+FFFD the other
+   side wrote, cut at a control character) — those 39 rows are **21 names, 16 equal failures, and 2
+   that are neither**. Both of the two are the port's own adapter: `to_term/1` returns nil for a
+   processing-instruction node on purpose, because the reference records one as a comment and the
+   render pipeline discards comments either way. Nothing in the 39 is a select shape, a table or
+   text rule, or a difference in what either parser parses: no parse difference is left to read.
+   `parity/results/richtext-tree-differences.json` there records all 39 by name and category, with
+   the two divergences' bodies, and `var/classify_diffs.exs` is what produces it.
 
 ## Status
 
@@ -195,10 +197,10 @@ html5lib cases the mode moves away from upstream's expectations); 0014's by
 `test/gumbo/foster_text_test.exs`, whose first two shapes are upstream's own from before the
 merge it reverses.
 
-Gate 5 leaves 39 bodies: 21 `other`, whose first read one is the name-as-written family, and 16
-`limit`, documents both parsers refuse with the same message — the classifier's coarse bucket, not
-a difference in output. The two `bogus_comment` bodies are the port's own adapter dropping
-processing-instruction nodes. None of the 39 is a select shape, a table or text rule.
+Gate 5 leaves 2 bodies that are neither the same failure from both parsers nor a difference in
+how a name is reported, and both of them are the port's own adapter dropping
+processing-instruction nodes; 21 more differ only in the names reported as written, and 16 are
+documents both parsers refuse with the same message. No parse difference is left.
 
 Two things are not claimed. Two of these three patches restore what `main` deliberately left
 behind, so a consumer that wants one cannot use the other: the port depends on this branch. 0012
