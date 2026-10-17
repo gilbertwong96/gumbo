@@ -102,6 +102,19 @@ every document with a select in it, not only to the shapes 0007, 0010 and 0011 r
    microseconds per body: `main` 47.17/50.19, this branch 47.26/48.28 and 49.59/51.57 in two
    runs (the runs bracket each other, so the difference is noise).
 
+5. A tree-level comparison against the reference's own parser rather than its rendered output:
+   the port vendors Nokogiri 1.19.4's unmodified gumbo sources (`native/vendor/gumbo/`, gem SHA
+   in its `PROVENANCE.md`) behind a fault-isolated fallback parser
+   (`Campfire.HtmlParserReference`), which is the reference's tree builder with the reader's own
+   `body` fragment context. Comparing that tree with this branch's over the 1,058 bodies with the
+   port's own classifier (`var/classify_diffs.exs`): 992 bodies have no divergence that survives
+   the comparison's normalization and 66 have one — `other` 39 (the tag-name and attribute
+   shapes), `limit` 16 (a parser limit on either side), `unicode` 5, `scope` 2, `template` 2,
+   `bogus_comment` 2. `main` on the same measure is 938 with 120, of which `scope` is 52. The two
+   remaining `scope` cases (`fuzz 275`, `fuzz 343`) diverge the same way on `main`, and neither
+   divergence is the mode's: one text node holds a run twice where the reference holds it once.
+   That is a separate known difference and the next piece of work, not a select shape.
+
 ## Status
 
 Implemented on this branch, with 0012 as described above. Evidence so far: the port's
@@ -110,12 +123,15 @@ Implemented on this branch, with 0012 as described above. Evidence so far: the p
 comparison resolves), the gumbo suite is green (332 tests, 19 environment-tagged exclusions),
 `mix format --check-formatted`, `mix credo --strict` and a warnings-as-errors compile pass, and
 `check-patch`, `check-generators`, `check-parity`, `check-c-format`, `check-c-lint`,
-`check-clean-build`, `check-teardown` and `check-sanitizers` all pass. Gate 4's numbers are
-above. The mode's own shapes are held by `test/gumbo/select_in_select_test.exs`
+`check-clean-build`, `check-teardown` and `check-sanitizers` all pass. Gates 4 and 5's numbers
+are above. The mode's own shapes are held by `test/gumbo/select_in_select_test.exs`
 (the mode's edges, including the two error states that would notice the enum moving),
 `test/gumbo/select_scope_test.exs` (the corpus shapes where an end tag or an element's text is
 at stake) and the six recorded trees in `test/gumbo/select_tree_construction_test.exs` (the
 html5lib cases the mode moves away from upstream's expectations).
+
+One item is open and is not about this mode: the two `scope` cases gate 5 leaves, where the
+binding keeps a text run twice and the reference keeps it once.
 
 Two things are not claimed. The mode is `main`'s opposite, so a consumer that wants one
 cannot use the other: the port depends on this branch. And the divergence is documented
