@@ -8,9 +8,14 @@ the legacy side of the same library.
 ## Why a branch, not an option
 
 The divergence is not a knob, it is a whole insertion mode: whatwg/html#10548 removed
-the **"in select"** insertion mode, and 0.14.1 follows that removal (`GUMBO_INSERTION_MODE_IN_SELECT`
-is gone from `src/insertion_mode.h`). Reproducing Nokogiri means re-adding the mode, which
-changes tree construction — fine on a branch, not fine as `main`'s default.
+the **"in select"** insertion mode, and 0.14.1 follows that removal
+(`GUMBO_INSERTION_MODE_IN_SELECT` is gone from `src/insertion_mode.h`). Reproducing
+Nokogiri means re-adding the mode, which changes tree construction — fine on a branch, not
+fine as `main`'s default. It also reaches outside the vendored copy: the mode's two enum
+members are part of the enum a parser error reports, so `c_src/gumbo_atoms.c`'s member
+list, its count literal and `lib/gumbo/types.ex` move with it. None of those three files is
+part of the copy the patch series patches, so this is a branch's worth of change rather
+than one file's.
 
 ## What actually differs (measured)
 
@@ -26,72 +31,93 @@ Three behaviours exist for the same input, `<p><select>https://example.com/&lt;b
 | 0.14.1's pinned base, unpatched | `</p>` closes the **outer** `p`, the trailing text escapes as a sibling — no version of the spec produces this |
 | `main` (patch 0007 + 0.14.1) | an empty `p` is inserted **inside** the select and closed: Chrome's behaviour |
 
-So "revert patch 0007" is **not** enough: the target needs the removed mode itself.
+So "revert patch 0007" is **not** enough: the target needs the removed mode itself. This
+branch produces the first row; the port's corpus is what holds it to it.
 
 ## Reference implementation (the rules, not invented here)
 
-The Rust port vendors html5ever 0.35 precisely because *"later releases also adopt the
-customizable-`<select>` parsing rules, which Gumbo doesn't, so upgrading isn't an option"*
-(`crates/richtext/vendor/html5ever/Cargo.toml`). Its `InSelect` arm
-(`src/tree_builder/rules.rs:1130`) is the rule list to mirror, and html5ever has the
-matching `InSelectInTable` arm at `:1224` with the entry conditions at `:692`.
+The mode is upstream's own code, restored: gumbo's history carries the commit that removed
+it — `7811944` ("fix parser to comply with most recent spec changes to `<select>` logic",
+2025-09-17, whatwg/html#10557) — and `git show 7811944^:src/parser.c` is the source of every
+line 0012 puts back: `handle_in_select`, `handle_in_select_in_table`,
+`has_an_element_in_select_scope`, `close_current_select`, the `select` case of
+`get_appropriate_insertion_mode`, and the in-body `<select>` start tag that switches into the
+mode. The three in-body rules that commit wrote in the mode's place are removed again,
+because the mode answers for a select itself.
 
-The arm, in short: characters and comments insert; `<html>` goes to in-body; `<option>`
-pops a current `option` then inserts; `<optgroup>` pops a current `option` and `optgroup`
-then inserts; `<hr>` pops both, inserts, pops; `</optgroup>`/`</option>` pop their own;
-`<select>` (nested) and `</select>` **pop to the select** and reset the insertion mode;
-`<input>`, `<keygen>` and `<textarea>` pop to the select, reset, and reprocess the token;
-`<script>`/`<template>` go to in-head; EOF goes to in-body; **anything else is a parse
-error and the token is ignored** — which is exactly the "the element is dropped and the
-text merges" behaviour the corpus expects.
+Two independent confirmations that this generation is the one the reference runs:
 
-## Where it goes (confirmed against this tree)
+* The Rust port vendors html5ever 0.35 precisely because *"later releases also adopt the
+  customizable-`<select>` parsing rules, which Gumbo doesn't, so upgrading isn't an option"*
+  (`crates/richtext/vendor/html5ever/Cargo.toml`). Its `InSelect` arm
+  (`src/tree_builder/rules.rs:1130`) and the table arm at `:1224`, with the entry conditions at
+  `:692`, are the same rule list 7811944 removed — worth reading the diff beside them.
+* The port's corpus: the tables the mode produces for its cases are the reference's output
+  (0 differences, below).
 
-`handle_html_content` (`src/parser.c:4133`) is a one-line dispatch through a table:
+## Where it goes, as built
 
-```c
-return kTokenHandlers[(unsigned int) parser->_parser_state->_insertion_mode](parser, token);
-```
+`handle_html_content` is a one-line dispatch through a table indexed by the mode
+(`kTokenHandlers[(unsigned int) _insertion_mode]`), so the mode is:
 
-so a mode is three edits plus two hooks:
-
-1. `src/insertion_mode.h` — append `GUMBO_INSERTION_MODE_IN_SELECT` and
-   `GUMBO_INSERTION_MODE_IN_SELECT_IN_TABLE` to the enum (**append**, so the existing
-   `kTokenHandlers` indices keep their meaning).
-2. `src/parser.c` — add `handle_in_select()` (and `handle_in_select_in_table()`) next to the
-   other handlers, with the arm above; append both to `kTokenHandlers` in the same order.
-3. `src/parser.c:3288` — the in-body `<select>` start tag: `reconstruct_active_formatting_elements`,
-   insert the element, `set_frameset_not_ok`, then `set_insertion_mode(IN_SELECT)`; when the
-   current mode is `IN_TABLE`/`IN_CAPTION`/`IN_ROW`/`IN_CELL`, use `IN_SELECT_IN_TABLE`
-   (html5ever `rules.rs:692`).
-4. `src/parser.c:612` — `get_appropriate_insertion_mode`: a `select` on the open-element
-   stack resets to `IN_SELECT` (the old spec's clause; `main` deliberately has no such case).
-5. Fragment parsing with `fragment_context = select`: start in `IN_SELECT`
-   (`fragment_parser_init` sets the mode; `main` has the related check at `parser.c:3222`).
+1. `src/insertion_mode.h` — two members back **between `IN_CELL` and `IN_TEMPLATE`**, where
+   Nokogiri's gumbo has them. Their position is observable: a parser error reports
+   `insertion_mode`, so the numbering is part of this binding's output.
+2. `src/parser.c` — `handle_in_select()` and `handle_in_select_in_table()` back beside the
+   other handlers, with their entries in `kTokenHandlers` in the same position.
+3. `src/parser.c` — the in-body `<select>` start tag switches into the mode again, and the
+   `<input>`, `<hr>`, `<option>`/`<optgroup>` rules 7811944 added are removed.
+4. `src/parser.c` — `get_appropriate_insertion_mode` answers `IN_SELECT` for a `select` on
+   the open-element stack, which is also what makes a fragment whose context element is a
+   `select` start in the mode: the context stands in for the last open element.
+5. `c_src/gumbo_atoms.c`, `c_src/gumbo_atoms.h`, `lib/gumbo/types.ex` — the member list and
+   count literal that travel with the enum, on the branch rather than in the patch, because
+   they are not part of the vendored copy.
 
 ## Delivering it the way this repo does
 
-Everything above is a **patch**, not a submodule edit: write
-`c_src/patches/gumbo-parser/0012-legacy-in-select.exs` (a generator: `%{priors:, header:,
-substitutions:}` with the C as heredocs, as 0007 does), run `mix gumbo.patches` to write the
-`.patch`, and let `make check-patch` keep the pair honest. `c_src/gumbo-parser` stays
-byte-identical to its pin. A test belongs next to patch 0007's, e.g.
-`test/gumbo/select_in_select_test.exs`, holding the three behaviours above.
+`c_src/patches/gumbo-parser/0012-legacy-in-select.exs` is a generator like 0007's, so
+`mix gumbo.patches` writes the patch, `make check-patch` keeps the series applicable, and
+`make check-generators` keeps the pair honest. `c_src/gumbo-parser` stays byte-identical to
+its pin; `c_src/patches/README.md` carries the row and why the patch is cumulative.
+
+It is the only cumulative patch whose diff is against a **patched** tree (it anchors a helper
+after `has_an_element_in_table_scope`, whose body 0002 rewrote), so `BEHAVIOUR_PATCHES` cannot
+list it and `make check-parity` compares its baseline against the shipped build per document:
+a difference is allowed only in a document whose tree holds a `select`, and the check fails if
+none moves. On this branch that is 454 of the 1,000 corpus documents — the mode applies to
+every document with a select in it, not only to the shapes 0007, 0010 and 0011 repaired.
 
 ## Acceptance gate
 
-1. Point `once-campfire-elixir`'s `{:gumbo, path: ...}` at this worktree and run its corpus:
+1. `once-campfire-elixir` with `{:gumbo, path: ...}` pointed at this worktree:
    `mix test test/richtext_corpus_test.exs` → **0 differences** (58 with `main`).
-2. `mix test` and `mix credo --strict` in this repository.
-3. `make check-patch`, `make check-parity`, `make check-teardown` — the patch series must
-   still apply and the pinned/patched comparisons must still hold for every document the
-   parity corpus generates (patch 0007 set that precedent; this one narrows it further, so
-   the exclusions need to be stated in the patch header as it does).
-4. Re-run the port's load benchmark once, to confirm the legacy mode does not cost throughput
-   (the mode only runs for documents that contain a `<select>`).
+   `parity/results/richtext-corpus-differences.json` is `[]`.
+2. This repository: `mix test` green, `mix format --check-formatted`, `mix credo --strict`.
+3. `make check-patch`, `make check-generators`, `make check-parity`, `make check-c-format`,
+   `make check-c-lint`, `make check-teardown`, `make check-sanitizers`.
+4. The port's parse benchmark, to confirm the mode costs nothing on documents without a
+   select — it is reached only through the dispatch table, and the tables it adds run only
+   where a select is open. Measured over the port's 1,058 bodies, five passes each, min/mean
+   microseconds per body: `main` 47.17/50.19, this branch 47.26/48.28 and 49.59/51.57 in two
+   runs (the runs bracket each other, so the difference is noise).
 
 ## Status
 
-Branch created from `main` (`1a991cd`, 0.3.0) plus this note. The mode itself is not
-implemented yet; the change list above is the work, with html5ever 0.35's arms as the
-reference and the port's corpus as the gate.
+Implemented on this branch, with 0012 as described above. Evidence so far: the port's
+1,058-case corpus reports no unresolved difference (`0` in
+`parity/results/richtext-corpus-differences.json`, 92 raw-unequal rows that the normalized
+comparison resolves), the gumbo suite is green (332 tests, 19 environment-tagged exclusions),
+`mix format --check-formatted`, `mix credo --strict` and a warnings-as-errors compile pass, and
+`check-patch`, `check-generators`, `check-parity`, `check-c-format`, `check-c-lint`,
+`check-clean-build`, `check-teardown` and `check-sanitizers` all pass. Gate 4's numbers are
+above. The mode's own shapes are held by `test/gumbo/select_in_select_test.exs`
+(the mode's edges, including the two error states that would notice the enum moving),
+`test/gumbo/select_scope_test.exs` (the corpus shapes where an end tag or an element's text is
+at stake) and the six recorded trees in `test/gumbo/select_tree_construction_test.exs` (the
+html5lib cases the mode moves away from upstream's expectations).
+
+Two things are not claimed. The mode is `main`'s opposite, so a consumer that wants one
+cannot use the other: the port depends on this branch. And the divergence is documented
+against Nokogiri's *behavior*, not against a Nokogiri binary: the reference's own output is
+the corpus, which the port keeps, rather than a Nokogiri run in this repository.

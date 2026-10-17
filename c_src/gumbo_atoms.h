@@ -27,7 +27,7 @@
   (GUMBO_TOKEN_PROCESSING_INSTRUCTION + 1) /* 10 \
                                             */
 #define GUMBO_INSERTION_MODE_COUNT \
-  (GUMBO_INSERTION_MODE_AFTER_AFTER_FRAMESET + 1) /* 21 */
+  (GUMBO_INSERTION_MODE_AFTER_AFTER_FRAMESET + 1) /* 23 */
 
 /* Tags: GUMBO_TAG_LAST is 154 real names + GUMBO_TAG_UNKNOWN + the LAST
    marker, so the tag table itself holds 155 entries. The names are NOT

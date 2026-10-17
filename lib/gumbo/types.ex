@@ -145,6 +145,8 @@ defmodule Gumbo.Types do
           | :in_table_body
           | :in_row
           | :in_cell
+          | :in_select
+          | :in_select_in_table
           | :in_template
           | :after_body
           | :in_frameset

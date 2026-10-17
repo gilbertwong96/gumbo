@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- On the `nokogiri-compat` branch only: what the 0.3.0 entry above moved — an element written
+  inside a `<select>`, and an end tag written inside one — moves back, because Nokogiri's fork of
+  gumbo still has the "in select" insertion mode the spec removed (whatwg/html#10548). A Rails port
+  that has to reach Nokogiri's trees needs that mode, it is a whole mode rather than a knob, and
+  `NOKOGIRI-COMPAT.md` is the branch's own note, including what it costs `make check-parity`.
+
 ## [0.3.0] - 2026-10-16
 
 ### Added

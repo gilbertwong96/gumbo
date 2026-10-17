@@ -40,18 +40,14 @@ defmodule Gumbo.SpecialCategoryTest do
            ] = children
   end
 
-  # The nested case is the only removal the relaxed select parser kept, and it fires on
-  # a scope query, so a boundary between the two selects keeps the inner one where it is.
-  test "a nested select behind a marquee keeps what follows its end tag" do
-    assert [%{type: :element, tag: :select, children: children}] =
-             content!("<select><marquee><i><select>x</select>y")
-
-    assert [%{type: :element, tag: :marquee, children: [i]}] = children
-    assert %{type: :element, tag: :i, children: inner} = i
-
+  # The nested case is the one removal the old select parser kept, and this branch applies it in
+  # the mode rather than through the special-category walk: the inner select closes the outer one,
+  # which is why both texts land outside it. main keeps the inner select where it is, because the
+  # marquee in between bounds the scope query its rules use instead.
+  test "a nested select closes the one it sits in, marquee or not" do
     assert [
-             %{type: :element, tag: :select, children: [%{type: :text, text: "x"}]},
-             %{type: :text, text: "y"}
-           ] = inner
+             %{type: :element, tag: :select, children: []},
+             %{type: :text, text: "xy"}
+           ] = content!("<select><marquee><i><select>x</select>y")
   end
 end

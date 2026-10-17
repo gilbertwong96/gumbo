@@ -344,6 +344,13 @@ Known and measured, with the reference's own sources read for its side of the ta
 | an end tag inside `<select>` (`<p><select>https://example.com/&lt;b</p>/p>`) | the same removal puts the end tag in body, where `</p>` with no `p` open for it inserts an empty `p` inside the select and closes that one — patch 0007, which is what makes `select` bound a scope query (whatwg/html#10548) | ignored — by the same catch-all, so the text on either side stays one text node |
 | an element whose name has a character the tokenizer drops, a NUL or a line feed (`<bod\0y>`, `<SCR\nIPT/XSS …>`) | `tag_name/1` gives the name **as written** — `"bod\u0000y"`, `"SCR\nIPT"` — while the tree itself is the spec's: the line feed ends the name and the rest of the tag becomes attributes (`"SCR\nIPT"` keeps `xss` and `src`, `"action-text-attac\nhment"` keeps `hment` and `content-type`) | the name the tokenizer built, which is what the C node's own tag name carries: a U+FFFD for the NUL, and nothing after the line feed |
 
+The two `<select>` rows are what the branch `nokogiri-compat` exists for, and they are the only
+rows here whose "this library" side that branch changes: it puts the removed "in select" insertion
+mode back, so on it an element inside a select is dropped and an end tag inside one is ignored,
+which is the third column. That is a whole mode rather than a knob — it is a patch, two enum
+members and the enum tables that report them — and `NOKOGIRI-COMPAT.md` is the branch's own note,
+including what it does to `make check-parity`. `main` keeps the rows as they are.
+
 The processing-instruction rows are the ones to decide on before a port. The spec gained
 processing instructions in 2026 — whatwg/html#12908 and #12911, which the pinned base
 follows: its own `tests/tree_construction/tests1.dat` expects `| <?COMMENT ?>` for
