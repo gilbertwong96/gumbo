@@ -295,7 +295,12 @@ $(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 # patches moving a tree — and the pin alone may differ only in the documents whose tree holds
 # a select, an applet, a marquee or an object: the first because a select bounds the scope
 # queries 0007 and 0010 changed, the rest because 0011 is the end tag rule for those three
-# asking in scope rather than in table scope. The corpus keeps the select
+# asking in scope rather than in table scope. 0012 comes between the two steps, and cannot be
+# in the list below the way the others can: it restores a whole insertion mode, and it is a
+# cumulative patch — its text is against the pin plus 0001-0011 — so the baseline cannot apply
+# it to the pin on its own. The second step is therefore per document as well, and it allows a
+# difference only where the tree holds a select, which is the mode's bound, and fails if no
+# document moves at all. The corpus keeps the select
 # shapes f57a7e9 added for the scope queries, and it holds no document 0008 or 0009 moves: of
 # the 1019 tree-construction documents in html5lib's corpus, the four that carry two distinct
 # unknown names at all are SVG or MathML, which is the handler that already compares names, and
@@ -349,32 +354,41 @@ check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BASELINE) $(PARITY_DUMP_BUILD)
 	$(PARITY_DUMP_PINNED) dump < "$$docs" > "$$pinned" || exit 1; \
 	$(PARITY_DUMP_BASELINE) dump < "$$docs" > "$$baseline" || exit 1; \
 	$(PARITY_DUMP_BUILD) dump < "$$docs" > "$$build" || exit 1; \
-	if ! cmp -s "$$baseline" "$$build"; then \
-		echo "FAIL: a patch other than $(notdir $(BEHAVIOUR_PATCHES)) changes tree construction; first divergence:"; \
-		diff "$$baseline" "$$build" | head -20; \
-		exit 1; \
-	fi; \
 	if cmp -s "$$pinned" "$$baseline"; then \
 		echo "FAIL: $(notdir $(BEHAVIOUR_PATCHES)) changed no tree, so nothing here covers it"; \
 		exit 1; \
 	fi; \
-	mkdir -p "$$split/pin" "$$split/base"; \
-	for side in pin base; do \
-		src="$$pinned"; [ "$$side" = base ] && src="$$baseline"; \
+	mkdir -p "$$split/pin" "$$split/base" "$$split/build"; \
+	for side in pin base build; do \
+		src="$$pinned"; [ "$$side" = base ] && src="$$baseline"; [ "$$side" = build ] && src="$$build"; \
 		awk -v out="$$split/$$side" '/^=== document /{ n = $$3 + 0; next } { print > (out "/" n) }' "$$src" || exit 1; \
 	done; \
-	changed=0; failed=0; \
+	changed=0; moved=0; failed=0; \
 	for f in "$$split/pin"/*; do \
 		i=$$(basename "$$f"); \
-		cmp -s "$$f" "$$split/base/$$i" && continue; \
-		changed=$$((changed + 1)); \
-		grep -Eq 'tag=(112|126|146|75),' "$$f" && continue; \
-		failed=1; \
-		echo "FAIL: document $$i differs but holds no select, applet, marquee or object, so no patch in $(notdir $(BEHAVIOUR_PATCHES)) is what moved it:"; \
-		diff "$$split/base/$$i" "$$f" | head -20; \
+		if ! cmp -s "$$f" "$$split/base/$$i"; then \
+			changed=$$((changed + 1)); \
+			if ! grep -Eq 'tag=(112|126|146|75),' "$$split/base/$$i"; then \
+				failed=1; \
+				echo "FAIL: document $$i differs but holds no select, applet, marquee or object, so no patch in $(notdir $(BEHAVIOUR_PATCHES)) is what moved it:"; \
+				diff "$$split/base/$$i" "$$f" | head -20; \
+			fi; \
+		fi; \
+		if ! cmp -s "$$split/base/$$i" "$$split/build/$$i"; then \
+			moved=$$((moved + 1)); \
+			if ! grep -Eq 'tag=112,' "$$split/base/$$i" "$$split/build/$$i"; then \
+				failed=1; \
+				echo "FAIL: document $$i differs between the baseline and the shipped build but holds no select, so a patch other than 0012 moved it:"; \
+				diff "$$split/build/$$i" "$$split/base/$$i" | head -20; \
+			fi; \
+		fi; \
 	done; \
 	[ $$failed -eq 0 ] || exit 1; \
-	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCHES)) and with the shipped build, and the pin alone differs only in the $$changed that hold a select, an applet, a marquee or an object"
+	[ $$moved -gt 0 ] || { \
+		echo "FAIL: 0012 changed no tree in the corpus, so nothing here covers the mode it restores"; \
+		exit 1; \
+	}; \
+	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCHES)) and with the shipped build, except the $$moved that hold a select and are what 0012 restores, and the pin alone differs only in the $$changed that hold a select, an applet, a marquee or an object"
 
 # The sanitizer gate. It is the only net there is for a memory-safety bug inside
 # gumbo itself — residual 2 of the list this project keeps of what could still take
