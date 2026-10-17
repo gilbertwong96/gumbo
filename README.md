@@ -336,6 +336,7 @@ Known and measured, with the reference's own sources read for its side of the ta
 | `<?pi x?>`, `<?COMMENT?>` | a `:processing_instruction` node, split into `target` and `data` | a comment — the spec's bogus-comment path, so `<?COMMENT?>` is `<!-- ?COMMENT? -->` |
 | `<?` with nothing after it | nothing in the tree | a comment, `<!-- ? -->` |
 | a control character in text (`\x07`, `\x1b`, `\x7f`, U+0085) | kept, with `:control_character_in_input_stream` | kept — the same, since patch 0009, which stopped writing U+FFFD for these |
+| text foster parented out of a table (`<div>a<table>b</table>`, `<table><td>Cell1<table><th>Cell2<tr>Cell3</table>`) | two text nodes in the first shape and three children in the second: upstream 41a0f3e merges a flushed run into the text node before the adjusted insertion location, which is what the spec's "insert a character" algorithm asks for | the same number of nodes, split differently — `"a"` and `"b"` stay apart — because Nokogiri's fork predates that merge, and its `maybe_flush_text_node_buffer` inserts the run as it stands. Patch 0013 takes that side on this branch |
 | a noncharacter in text (U+FDD0) | kept, with `:noncharacter_in_input_stream` | kept — the same, since patch 0009 |
 | `:max_tree_depth` | no ceiling unless one is asked for | 400 by default |
 | `:max_attributes` | 1024 by default, counting the names read for one element — a name counts as the tokenizer reaches it, so a tag that never closes is refused too | 400 by default, counting the same way |
@@ -349,7 +350,8 @@ rows here whose "this library" side that branch changes: it puts the removed "in
 mode back, so on it an element inside a select is dropped and an end tag inside one is ignored,
 which is the third column. That is a whole mode rather than a knob — it is a patch, two enum
 members and the enum tables that report them — and `NOKOGIRI-COMPAT.md` is the branch's own note,
-including what it does to `make check-parity`. `main` keeps the rows as they are.
+including what it does to `make check-parity`. `main` keeps the rows as they are. The foster-text
+row above is the other one: patch 0013, on that branch, splits text the way the third column does.
 
 The processing-instruction rows are the ones to decide on before a port. The spec gained
 processing instructions in 2026 — whatwg/html#12908 and #12911, which the pinned base

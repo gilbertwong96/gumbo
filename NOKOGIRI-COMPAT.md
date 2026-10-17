@@ -45,6 +45,17 @@ line 0012 puts back: `handle_in_select`, `handle_in_select_in_table`,
 mode. The three in-body rules that commit wrote in the mode's place are removed again,
 because the mode answers for a select itself.
 
+The other difference whose mechanism is known is text-node splitting. Upstream `41a0f3e`
+("spec: fix foster parented text not being merged into preceding text node", 2026-08-15) made a
+flushed text run merge into the text node before the adjusted insertion location; Nokogiri's fork
+predates it and inserts the run as it stands. Patch 0013 is the reverse of that commit, and the
+shapes it moves are upstream's own: `41a0f3e^`'s `MisnestedTable2` expected three children where
+the merged version expects two.
+
+Both are worth reading next to the reference's sources here rather than in the abstract: the port
+keeps them at `native/vendor/gumbo/`, unmodified, with the gem's SHA in `PROVENANCE.md`, and its
+`Campfire.HtmlParserReference` runs them.
+
 Two independent confirmations that this generation is the one the reference runs:
 
 * The Rust port vendors html5ever 0.35 precisely because *"later releases also adopt the
@@ -76,10 +87,11 @@ Two independent confirmations that this generation is the one the reference runs
 
 ## Delivering it the way this repo does
 
-`c_src/patches/gumbo-parser/0012-legacy-in-select.exs` is a generator like 0007's, so
-`mix gumbo.patches` writes the patch, `make check-patch` keeps the series applicable, and
-`make check-generators` keeps the pair honest. `c_src/gumbo-parser` stays byte-identical to
-its pin; `c_src/patches/README.md` carries the row and why the patch is cumulative.
+`c_src/patches/gumbo-parser/0012-legacy-in-select.exs` and `0013-legacy-text-merge.exs` are
+generators like 0007's, so
+`mix gumbo.patches` writes the patches, `make check-patch` keeps the series applicable, and
+`make check-generators` keeps the pairs honest. `c_src/gumbo-parser` stays byte-identical to
+its pin; `c_src/patches/README.md` carries the rows and why 0012 is cumulative.
 
 It is the only cumulative patch whose diff is against a **patched** tree (it anchors a helper
 after `has_an_element_in_table_scope`, whose body 0002 rewrote), so `BEHAVIOUR_PATCHES` cannot
@@ -87,6 +99,10 @@ list it and `make check-parity` compares its baseline against the shipped build 
 a difference is allowed only in a document whose tree holds a `select`, and the check fails if
 none moves. On this branch that is 454 of the 1,000 corpus documents — the mode applies to
 every document with a select in it, not only to the shapes 0007, 0010 and 0011 repaired.
+0013 has the opposite shape: its text is the pin's own, it applies to the pin on its own, and it
+stands with 0007-0011 in `BEHAVIOUR_PATCHES`, whose bound the gate now states with a `table` in
+the list — a table is the context a run has to be foster parented out of. That widened the
+documents the pin alone may differ in from 167 to 232 of the 1,000.
 
 ## Acceptance gate
 
@@ -107,20 +123,33 @@ every document with a select in it, not only to the shapes 0007, 0010 and 0011 r
    in its `PROVENANCE.md`) behind a fault-isolated fallback parser
    (`Campfire.HtmlParserReference`), which is the reference's tree builder with the reader's own
    `body` fragment context. Comparing that tree with this branch's over the 1,058 bodies with the
-   port's own classifier (`var/classify_diffs.exs`): 992 bodies have no divergence that survives
-   the comparison's normalization and 66 have one — `other` 39 (the tag-name and attribute
-   shapes), `limit` 16 (a parser limit on either side), `unicode` 5, `scope` 2, `template` 2,
-   `bogus_comment` 2. `main` on the same measure is 938 with 120, of which `scope` is 52. The two
-   remaining `scope` cases (`fuzz 275`, `fuzz 343`) diverge the same way on `main`, and neither
-   divergence is the mode's: one text node holds a run twice where the reference holds it once.
-   That is a separate known difference and the next piece of work, not a select shape.
+   port's own classifier (`var/classify_diffs.exs`), by category (bodies whose first divergence is
+   of that kind):
+
+   | category | `main` | 0012 | 0012 + 0013 |
+   |---|---|---|---|
+   | no surviving divergence | 938 | 992 | 1012 |
+   | `scope` (a table, `li`, `ul`, `dl`, the select family) | 52 | 2 | 1 |
+   | `other` (the tag-name and attribute shapes) | 39 | 39 | 27 |
+   | `limit` (a parser limit on either side) | 16 | 16 | 16 |
+   | `unicode` | 5 | 5 | 0 |
+   | `bogus_comment` (the processing-instruction shapes) | 5 | 2 | 2 |
+   | `template` | 3 | 2 | 0 |
+
+   The two `scope` cases 0012 leaves are `fuzz 275` and `fuzz 343`, and they move to 0013: both
+   are a foster-parented run, which is why merging text nodes on both sides in that same
+   comparison made them — and `unicode` and `template` with them — read as no divergence at all.
+   The one `scope` case left is `fuzz 33`, which `main` has too and which is not this branch's: its
+   first divergence happens to sit under a table, and the difference itself is one of the
+   documented ones. Nothing here is visible to the rendered corpus, which reads 0 either way —
+   that is what `:rendered_only` above means.
 
 ## Status
 
-Implemented on this branch, with 0012 as described above. Evidence so far: the port's
+Implemented on this branch, with 0012 and 0013 as described above. Evidence so far: the port's
 1,058-case corpus reports no unresolved difference (`0` in
 `parity/results/richtext-corpus-differences.json`, 92 raw-unequal rows that the normalized
-comparison resolves), the gumbo suite is green (332 tests, 19 environment-tagged exclusions),
+comparison resolves), the gumbo suite is green (335 tests, 19 environment-tagged exclusions),
 `mix format --check-formatted`, `mix credo --strict` and a warnings-as-errors compile pass, and
 `check-patch`, `check-generators`, `check-parity`, `check-c-format`, `check-c-lint`,
 `check-clean-build`, `check-teardown` and `check-sanitizers` all pass. Gates 4 and 5's numbers
@@ -128,12 +157,19 @@ are above. The mode's own shapes are held by `test/gumbo/select_in_select_test.e
 (the mode's edges, including the two error states that would notice the enum moving),
 `test/gumbo/select_scope_test.exs` (the corpus shapes where an end tag or an element's text is
 at stake) and the six recorded trees in `test/gumbo/select_tree_construction_test.exs` (the
-html5lib cases the mode moves away from upstream's expectations).
+html5lib cases the mode moves away from upstream's expectations); 0013's by
+`test/gumbo/foster_text_test.exs`, whose first two shapes are upstream's own from before the
+merge it reverses.
 
-One item is open and is not about this mode: the two `scope` cases gate 5 leaves, where the
-binding keeps a text run twice and the reference keeps it once.
+What gate 5 leaves is 46 bodies and every one of them is one of the differences `main` has
+too: the tag-name and attribute shapes, the parser limits, the processing-instruction shapes,
+and one first divergence that happens to sit under a table. No shape whose mechanism is known is
+open. The next thing to identify, if it is wanted, is the mechanism behind the `other` bucket —
+none of those is a select shape or a text split, and each needs its own reading of the reference's
+sources, which are on disk in the port.
 
-Two things are not claimed. The mode is `main`'s opposite, so a consumer that wants one
-cannot use the other: the port depends on this branch. And the divergence is documented
-against Nokogiri's *behavior*, not against a Nokogiri binary: the reference's own output is
-the corpus, which the port keeps, rather than a Nokogiri run in this repository.
+Two things are not claimed. What the branch restores is `main`'s opposite, so a consumer that
+wants one cannot use the other: the port depends on this branch. And the divergence is
+documented against Nokogiri's sources and behavior rather than a Nokogiri *run* in this
+repository: the port's own reference parser is the comparison, and its stored corpus is what the
+rendered contract is held to.

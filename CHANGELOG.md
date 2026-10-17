@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gumbo still has the "in select" insertion mode the spec removed (whatwg/html#10548). A Rails port
   that has to reach Nokogiri's trees needs that mode, it is a whole mode rather than a knob, and
   `NOKOGIRI-COMPAT.md` is the branch's own note, including what it costs `make check-parity`.
+- Also on that branch: text foster parented out of a table is a node of its own again, the reverse
+  of the merge upstream 41a0f3e added, for the same reason — Nokogiri's fork predates it. Rendering
+  does not show the difference, a tree comparison does, and so does anything acting per text node.
 
 ## [0.3.0] - 2026-10-16
 

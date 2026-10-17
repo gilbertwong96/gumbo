@@ -293,9 +293,11 @@ $(PARITY_DUMP_BUILD): $(PARITY_DUMP_SRC) $(GUMBO_OBJS)
 # made against in two steps rather than one: the pin plus those has to parse the
 # whole corpus identically to the shipped build — which is what still catches any of the other
 # patches moving a tree — and the pin alone may differ only in the documents whose tree holds
-# a select, an applet, a marquee or an object: the first because a select bounds the scope
-# queries 0007 and 0010 changed, the rest because 0011 is the end tag rule for those three
-# asking in scope rather than in table scope. 0012 comes between the two steps, and cannot be
+# a select, an applet, a marquee, an object or a table: a select because it bounds the scope
+# queries 0007 and 0010 changed, the second and third because 0011 is the end tag rule for
+# those asking in scope rather than in table scope, and a table because that is the context a
+# text run has to be foster parented out of for 0013 to move it. 0012 comes between the two
+# steps, and cannot be
 # in the list below the way the others can: it restores a whole insertion mode, and it is a
 # cumulative patch — its text is against the pin plus 0001-0011 — so the baseline cannot apply
 # it to the pin on its own. The second step is therefore per document as well, and it allows a
@@ -313,7 +315,8 @@ BEHAVIOUR_PATCHES := $(GUMBO_PATCH_DIR)/0007-select-in-scope.patch \
                      $(GUMBO_PATCH_DIR)/0008-unknown-end-tag-by-name.patch \
                      $(GUMBO_PATCH_DIR)/0009-keep-control-characters.patch \
                      $(GUMBO_PATCH_DIR)/0010-select-is-special.patch \
-                     $(GUMBO_PATCH_DIR)/0011-marquee-object-default-scope.patch
+                     $(GUMBO_PATCH_DIR)/0011-marquee-object-default-scope.patch \
+                     $(GUMBO_PATCH_DIR)/0013-legacy-text-merge.patch
 GUMBO_BASELINE_SRC_DIR := $(OBJ_DIR)/gumbo-src-baseline
 GUMBO_BASELINE_STAMP := $(GUMBO_BASELINE_SRC_DIR)/.patched
 GUMBO_BASELINE_OBJ_DIR := $(OBJ_DIR)/gumbo-parser-baseline
@@ -368,9 +371,9 @@ check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BASELINE) $(PARITY_DUMP_BUILD)
 		i=$$(basename "$$f"); \
 		if ! cmp -s "$$f" "$$split/base/$$i"; then \
 			changed=$$((changed + 1)); \
-			if ! grep -Eq 'tag=(112|126|146|75),' "$$split/base/$$i"; then \
+			if ! grep -Eq 'tag=(96|112|126|146|75),' "$$split/base/$$i"; then \
 				failed=1; \
-				echo "FAIL: document $$i differs but holds no select, applet, marquee or object, so no patch in $(notdir $(BEHAVIOUR_PATCHES)) is what moved it:"; \
+				echo "FAIL: document $$i differs but holds no select, applet, marquee, object or table, so no patch in $(notdir $(BEHAVIOUR_PATCHES)) is what moved it:"; \
 				diff "$$split/base/$$i" "$$f" | head -20; \
 			fi; \
 		fi; \
@@ -388,7 +391,7 @@ check-parity: $(PARITY_DUMP_PINNED) $(PARITY_DUMP_BASELINE) $(PARITY_DUMP_BUILD)
 		echo "FAIL: 0012 changed no tree in the corpus, so nothing here covers the mode it restores"; \
 		exit 1; \
 	}; \
-	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCHES)) and with the shipped build, except the $$moved that hold a select and are what 0012 restores, and the pin alone differs only in the $$changed that hold a select, an applet, a marquee or an object"
+	echo "PASS: $(PARITY_COUNT) documents parse to identical trees with the pin plus $(notdir $(BEHAVIOUR_PATCHES)) and with the shipped build, except the $$moved that hold a select and are what 0012 restores, and the pin alone differs only in the $$changed that hold a select, an applet, a marquee, an object or a table"
 
 # The sanitizer gate. It is the only net there is for a memory-safety bug inside
 # gumbo itself — residual 2 of the list this project keeps of what could still take
