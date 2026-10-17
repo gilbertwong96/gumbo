@@ -1,5 +1,5 @@
 defmodule Gumbo.SelectInSelectTest do
-  # The "in select" insertion mode 0012 restores, tested where the branch exists for it: a
+  # The "in select" insertion mode 0013 restores, tested where the branch exists for it: a
   # Rails port whose reference parses with Nokogiri's gumbo. main keeps the current spec, where
   # whatwg/html#10548 folded this mode's rules into "in body" and an element written inside a
   # select is kept; NOKOGIRI-COMPAT.md has the three generations side by side, the port's

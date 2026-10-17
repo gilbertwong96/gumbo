@@ -1,6 +1,6 @@
-# The 0012 generator: what it substitutes, and the count each substitution must
+# The 0013 generator: what it substitutes, and the count each substitution must
 # match. `mix gumbo.patches` reads this, applies the earlier patches when `priors` is
-# true, runs the substitutions in order, and writes 0012-legacy-in-select.patch. This one
+# true, runs the substitutions in order, and writes 0013-legacy-in-select.patch. This one
 # restores the "in select" insertion mode Nokogiri's gumbo has and the pin no longer does.
 #
 # `priors` is true because this is an upstream commit's reverse replayed on the patched
@@ -25,7 +25,7 @@ t = &String.replace_suffix(&1, "\n", "")
   priors: true,
   header: ~S"""
   From: patched for this project, not from upstream
-  Subject: [PATCH 12/12] Put the "in select" insertion mode back, for Nokogiri
+  Subject: [PATCH 13/14] Put the "in select" insertion mode back, for Nokogiri
 
   This is the reverse of the commit the pin follows. Upstream 7811944 ("fix parser to
   comply with most recent spec changes to <select> logic", 2025-09-17) removed the "in
@@ -69,7 +69,7 @@ t = &String.replace_suffix(&1, "\n", "")
   0007's addition of SELECT to SCOPE_TAGS is left alone, and so are 0010's and 0011's shapes:
   on this branch the mode answers for a select, and the in-body rules those patches repaired
   are reached only for markup the mode would not see. `make check-parity` cannot put this
-  patch in BEHAVIOUR_PATCHES, because 0012 is cumulative and that list is applied to the pin
+  patch in BEHAVIOUR_PATCHES, because 0013 is cumulative and that list is applied to the pin
   alone; the gate compares its baseline against the shipped build per document instead, and
   allows a difference only in a document whose tree holds a select, which is this patch's
   bound and is asserted to be non-empty. A document without one parses identically to the

@@ -1,5 +1,5 @@
 defmodule Gumbo.SelectScopeTest do
-  # This branch parses a `select` the way Nokogiri's gumbo does: 0012 restores the "in select"
+  # This branch parses a `select` the way Nokogiri's gumbo does: 0013 restores the "in select"
   # insertion mode the current spec removed, and inside that mode a token that is not an
   # `option`, an `optgroup`, an `hr`, a `script`/`template`, a nested `select` or one of the two
   # closing tags is a parse error and is ignored. So an element written inside a select is

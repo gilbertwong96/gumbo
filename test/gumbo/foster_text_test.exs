@@ -2,7 +2,7 @@ defmodule Gumbo.FosterTextTest do
   # This branch splits foster-parented text the way Nokogiri's gumbo does: a run a table
   # context pushes out to the adjusted insertion location becomes a node of its own instead of
   # merging into whichever text node precedes it. Upstream 41a0f3e made it merge — the "insert a
-  # character" algorithm asks for that — and Nokogiri's fork predates the change, so patch 0013
+  # character" algorithm asks for that — and Nokogiri's fork predates the change, so patch 0014
   # puts this branch back on the older side. Rendering cannot see the difference; a tree
   # comparison can, and so can anything acting per text node, an autolinker for instance.
   #

@@ -1,0 +1,48 @@
+From: patched for this project, not from upstream
+Subject: [PATCH 12/14] Ask the "in table" character rule for its current node
+
+The spec's "in table" mode gates its character rule on the current node: "A character
+token, if the current node is table, tbody, template, tfoot, thead, or tr element" goes to
+"in table text", and anything else is "Parse error. Enable foster parenting, process the
+token using the rules for the 'in body' insertion mode, and then disable foster parenting"
+(parsing.html#parsing-main-intable, fetched 2026-10-17). The pinned base takes the first
+branch for every character token it sees in that mode, whatever the current node is.
+
+What that costs is a text-node split. A run written where the current node is something
+else — a custom element foster parented out of the table, say — is accumulated in
+"in table text" and flushed when the next token arrives, so a token that is then ignored
+(`</h>` below) ends the run and the next character starts a new node. The spec's route
+keeps one run: the character is handled by the in-body rule, in the buffer that is already
+open. `<table><r>x</h>e` reads `[{"r", [], ["xe"]}, {"table", [], []}]` with the condition
+and `[{"r", [], ["x", "e"]}, {"table", [], []}]` without it, and Nokogiri's fork — which
+has the condition, and `GUMBO_TOKEN_NULL` in it — parses the first.
+
+The `[{"r", …}]` shape is not invented for this patch: it is one of the 1,058 stored bodies
+a Rails port carries, and it was the last body whose tree that port's own reference parser
+disagreed with this base on, once the branch's two compatibility patches are out of the
+way. The tree is the same shape `main` produces for the other 1,057; this makes it the
+same for that one too.
+
+The fall-through already does what the spec asks for a character token: the "anything
+else" arm at the end of `handle_in_table` records the parse error, enables foster
+parenting, calls `handle_in_body`, and disables it again. Nothing else is added here, and
+`GUMBO_TOKEN_NULL` goes in the condition because in-table-text's own NULL rule — parse
+error, ignore the token — is the one the spec gives for it.
+---
+--- a/src/parser.c
++++ b/src/parser.c
+@@ -3427,8 +3427,12 @@
+ // http://www.whatwg.org/specs/web-apps/current-work/complete/tokenization.html#parsing-main-intable
+ static bool handle_in_table(GumboParser* parser, GumboToken* token) {
+   GumboParserState* state = parser->_parser_state;
+-  if (token->type == GUMBO_TOKEN_CHARACTER ||
+-      token->type == GUMBO_TOKEN_WHITESPACE) {
++  if ((token->type == GUMBO_TOKEN_CHARACTER ||
++          token->type == GUMBO_TOKEN_WHITESPACE ||
++          token->type == GUMBO_TOKEN_NULL) &&
++      node_tag_in_set(get_current_node(parser),
++          (gumbo_tagset){TAG(TABLE), TAG(TBODY), TAG(TEMPLATE), TAG(TFOOT),
++              TAG(THEAD), TAG(TR)})) {
+     // The "pending table character tokens" list described in the spec is
+     // nothing more than the TextNodeBufferState.  We accumulate text tokens as
+     // normal, except that when we go to flush them in the handle_in_table_text,

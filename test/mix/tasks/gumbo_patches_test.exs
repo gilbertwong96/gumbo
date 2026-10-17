@@ -9,7 +9,7 @@ defmodule Mix.Tasks.Gumbo.PatchesTest do
 
   test "--check passes in the repository and reports what it checked" do
     output = capture_io(fn -> Mix.Task.rerun("gumbo.patches", ["--check"]) end)
-    assert output =~ "PASS: 12 patch(es) regenerate byte-identically"
+    assert output =~ "PASS: 13 patch(es) regenerate byte-identically"
     assert output =~ "hand-written patch(es) are not generated and not checked"
   end
 

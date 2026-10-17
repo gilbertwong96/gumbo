@@ -1,5 +1,5 @@
 From: patched for this project, not from upstream
-Subject: [PATCH 12/12] Put the "in select" insertion mode back, for Nokogiri
+Subject: [PATCH 13/14] Put the "in select" insertion mode back, for Nokogiri
 
 This is the reverse of the commit the pin follows. Upstream 7811944 ("fix parser to
 comply with most recent spec changes to <select> logic", 2025-09-17) removed the "in
@@ -43,7 +43,7 @@ Notes for review, since four details are not a plain revert:
 0007's addition of SELECT to SCOPE_TAGS is left alone, and so are 0010's and 0011's shapes:
 on this branch the mode answers for a select, and the in-body rules those patches repaired
 are reached only for markup the mode would not see. `make check-parity` cannot put this
-patch in BEHAVIOUR_PATCHES, because 0012 is cumulative and that list is applied to the pin
+patch in BEHAVIOUR_PATCHES, because 0013 is cumulative and that list is applied to the pin
 alone; the gate compares its baseline against the shipped build per document instead, and
 allows a difference only in a document whose tree holds a select, which is this patch's
 bound and is asserted to be non-empty. A document without one parses identically to the
@@ -200,7 +200,7 @@ pinned sources, which is what the rest of the series keeps.
      }
      reconstruct_active_formatting_elements(parser);
      insert_element_from_token(parser, token);
-@@ -4095,6 +4098,143 @@
+@@ -4099,6 +4102,143 @@
    }
  }
  
@@ -344,7 +344,7 @@ pinned sources, which is what the rest of the series keeps.
  // http://www.whatwg.org/specs/web-apps/current-work/multipage/tree-construction.html#parsing-main-intemplate
  static bool handle_in_template(GumboParser* parser, GumboToken* token) {
    GumboParserState* state = parser->_parser_state;
-@@ -4338,6 +4478,8 @@
+@@ -4342,6 +4482,8 @@
      handle_in_table_body,
      handle_in_row,
      handle_in_cell,

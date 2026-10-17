@@ -83,10 +83,12 @@ the claim is made in two steps rather than one. A third binary — the pin with 
 to it alone, and compiled against the pin's own headers — has to parse the whole corpus
 identically to the shipped build, which is what still catches any of the other patches
 moving a tree, and the pin alone may differ only in the documents whose tree holds a
-`select` element, which is what bounds 0007's and 0010's blast radius. On the
-`nokogiri-compat` branch 0012 comes between those two steps and cannot join that list the way
+`select` element, which is what bounds 0007's and 0010's blast radius; 0012 adds a `table` or a
+`template` to that list, because a template's contents can be parsed in one of the table modes
+with no table element in the tree, and it is the character rule there that 0012 reads. On the
+`nokogiri-compat` branch 0013 comes between those two steps and cannot join that list the way
 the others can: it restores a whole insertion mode, and it is cumulative — its own text is
-against the pin plus 0001-0011 — so the baseline cannot apply it to the pin on its own. The
+against the pin plus 0001-0012 — so the baseline cannot apply it to the pin on its own. The
 second comparison is therefore per document too, and allows a difference only where the tree
 holds a `select`, which is the mode's bound, and fails when no document moves at all. The
 corpus keeps the
@@ -139,10 +141,11 @@ a 20 000-level tree survives a 320 KB stack. Both are hard gates now — after t
 | 0009 | the input stream's decoder replacing the characters the spec only calls parse errors — controls and noncharacters — with U+FFFD, and reporting all of them as `UTF8_INVALID`, so a pasted control byte comes back as U+FFFD and a multi-byte one reported its bytes as its code point | the shapes in `test/gumbo/control_characters_test.exs`, plus `check-parity` in its two-step form, which is also where the corpus is measured to hold no document this patch moves |
 | 0010 | the "special" category not naming a `select`, so an end tag with no matching open element walked past an open select, reached whatever sat above it, and took both with it — `</option>` inside a `<select>` is the reported shape, and it moved everything the document wrote after the end tag out of the select | the shapes in `test/gumbo/special_category_test.exs`, plus `check-parity` in its two-step form, which is what bounds it to documents that hold a select |
 | 0011 | the in-body end tag rule for `applet`, `marquee` and `object` asking for the element in *table* scope, whose boundaries are only `html`, `table` and `template`, where the spec asks for it in scope — so an end tag inside a select reached past the select to the element above it and popped the select and everything under it, leaving the rest of the document outside | the shapes in `test/gumbo/select_scope_test.exs`, plus `check-parity` in its two-step form, which is what bounds it to documents that hold a select |
-| 0012 | nothing about the current spec: it puts the "in select" insertion mode back, which upstream 7811944 removed, because Nokogiri's fork of gumbo still parses a select with it — an element written inside a select is dropped and its text merges, and an end tag inside one cannot reach the element above it. Only on the `nokogiri-compat` branch, and only for a consumer that has to reproduce Nokogiri: NOKOGIRI-COMPAT.md | the shapes in `test/gumbo/select_scope_test.exs`, `test/gumbo/select_in_select_test.exs` and the six recorded trees in `test/gumbo/select_tree_construction_test.exs`, plus `check-parity`'s second comparison, which allows a difference against the baseline only in a document that holds a select and fails if none moves |
-| 0013 | nothing either: it puts a foster-parented text run back in a node of its own, the reverse of upstream 41a0f3e, which made a flushed run merge into the text node before the adjusted insertion location. Nokogiri's fork predates the merge, so the two split text differently; rendering cannot see it, a tree comparison can, and so can anything acting per text node. The merge it reverses is not an older reading of the rule: "insert a character" asks for it, a browser and `main` do it, and so does html5lib's own `adoption01.dat`, whose `<table>A<td>B</td>C</table>` is one node, `"AC"` — so this deviates from the spec rather than returning to an earlier one. Also only on `nokogiri-compat` | the shapes in `test/gumbo/foster_text_test.exs`, plus `check-parity`, which now lists this patch with 0007-0011 and allows the pin alone to differ only in documents that hold a table, and four of html5lib's corpus documents it moves with no select in them (`adoption01.dat`'s `<table>A<td>B</td>C</table>` is one) |
+| 0012 | the "in table" character rule ignoring the current node it is written around, so a character token whose current node was not a `table`, `tbody`, `template`, `tfoot`, `thead` or `tr` element took the "in table text" route instead of the "anything else" one: a text run broken by a token the parser then ignores became two nodes, and the parse error the spec asks for on that route was never recorded | the shapes in `test/gumbo/in_table_text_test.exs`, plus `check-parity`, whose first step bounds it to documents that hold a table or a template |
+| 0013 | nothing about the current spec: it puts the "in select" insertion mode back, which upstream 7811944 removed, because Nokogiri's fork of gumbo still parses a select with it — an element written inside a select is dropped and its text merges, and an end tag inside one cannot reach the element above it. Only on the `nokogiri-compat` branch, and only for a consumer that has to reproduce Nokogiri: NOKOGIRI-COMPAT.md | the shapes in `test/gumbo/select_scope_test.exs`, `test/gumbo/select_in_select_test.exs` and the six recorded trees in `test/gumbo/select_tree_construction_test.exs`, plus `check-parity`'s second comparison, which allows a difference against the baseline only in a document that holds a select and fails if none moves |
+| 0014 | nothing either: it puts a foster-parented text run back in a node of its own, the reverse of upstream 41a0f3e, which made a flushed run merge into the text node before the adjusted insertion location. Nokogiri's fork predates the merge, so the two split text differently; rendering cannot see it, a tree comparison can, and so can anything acting per text node. The merge it reverses is not an older reading of the rule: "insert a character" asks for it, a browser and `main` do it, and so does html5lib's own `adoption01.dat`, whose `<table>A<td>B</td>C</table>` is one node, `"AC"` — so this deviates from the spec rather than returning to an earlier one. Also only on `nokogiri-compat` | the shapes in `test/gumbo/foster_text_test.exs`, plus `check-parity`, which now lists this patch with 0007-0011 and allows the pin alone to differ only in documents that hold a table, and four of html5lib's corpus documents it moves with no select in them (`adoption01.dat`'s `<table>A<td>B</td>C</table>` is one) |
 
-Twelve of the thirteen are generated. The definition next to a patch — `NNNN-name.exs` — lists the
+Thirteen of the fourteen are generated. The definition next to a patch — `NNNN-name.exs` — lists the
 substitutions that make it, each with the count it must find, and `mix gumbo.patches` applies the
 earlier patches to a copy of the pin, runs the substitutions, and writes the patch back out as the
 diff against the pinned tree. That is also how they are rebased after a submodule bump:
@@ -153,12 +156,12 @@ mix gumbo.patches --check    # assert the committed patches are what the definit
 ```
 
 Whether a patch is cumulative is part of its definition. 0005 and 0006 edit text that earlier
-patches introduced, so their `priors: true` has the tool apply 0001-0004 and 0001-0005 first; 0012
+patches introduced, so their `priors: true` has the tool apply 0001-0004 and 0001-0005 first; 0013
 anchors a helper after `has_an_element_in_table_scope`, whose body 0002 rewrote, so it asks for
 0001-0011; while 0002, 0003, 0004, 0007, 0008 and 0009 were written against the pinned tree and say
-`priors: false`. 0012 is the one cumulative patch whose own text is about a patched tree rather than
+`priors: false`. 0013 is the one cumulative patch whose own text is about a patched tree rather than
 the pin, and that is why the Makefile's `BEHAVIOUR_PATCHES` cannot list it: that list is applied to
-the pin on its own, and the parity gate states 0012's bound separately.
+the pin on its own, and the parity gate states 0013's bound separately.
 
 Each substitution asserts how many occurrences it must find, so a submodule bump that moves any of
 the text fails there — naming the file and the snippet — rather than producing a patch that applies

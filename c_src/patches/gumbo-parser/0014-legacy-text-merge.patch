@@ -1,5 +1,5 @@
 From: patched for this project, not from upstream
-Subject: [PATCH 13/13] Insert foster parented text as its own node, for Nokogiri
+Subject: [PATCH 14/14] Insert foster parented text as its own node, for Nokogiri
 
 The reverse of upstream 41a0f3e ("spec: fix foster parented text not being merged into
 preceding text node", 2026-08-15), which made a flushed text run merge into whichever
@@ -10,13 +10,13 @@ stands, so a run foster parented out of a table stays a node of its own.
 Only on this branch, and only for a consumer that has to reproduce Nokogiri's trees.
 What it moves is text-node splitting, which rendering does not show — the port's stored
 corpus reads the same either way — but a tree comparison does, and so does anything
-acting per text node, an autolinker for instance. With 0012's mode this is the last
+acting per text node, an autolinker for instance. With 0013's mode this is the last
 difference between this branch's trees and the reference's whose mechanism is known: 21
 of the port's 1,058 bodies diverge by this alone, 2 of them on a scope path (a table
 inside an `option`), the rest reading as `other`, `unicode`, `template` or
 `bogus_comment` because that is where a structural comparison first lands.
 
-Unlike 0012 this is not cumulative and needs nothing outside the vendored copy: the
+Unlike 0013 this is not cumulative and needs nothing outside the vendored copy: the
 function it edits is the pin's own text, so it applies to the pin on its own, joins
 BEHAVIOUR_PATCHES with 0007-0011, and the documents it moves are the ones whose tree
 holds a table, which is where a foster-parented run comes from. `make check-parity`'s

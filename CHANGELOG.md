@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The "in table" character rule asks for its current node, as the spec words it: a character token
+  goes to "in table text" when the current node is a `table`, `tbody`, `template`, `tfoot`, `thead`
+  or `tr` element, and is otherwise handled by the "anything else" arm — parse error, foster
+  parenting, the in-body rules (parsing.html#parsing-main-intable). The pinned base took the first
+  route for every character token in the mode, which split a run wherever a token the parser
+  ignored followed it (`<table><r>x</h>e` read `["x", "e"]` instead of `["xe"]`) and never recorded
+  the parse error the other route asks for. On `nokogiri-compat` as patch 0012: a Rails port's tree
+  comparison against the reference's own parser read 0 divergences on a scope path with it and 1
+  without, and the fix is the spec's rather than the fork's, so it can move to `main` unchanged.
+
 ### Changed
 
 - On the `nokogiri-compat` branch only: what the 0.3.0 entry above moved — an element written
