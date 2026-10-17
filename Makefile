@@ -139,7 +139,22 @@ $(OBJS): $(GUMBO_SRC_STAMP)
 # leaving a tree that mixes patched and unpatched objects. `git apply` needs a
 # *relative* --directory and works outside a git repository, which is what a
 # build from a tarball, where the submodule is a plain directory, looks like.
-$(GUMBO_SRC_STAMP): $(GUMBO_VENDORED) $(GUMBO_PATCHES) | $(GUMBO_HEADER)
+#
+# The stamp alone covers an edit and an addition — a patch that is newer than the copy rebuilds
+# it — but not a removal or a rename, which leave only older files behind, and not an addition
+# that came with an older timestamp either (a copy, a move, a restored backup). A pin bump can
+# bring any of those, so the directory and the list of patches are kept as well: the directory's
+# own mtime changes on any addition or removal, and the list is rewritten only when its contents
+# differ, so its mtime is what makes the copy rebuild exactly when the series changed. All three
+# live under $(OBJ_DIR), and none is inside $(GUMBO_SRC_DIR), which this rule removes.
+GUMBO_PATCH_LIST := $(OBJ_DIR)/gumbo-patches.txt
+
+$(GUMBO_PATCH_LIST): $(GUMBO_PATCHES) $(GUMBO_PATCH_DIR) | $(GUMBO_HEADER)
+	@mkdir -p $(dir $@)
+	@printf '%s\n' $(notdir $(GUMBO_PATCHES)) > $@.tmp
+	@if cmp -s $@.tmp $@; then rm -f $@.tmp; else mv -f $@.tmp $@; fi
+
+$(GUMBO_SRC_STAMP): $(GUMBO_VENDORED) $(GUMBO_PATCHES) $(GUMBO_PATCH_LIST) | $(GUMBO_HEADER)
 	@echo "  vendored: copying $(GUMBO_DIR)/src and applying $(words $(GUMBO_PATCHES)) patch(es)"
 	@rm -rf $(GUMBO_SRC_DIR)
 	@mkdir -p $(GUMBO_SRC_DIR)
