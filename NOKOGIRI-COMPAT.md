@@ -115,8 +115,8 @@ documents the pin alone may differ in from 167 to 232 of the 1,000.
 4. The port's parse benchmark, to confirm the mode costs nothing on documents without a
    select — it is reached only through the dispatch table, and the tables it adds run only
    where a select is open. Measured over the port's 1,058 bodies, five passes each, min/mean
-   microseconds per body: `main` 47.17/50.19, this branch 47.26/48.28 and 49.59/51.57 in two
-   runs (the runs bracket each other, so the difference is noise).
+   microseconds per body: `main` 47.17/50.19, 0012 47.26/48.28 and 49.59/51.57 in two runs, and
+   0012 + 0013 48.44/50.95 (the runs bracket each other, so the difference is noise).
 
 5. A tree-level comparison against the reference's own parser rather than its rendered output:
    the port vendors Nokogiri 1.19.4's unmodified gumbo sources (`native/vendor/gumbo/`, gem SHA
